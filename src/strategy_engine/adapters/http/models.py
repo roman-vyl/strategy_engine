@@ -1,0 +1,202 @@
+"""FastAPI request/response models for foundation contracts."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
+
+from strategy_engine.domain.market import MarketStream
+from strategy_engine.domain.ranges import TimeRange
+from strategy_engine.indicators.contracts import (
+    IndicatorPlan,
+    IndicatorRangeRequest,
+    PlannedFeature,
+)
+from strategy_engine.strategies.contracts import (
+    ManagedReplayRequest,
+    StrategyBatchVariant,
+    StrategyOutputOptions,
+    StrategyRangeBatchRequest,
+    StrategyRangeRequest,
+    StrategySpecEnvelope,
+)
+
+
+class MarketRangeModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: StrictStr
+    base_timeframe: StrictStr
+    from_ms: StrictInt
+    to_ms: StrictInt
+
+    def to_domain(self) -> tuple[MarketStream, TimeRange]:
+        market = MarketStream(self.ticker, self.base_timeframe)
+        time_range = TimeRange(self.from_ms, self.to_ms)
+        time_range.validate_alignment(self.base_timeframe)
+        return market, time_range
+
+
+class PlannedFeatureModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    output_id: StrictStr
+    kind: StrictStr
+    timeframe: StrictStr
+    source: StrictStr | None = None
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    dependencies: list[StrictStr] = Field(default_factory=list)
+
+    def to_domain(self) -> PlannedFeature:
+        return PlannedFeature(
+            output_id=self.output_id,
+            kind=self.kind,
+            timeframe=self.timeframe,
+            source=self.source,
+            parameters=self.parameters,
+            dependencies=tuple(self.dependencies),
+        )
+
+
+class IndicatorPlanModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plan_version: StrictStr
+    features: list[PlannedFeatureModel]
+
+    def to_domain(self) -> IndicatorPlan:
+        return IndicatorPlan(
+            plan_version=self.plan_version,
+            features=tuple(feature.to_domain() for feature in self.features),
+        )
+
+
+class IndicatorRangeRequestModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    market: MarketRangeModel
+    plan: IndicatorPlanModel
+
+    def to_domain(self) -> IndicatorRangeRequest:
+        market, time_range = self.market.to_domain()
+        return IndicatorRangeRequest(
+            market=market,
+            time_range=time_range,
+            plan=self.plan.to_domain(),
+        )
+
+
+class StrategySpecEnvelopeModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_id: StrictStr
+    strategy_version: StrictStr
+    instance_id: StrictStr
+    raw_spec: dict[str, Any]
+    compatibility_profile: StrictStr = "bbb_v1"
+
+    def to_domain(self) -> StrategySpecEnvelope:
+        return StrategySpecEnvelope(
+            strategy_id=self.strategy_id,
+            strategy_version=self.strategy_version,
+            instance_id=self.instance_id,
+            raw_spec=self.raw_spec,
+            compatibility_profile=self.compatibility_profile,
+        )
+
+
+class StrategyOutputOptionsModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    include_features: StrictBool = True
+    include_contexts: StrictBool = True
+    include_component_evidence: StrictBool = True
+    include_state_artifact: StrictBool = False
+
+    def to_domain(self) -> StrategyOutputOptions:
+        return StrategyOutputOptions(
+            include_features=self.include_features,
+            include_contexts=self.include_contexts,
+            include_component_evidence=self.include_component_evidence,
+            include_state_artifact=self.include_state_artifact,
+        )
+
+
+class StrategyRangeRequestModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    market: MarketRangeModel
+    strategy: StrategySpecEnvelopeModel
+    expected_market_data_hash: StrictStr | None = None
+    options: StrategyOutputOptionsModel = Field(default_factory=StrategyOutputOptionsModel)
+
+    def to_domain(self) -> StrategyRangeRequest:
+        market, time_range = self.market.to_domain()
+        return StrategyRangeRequest(
+            strategy=self.strategy.to_domain(),
+            market=market,
+            time_range=time_range,
+            expected_market_data_hash=self.expected_market_data_hash,
+            options=self.options.to_domain(),
+        )
+
+
+class StrategyBatchVariantModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    variant_id: StrictStr
+    strategy: StrategySpecEnvelopeModel
+
+    def to_domain(self) -> StrategyBatchVariant:
+        return StrategyBatchVariant(
+            variant_id=self.variant_id,
+            strategy=self.strategy.to_domain(),
+        )
+
+
+class StrategyRangeBatchRequestModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    market: MarketRangeModel
+    variants: list[StrategyBatchVariantModel]
+    options: StrategyOutputOptionsModel = Field(default_factory=StrategyOutputOptionsModel)
+
+    def to_domain(self) -> StrategyRangeBatchRequest:
+        market, time_range = self.market.to_domain()
+        return StrategyRangeBatchRequest(
+            market=market,
+            time_range=time_range,
+            variants=tuple(variant.to_domain() for variant in self.variants),
+            options=self.options.to_domain(),
+        )
+
+
+class ManagedReplayRequestModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    market: MarketRangeModel
+    strategy: StrategySpecEnvelopeModel
+    trade_id: StrictStr
+    side: StrictStr
+    entry_time_ms: StrictInt
+    entry_price: float
+
+    def to_domain(self) -> ManagedReplayRequest:
+        market, time_range = self.market.to_domain()
+        if self.side not in {"long", "short"}:
+            raise ValueError("side must be long or short")
+        return ManagedReplayRequest(
+            strategy=self.strategy.to_domain(),
+            market=market,
+            time_range=time_range,
+            trade_id=self.trade_id,
+            side=self.side,
+            entry_time_ms=self.entry_time_ms,
+            entry_price=float(self.entry_price),
+        )
+
+
+class StrategyAuthoringValidationRequestModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    instances: list[dict[str, Any]] = Field(min_length=1)

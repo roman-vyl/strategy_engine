@@ -1,0 +1,62 @@
+source_path,lines,raw_copy,final_disposition,provisional_target,rationale
+research/strategies/ema_pullback/README.md,380,yes,reference_metadata,review during port,copy for provenance; recreate clean package metadata later
+research/strategies/ema_pullback/__init__.py,2,yes,reference_metadata,review during port,copy for provenance; recreate clean package metadata later
+research/strategies/ema_pullback/cli.py,27,yes,bbb_only,BBB remains authoritative,"research orchestration, execution simulation, reports, metrics or analysis"
+research/strategies/ema_pullback/component_builders.py,567,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/config/builders.py,strategy specification/config semantics
+research/strategies/ema_pullback/components/__init__.py,44,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/components/__init__.py,strategy component/context semantics
+research/strategies/ema_pullback/components/blockers.py,131,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/components/blockers.py,strategy component/context semantics
+research/strategies/ema_pullback/components/context.py,45,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/components/context.py,strategy component/context semantics
+research/strategies/ema_pullback/components/direction.py,49,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/components/direction.py,strategy component/context semantics
+research/strategies/ema_pullback/components/exits.py,215,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/components/exits.py,strategy component/context semantics
+research/strategies/ema_pullback/components/registry.py,283,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/components/registry.py,strategy component/context semantics
+research/strategies/ema_pullback/components/risk.py,15,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/components/risk.py,strategy component/context semantics
+research/strategies/ema_pullback/components/setup.py,421,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/components/setup.py,strategy component/context semantics
+research/strategies/ema_pullback/components/trend_strength_episode.py,221,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/components/trend_strength_episode.py,strategy component/context semantics
+research/strategies/ema_pullback/components/triggers.py,149,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/components/triggers.py,strategy component/context semantics
+research/strategies/ema_pullback/config.py,64,yes,bbb_only,BBB remains authoritative,"research orchestration, execution simulation, reports, metrics or analysis"
+research/strategies/ema_pullback/consumer_roles.py,148,yes,direct_port_candidate,src/strategy_engine/strategies/contracts/consumer_roles.py,strategy specification/config semantics
+research/strategies/ema_pullback/context/__init__.py,23,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/context/__init__.py,strategy component/context semantics
+research/strategies/ema_pullback/context/bundle.py,69,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/context/bundle.py,strategy component/context semantics
+research/strategies/ema_pullback/context/consumption_trace.py,275,yes,mixed_split,split after characterization; no one-to-one target yet,contains both strategy semantics and BBB execution/trace/report coupling
+research/strategies/ema_pullback/context/consumption_validation.py,102,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/context/consumption_validation.py,strategy component/context semantics
+research/strategies/ema_pullback/context/evaluation.py,127,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/context/evaluation.py,strategy component/context semantics
+research/strategies/ema_pullback/context/pipeline.py,36,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/context/pipeline.py,strategy component/context semantics
+research/strategies/ema_pullback/context/policies.py,61,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/context/policies.py,strategy component/context semantics
+research/strategies/ema_pullback/execution/__init__.py,2,yes,reference_metadata,review during port,copy for provenance; recreate clean package metadata later
+research/strategies/ema_pullback/execution/backtest.py,650,yes,bbb_only,BBB remains authoritative,"research orchestration, execution simulation, reports, metrics or analysis"
+research/strategies/ema_pullback/execution/data_loader.py,55,yes,bbb_only,BBB remains authoritative,"research orchestration, execution simulation, reports, metrics or analysis"
+research/strategies/ema_pullback/execution/exit_arbitration.py,92,yes,bbb_only,BBB remains authoritative,"research orchestration, execution simulation, reports, metrics or analysis"
+research/strategies/ema_pullback/execution/exit_attribution.py,420,yes,mixed_split,split after characterization; no one-to-one target yet,contains both strategy semantics and BBB execution/trace/report coupling
+research/strategies/ema_pullback/execution/exit_policy_candidates.py,235,yes,mixed_split,split after characterization; no one-to-one target yet,contains both strategy semantics and BBB execution/trace/report coupling
+research/strategies/ema_pullback/execution/exits.py,457,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/evaluation/exits.py,bar-aligned strategy evaluation semantics
+research/strategies/ema_pullback/execution/managed_bar_open_candidates.py,102,yes,mixed_split,split after characterization; no one-to-one target yet,contains both strategy semantics and BBB execution/trace/report coupling
+research/strategies/ema_pullback/execution/managed_comparison.py,287,yes,bbb_only,BBB remains authoritative,"research orchestration, execution simulation, reports, metrics or analysis"
+research/strategies/ema_pullback/execution/managed_components/__init__.py,42,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/managed/components/__init__.py,managed policy semantics
+research/strategies/ema_pullback/execution/managed_components/activation.py,12,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/managed/components/activation.py,managed policy semantics
+research/strategies/ema_pullback/execution/managed_components/atr.py,49,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/managed/components/atr.py,managed policy semantics
+research/strategies/ema_pullback/execution/managed_components/runtime_exit.py,152,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/managed/components/runtime_exit.py,managed policy semantics
+research/strategies/ema_pullback/execution/managed_components/snapshot.py,246,yes,mixed_split,split after characterization; no one-to-one target yet,contains both strategy semantics and BBB execution/trace/report coupling
+research/strategies/ema_pullback/execution/managed_components/stop.py,148,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/managed/components/stop.py,managed policy semantics
+research/strategies/ema_pullback/execution/managed_components/take.py,60,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/managed/components/take.py,managed policy semantics
+research/strategies/ema_pullback/execution/managed_execution_loop.py,365,yes,bbb_only,BBB remains authoritative,"research orchestration, execution simulation, reports, metrics or analysis"
+research/strategies/ema_pullback/execution/managed_exit_provider.py,136,yes,mixed_split,split after characterization; no one-to-one target yet,contains both strategy semantics and BBB execution/trace/report coupling
+research/strategies/ema_pullback/execution/report_table.py,124,yes,bbb_only,BBB remains authoritative,"research orchestration, execution simulation, reports, metrics or analysis"
+research/strategies/ema_pullback/execution/result_models.py,127,yes,bbb_only,BBB remains authoritative,"research orchestration, execution simulation, reports, metrics or analysis"
+research/strategies/ema_pullback/execution/results.py,923,yes,bbb_only,BBB remains authoritative,"research orchestration, execution simulation, reports, metrics or analysis"
+research/strategies/ema_pullback/execution/runner.py,146,yes,bbb_only,BBB remains authoritative,"research orchestration, execution simulation, reports, metrics or analysis"
+research/strategies/ema_pullback/execution/signal_trace.py,1386,yes,mixed_split,split after characterization; no one-to-one target yet,contains both strategy semantics and BBB execution/trace/report coupling
+research/strategies/ema_pullback/execution/signals.py,323,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/evaluation/entries.py,bar-aligned strategy evaluation semantics
+research/strategies/ema_pullback/execution/trade_analyzer.py,772,yes,bbb_only,BBB remains authoritative,"research orchestration, execution simulation, reports, metrics or analysis"
+research/strategies/ema_pullback/execution/trade_runtime.py,964,yes,mixed_split,split after characterization; no one-to-one target yet,contains both strategy semantics and BBB execution/trace/report coupling
+research/strategies/ema_pullback/features/__init__.py,18,yes,direct_port_candidate,src/strategy_engine/indicators/__init__.py,indicator planning/calculation semantics
+research/strategies/ema_pullback/features/calculations.py,207,yes,direct_port_candidate,src/strategy_engine/indicators/calculations.py,indicator planning/calculation semantics
+research/strategies/ema_pullback/features/plan.py,421,yes,direct_port_candidate,src/strategy_engine/indicators/plan.py,indicator planning/calculation semantics
+research/strategies/ema_pullback/instance_loader.py,1381,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/config/loader.py,strategy specification/config semantics
+research/strategies/ema_pullback/phase_rule_conditions/__init__.py,20,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/managed/phase_rule_conditions/__init__.py,managed policy semantics
+research/strategies/ema_pullback/phase_rule_conditions/params.py,57,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/managed/phase_rule_conditions/params.py,managed policy semantics
+research/strategies/ema_pullback/phase_rule_conditions/registry.py,312,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/managed/phase_rule_conditions/registry.py,managed policy semantics
+research/strategies/ema_pullback/run.py,29,yes,bbb_only,BBB remains authoritative,"research orchestration, execution simulation, reports, metrics or analysis"
+research/strategies/ema_pullback/setup_runtime.py,232,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/evaluation/setups.py,bar-aligned strategy evaluation semantics
+research/strategies/ema_pullback/spec.py,1012,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/spec.py,strategy specification/config semantics
+research/strategies/ema_pullback/spec_instances.py,160,yes,direct_port_candidate,src/strategy_engine/strategies/ema_pullback/config/instances.py,strategy specification/config semantics
+research/strategies/ema_pullback/spec_report.py,477,yes,mixed_split,split after characterization; no one-to-one target yet,contains both strategy semantics and BBB execution/trace/report coupling
