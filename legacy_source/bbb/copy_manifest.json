@@ -1,0 +1,422 @@
+[
+  {
+    "source": "research/strategies/ema_pullback/README.md",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/README.md",
+    "sha256": "e5c6c5116048830256984dc0962db9916a79e5a07bf6a480378aaa9549e734a8"
+  },
+  {
+    "source": "research/strategies/ema_pullback/__init__.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/__init__.py",
+    "sha256": "c580547bb9f1b4420096819555ce2d76d5e4a1b794a707cb4ca741e4eef2cff2"
+  },
+  {
+    "source": "research/strategies/ema_pullback/cli.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/cli.py",
+    "sha256": "7687977767566238663ed22e4500b287ded6dabc6a638a1189f381adb8cee64a"
+  },
+  {
+    "source": "research/strategies/ema_pullback/component_builders.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/component_builders.py",
+    "sha256": "2cdcb0039e3a1133155d5b3c593210dc94250f92ac5cb645d02d790033787cef"
+  },
+  {
+    "source": "research/strategies/ema_pullback/components/__init__.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/components/__init__.py",
+    "sha256": "d40aeb4cae0979905000bee4f1fe13efb7521c1534760bfe6b15e64f55027e9d"
+  },
+  {
+    "source": "research/strategies/ema_pullback/components/blockers.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/components/blockers.py",
+    "sha256": "bd748f97df7c44568fc3ea345bf61c514ec03929e9e4e81cafd8e8a83b4b243e"
+  },
+  {
+    "source": "research/strategies/ema_pullback/components/context.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/components/context.py",
+    "sha256": "fae108fd1583c83bba4749a34dec175fe92aa65ab99e6498be18639b775201fc"
+  },
+  {
+    "source": "research/strategies/ema_pullback/components/direction.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/components/direction.py",
+    "sha256": "ea0a6caa6d8f665737e6d58a0a786a23172e9a1ed8b26320aa6094abd22c7b09"
+  },
+  {
+    "source": "research/strategies/ema_pullback/components/exits.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/components/exits.py",
+    "sha256": "3aca331ea9d0252c5c4f4ced01f2c938055a69979a85cf3417503cc6b754d4f3"
+  },
+  {
+    "source": "research/strategies/ema_pullback/components/registry.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/components/registry.py",
+    "sha256": "01fa709232b5657ff845da3e1ffb7437ac4442736df28c292701e3400e331caf"
+  },
+  {
+    "source": "research/strategies/ema_pullback/components/risk.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/components/risk.py",
+    "sha256": "5c41e0c65b0392f9ed16e8edc1b075c6e82fae3d8ed106d886db09737f5e07a0"
+  },
+  {
+    "source": "research/strategies/ema_pullback/components/setup.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/components/setup.py",
+    "sha256": "7efb9589477920dadba36c974957a1ba2b47926d2e6396720be1ad566098dc61"
+  },
+  {
+    "source": "research/strategies/ema_pullback/components/trend_strength_episode.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/components/trend_strength_episode.py",
+    "sha256": "e3133f57446393d8f091df73d263b2f0df3da22fdf55be81073e25f078f33485"
+  },
+  {
+    "source": "research/strategies/ema_pullback/components/triggers.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/components/triggers.py",
+    "sha256": "271b661d9f074c7f2fc06a96f1827184577dbd412182fc9a8519806bab354903"
+  },
+  {
+    "source": "research/strategies/ema_pullback/config.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/config.py",
+    "sha256": "5bf04f82cf2fd01a186a6eb0718bd0e297de3da53d03a549635a7625bb84ef89"
+  },
+  {
+    "source": "research/strategies/ema_pullback/consumer_roles.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/consumer_roles.py",
+    "sha256": "d74dc7b94d88ff96e6007a18db0e95ce2e827be0c5bddcf418c96f4ce2b00f0f"
+  },
+  {
+    "source": "research/strategies/ema_pullback/context/__init__.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/context/__init__.py",
+    "sha256": "fb71a9eea2206a29211804c4e8fecea420ddc7a24e796ed3e320fc149a0bc4cf"
+  },
+  {
+    "source": "research/strategies/ema_pullback/context/bundle.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/context/bundle.py",
+    "sha256": "8672ade03d7eefcf4bb6cf1eb87bc4488fc1419a467a1dc5f39ca8f6e8d1b5ee"
+  },
+  {
+    "source": "research/strategies/ema_pullback/context/consumption_trace.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/context/consumption_trace.py",
+    "sha256": "6966da85c451b219a7903691a061fd96899a01b8655a9813468969939fc0ef17"
+  },
+  {
+    "source": "research/strategies/ema_pullback/context/consumption_validation.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/context/consumption_validation.py",
+    "sha256": "bc454f2de0cdcc5c09a17816232cbbe606747624191ce648025bad86f09e64ee"
+  },
+  {
+    "source": "research/strategies/ema_pullback/context/evaluation.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/context/evaluation.py",
+    "sha256": "b0e1fe2eea224c3c7bd88047846eba7312037f80fab87c70957713ccb6472a4b"
+  },
+  {
+    "source": "research/strategies/ema_pullback/context/pipeline.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/context/pipeline.py",
+    "sha256": "830b447da417573c169056b53cd959efa15431b368d3e9e660e2d1b6284a3a49"
+  },
+  {
+    "source": "research/strategies/ema_pullback/context/policies.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/context/policies.py",
+    "sha256": "b63d5b16252043b9a1a9dea76b1b12fcbbed52c76f1e1c3388679afd9f99c7b8"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/__init__.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/__init__.py",
+    "sha256": "ff3263a34a3249fa67e2dffa691b4a137effcfd304678f736faf7469afc6d82e"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/backtest.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/backtest.py",
+    "sha256": "e3a248380f8012bc271b98e9c424023eafd01252cf58366ccd8f5841a7e166a7"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/data_loader.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/data_loader.py",
+    "sha256": "33f615bc3657eb32b86358724fc4c2c7e2222d654c017d1240c6cb78d854ddd5"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/exit_arbitration.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/exit_arbitration.py",
+    "sha256": "5469f6d650196c0f9482845e64a5ab9910cd69a367f9b10097ca7f2d273f3eee"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/exit_attribution.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/exit_attribution.py",
+    "sha256": "ca76056a9b20deb02f448fa874f1f353fabc14cf55a89f634324c78f9cb3ab97"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/exit_policy_candidates.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/exit_policy_candidates.py",
+    "sha256": "89068f0daaba847a0cf2f1c17cebe8c7bbd6c5f31d8a4c8d89d457738dd29829"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/exits.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/exits.py",
+    "sha256": "11285d13db433e8161438fdc1f7fc457841b685e792ecc90917240a8d6d881f8"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/managed_bar_open_candidates.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/managed_bar_open_candidates.py",
+    "sha256": "78ab357ee81f107ff419ce31be0016875ed4eedbb1b0a60d84c017cad82be798"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/managed_comparison.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/managed_comparison.py",
+    "sha256": "ecea59a7fc011a281a9a0bd595832e6799b303b7c046d241c21586efcc24666e"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/managed_components/__init__.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/managed_components/__init__.py",
+    "sha256": "d82c093f31b92318967172441bfb7a392001df277869bf56274168314350ac2b"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/managed_components/activation.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/managed_components/activation.py",
+    "sha256": "7a0860b87a442947aa9192bdc6c91ec37199fe0ca9af89e4def3a418c77b20b9"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/managed_components/atr.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/managed_components/atr.py",
+    "sha256": "31373925f59d13326777f2b4d02f971be755055c9866774e58348e4e51e00d55"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/managed_components/runtime_exit.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/managed_components/runtime_exit.py",
+    "sha256": "8be11f793a8bbf6466acc3221d28b314a6f5f7be9264ccea8bd1917859a627be"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/managed_components/snapshot.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/managed_components/snapshot.py",
+    "sha256": "6ffb62afbdd7752d543741b2a2e860f9bbdc3d89fcf5378b5b1183af771c74c4"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/managed_components/stop.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/managed_components/stop.py",
+    "sha256": "a34745a27489467ec2b0eeb94bdbac778555be0bd190330f3c7a00c2f0f0471a"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/managed_components/take.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/managed_components/take.py",
+    "sha256": "54b06c92eeeddc4d9b05039594bbd27dae96361e2ba73a2b2e16335479ad7d18"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/managed_execution_loop.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/managed_execution_loop.py",
+    "sha256": "b7908303a342ddc3a283d63f48a1db44df4d1e822bcd04224b76d8faaf67e5eb"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/managed_exit_provider.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/managed_exit_provider.py",
+    "sha256": "5f1990cd9d1d9083996fc49da4026a4b7fe7ce234cf0fa0774cda3eb94fca9d0"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/report_table.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/report_table.py",
+    "sha256": "eb0e6fbddbf9541945cca8babe75ffd25bed60c2d50f166f31e6c0e0fa4c69ef"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/result_models.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/result_models.py",
+    "sha256": "6f2670d1ef47a68004e13542014314a032d183aefe1a5b047f8fc7ba6c09b6f3"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/results.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/results.py",
+    "sha256": "05cf3dc586310361a2b1ecc34ca4ec4746ec4b25dfce7da5cab2a55bef4305f2"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/runner.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/runner.py",
+    "sha256": "c18d4f446d645280c6e52d762a4c939bf88250458a3b6bfd30a6ce26e1d8fbce"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/signal_trace.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/signal_trace.py",
+    "sha256": "c04f1d28ecc21e49197903512d95430d40b4f71b2e16102c1159451273848ebf"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/signals.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/signals.py",
+    "sha256": "7d72997f6ed1f26ccb3778707d307ffdfcfa852201f21d2e6814023c11623572"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/trade_analyzer.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/trade_analyzer.py",
+    "sha256": "06a3c9490f9cdb8c77c698d0617c12fd912628653026c8f79a9f9b64b768c38a"
+  },
+  {
+    "source": "research/strategies/ema_pullback/execution/trade_runtime.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/execution/trade_runtime.py",
+    "sha256": "ceae930bdcc4acecb16551b1e585aa7d673faa056aec948379595460fa428cc6"
+  },
+  {
+    "source": "research/strategies/ema_pullback/features/__init__.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/features/__init__.py",
+    "sha256": "e9a33048d27bfd7f13f634410cbe1bcf97df612059ef71b2a39639fb17da06cc"
+  },
+  {
+    "source": "research/strategies/ema_pullback/features/calculations.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/features/calculations.py",
+    "sha256": "35dd9b14786991f8fe0e6cb3954f5b47a0607f9ffd39a68ac640e5832c4c086f"
+  },
+  {
+    "source": "research/strategies/ema_pullback/features/plan.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/features/plan.py",
+    "sha256": "165086f2354e8b6d32e2f7022e4cc249091580573c7714fdd41f111ebd87d599"
+  },
+  {
+    "source": "research/strategies/ema_pullback/instance_loader.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/instance_loader.py",
+    "sha256": "3165f2c3065df955ed0e236520b82197bb3b41f9eae210cf22e528bde2d08ece"
+  },
+  {
+    "source": "research/strategies/ema_pullback/phase_rule_conditions/__init__.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/phase_rule_conditions/__init__.py",
+    "sha256": "6d2db6ebd64b4f517ba6f608ad3af8eab25173f169e478f0ef79ffb3f8d6ac2f"
+  },
+  {
+    "source": "research/strategies/ema_pullback/phase_rule_conditions/params.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/phase_rule_conditions/params.py",
+    "sha256": "eba0dcdb9c69a222038a3a98e320941ae9f0659ed915533032278592a7616167"
+  },
+  {
+    "source": "research/strategies/ema_pullback/phase_rule_conditions/registry.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/phase_rule_conditions/registry.py",
+    "sha256": "80c72762583e1ac3270b5cd3f89968af4e21c280ec2cdf82ea9f6e253f724225"
+  },
+  {
+    "source": "research/strategies/ema_pullback/run.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/run.py",
+    "sha256": "5dda73ebe728fc620feac05a9ace83457bd9bcec5df15c695f6897fe90910c79"
+  },
+  {
+    "source": "research/strategies/ema_pullback/setup_runtime.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/setup_runtime.py",
+    "sha256": "98a97f91636d8d97db3c5c78cf8416de86845373e3a5659199be310bfd42f4f5"
+  },
+  {
+    "source": "research/strategies/ema_pullback/spec.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/spec.py",
+    "sha256": "dc581f082b2aa69711abb57b281e2c0982fd25f5f75cdd76fec8565f8b0477fb"
+  },
+  {
+    "source": "research/strategies/ema_pullback/spec_instances.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/spec_instances.py",
+    "sha256": "bb87442ab1b5f66a14d7ada943b95b811a77528f64f6c830b263529d8e189eec"
+  },
+  {
+    "source": "research/strategies/ema_pullback/spec_report.py",
+    "destination": "legacy_source/bbb/research/strategies/ema_pullback/spec_report.py",
+    "sha256": "7dc57e8cfcde4553f3af438ec4364f1d6093d417e16d52aea03030c7c68d4412"
+  },
+  {
+    "source": "tests/ema_pullback_context_helpers.py",
+    "destination": "legacy_source/bbb/tests/ema_pullback_context_helpers.py",
+    "sha256": "696267e2930aa5123071e7c10f53a77edfbd9fa47ed27ba98cb7307812d38f37"
+  },
+  {
+    "source": "tests/phase_rule_test_helpers.py",
+    "destination": "legacy_source/bbb/tests/phase_rule_test_helpers.py",
+    "sha256": "fef01071c24922fc411f57e4cae0070757c73065279bac819573fa50c33a1ee3"
+  },
+  {
+    "source": "tests/test_anchor_stack_width_setup.py",
+    "destination": "legacy_source/bbb/tests/test_anchor_stack_width_setup.py",
+    "sha256": "bd90e4477cef86fe354a9952888e659e49617c5701a0e971a416ede2f7c28cae"
+  },
+  {
+    "source": "tests/test_consumer_roles.py",
+    "destination": "legacy_source/bbb/tests/test_consumer_roles.py",
+    "sha256": "934916a66a4cf301cbf9817bf2d51e0625d5191c35ed4626836603f60a2ce48d"
+  },
+  {
+    "source": "tests/test_ema_pullback_components.py",
+    "destination": "legacy_source/bbb/tests/test_ema_pullback_components.py",
+    "sha256": "f2246a972b0c081d808f1e4efaade89987a7c75b2e6c2c9352a183059cea35b5"
+  },
+  {
+    "source": "tests/test_ema_pullback_exit_ema_signals.py",
+    "destination": "legacy_source/bbb/tests/test_ema_pullback_exit_ema_signals.py",
+    "sha256": "238abf87388856aeff8f27b67e38165d10ebbc891d9f24d722a5967fba668407"
+  },
+  {
+    "source": "tests/test_ema_pullback_exits.py",
+    "destination": "legacy_source/bbb/tests/test_ema_pullback_exits.py",
+    "sha256": "e26c5c7f8d43d5e6348b2af632f1ad2b7bcbb6e438ec8c4b3a95140fb8633cec"
+  },
+  {
+    "source": "tests/test_ema_pullback_feature_profile.py",
+    "destination": "legacy_source/bbb/tests/test_ema_pullback_feature_profile.py",
+    "sha256": "c30286d0c3000c3470db0672c091392a09024c8316420c5a06fb0dc7e9757f76"
+  },
+  {
+    "source": "tests/test_ema_pullback_features_atr.py",
+    "destination": "legacy_source/bbb/tests/test_ema_pullback_features_atr.py",
+    "sha256": "b873e3eed3363acae7a49857c285ae6ccfa2db0546983a078382896daeea8400"
+  },
+  {
+    "source": "tests/test_ema_pullback_pipeline.py",
+    "destination": "legacy_source/bbb/tests/test_ema_pullback_pipeline.py",
+    "sha256": "452d9b9ae12f86887ca8c35f623174f76f78541115bc5f4aaac27a8543ee7c8f"
+  },
+  {
+    "source": "tests/test_ema_pullback_setup_stack.py",
+    "destination": "legacy_source/bbb/tests/test_ema_pullback_setup_stack.py",
+    "sha256": "f21d9e599459a628d1de7289862ec99da13b3763169bc5c809999e12922d87e9"
+  },
+  {
+    "source": "tests/test_exit_attribution.py",
+    "destination": "legacy_source/bbb/tests/test_exit_attribution.py",
+    "sha256": "392047f14017586d7177adc8c31f6d12b936f6fea94119c739db4fc252bd0bce"
+  },
+  {
+    "source": "tests/test_exit_management_contracts.py",
+    "destination": "legacy_source/bbb/tests/test_exit_management_contracts.py",
+    "sha256": "7a0941061c42584ce4d5ac08a33a7a5a66c9675737bd011da24e754d4e3f168d"
+  },
+  {
+    "source": "tests/test_htf_regime_gate.py",
+    "destination": "legacy_source/bbb/tests/test_htf_regime_gate.py",
+    "sha256": "6f945a2f3835148339151c5d0db9cfb223f1054e394d955c1d08e69cda3bf081"
+  },
+  {
+    "source": "tests/test_managed_exit_provider.py",
+    "destination": "legacy_source/bbb/tests/test_managed_exit_provider.py",
+    "sha256": "96737a944d4f5510d4089f247b7efdf68682abb73e8fde986d64d22af5d19b47"
+  },
+  {
+    "source": "tests/test_managed_runtime_exit_components.py",
+    "destination": "legacy_source/bbb/tests/test_managed_runtime_exit_components.py",
+    "sha256": "df61ab96f25123221cc5b700a707487c24373641d4cbcfbbeca0b713a5918235"
+  },
+  {
+    "source": "tests/test_managed_stop_components.py",
+    "destination": "legacy_source/bbb/tests/test_managed_stop_components.py",
+    "sha256": "bbaebcbc30916c04e8c6630113ab88e36fef7ca412dc8e417ef4e806ec76d3fc"
+  },
+  {
+    "source": "tests/test_managed_take_components.py",
+    "destination": "legacy_source/bbb/tests/test_managed_take_components.py",
+    "sha256": "1761d2e2ca038e1b46cc259dfaf83aacab0a3450c86a1f5d4d834c5e27db53f3"
+  },
+  {
+    "source": "tests/test_phase_rule_conditions.py",
+    "destination": "legacy_source/bbb/tests/test_phase_rule_conditions.py",
+    "sha256": "2c915c5c1e4d917e51d4f93e55926c655942c400226ad558a1f574f4e3c42a5e"
+  },
+  {
+    "source": "tests/test_runtime_reusable_signal_exits.py",
+    "destination": "legacy_source/bbb/tests/test_runtime_reusable_signal_exits.py",
+    "sha256": "762f3fe66b615cedcded83a800268b044841ad6d7aa2e4ba2a9d27cc92aa6589"
+  },
+  {
+    "source": "tests/test_setup_component_context_boundary.py",
+    "destination": "legacy_source/bbb/tests/test_setup_component_context_boundary.py",
+    "sha256": "9f1f08cc9337ea213d9b1271b6b8a48fc2e4ef242c7d09f56a3cbbd61a97f0bf"
+  },
+  {
+    "source": "tests/test_strategy_level_contexts.py",
+    "destination": "legacy_source/bbb/tests/test_strategy_level_contexts.py",
+    "sha256": "7a9f6f49ea97e8ea06e12ccbed77fcb8fcf1405e1f8f3e556d48f6f47ec204ea"
+  },
+  {
+    "source": "tests/test_trend_strength_episode_blocker.py",
+    "destination": "legacy_source/bbb/tests/test_trend_strength_episode_blocker.py",
+    "sha256": "8cadec62f0a0fd1c12c5f57057fdf4347b533e779a52e9d818a26a107886e953"
+  }
+]

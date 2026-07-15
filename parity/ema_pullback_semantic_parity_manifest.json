@@ -1,0 +1,63 @@
+{
+  "manifest_version": 1,
+  "strategy_id": "ema_pullback",
+  "compatibility_profile": "bbb_v1",
+  "source_provenance": "legacy_source/bbb/copy_manifest.json",
+  "required_stages": [
+    {
+      "stage": "feature_plan",
+      "tests": ["tests/test_ema_pullback_feature_plan_bbb_golden_parity.py"]
+    },
+    {
+      "stage": "indicators",
+      "tests": [
+        "tests/test_ema_bbb_golden_parity.py",
+        "tests/test_atr_bbb_golden_parity.py",
+        "tests/test_atr_distance_bbb_golden_parity.py",
+        "tests/test_rsi_bbb_golden_parity.py",
+        "tests/test_adx_dmi_bbb_golden_parity.py"
+      ]
+    },
+    {
+      "stage": "contexts",
+      "tests": [
+        "tests/test_ema_pullback_contexts_bbb_golden_parity.py",
+        "tests/test_ema_pullback_context_consumption_bbb_parity.py"
+      ]
+    },
+    {
+      "stage": "direction_blockers",
+      "tests": ["tests/test_ema_pullback_direction_blockers_bbb_parity.py"]
+    },
+    {
+      "stage": "setups",
+      "tests": ["tests/test_ema_pullback_setups_bbb_parity.py"]
+    },
+    {
+      "stage": "triggers",
+      "tests": ["tests/test_ema_pullback_triggers_bbb_parity.py"]
+    },
+    {
+      "stage": "exit_policy",
+      "tests": ["tests/test_ema_pullback_exits_bbb_parity.py"]
+    },
+    {
+      "stage": "managed_policy",
+      "tests": ["tests/test_ema_pullback_managed_parity.py"]
+    },
+    {
+      "stage": "public_api_contract",
+      "tests": [
+        "tests/test_ema_pullback_feature_range_api.py",
+        "tests/test_ema_pullback_managed_api.py"
+      ]
+    }
+  ],
+  "explicitly_out_of_scope": [
+    "BBB vectorbt fill arbitration",
+    "same-bar OHLC stop/take execution priority",
+    "fees, slippage, PnL and trade records",
+    "BBB Workbench DTO translation",
+    "live runtime bar-to-bar checkpointing"
+  ]
+}
