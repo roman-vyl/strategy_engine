@@ -35,20 +35,29 @@ At every bar, entry, stop, and take SHALL either all be present or all be absent
 
 ### Requirement: Existing pre-trigger gate
 
-The touch-anchor projector SHALL use the existing `SideSetupEvaluation.pre_trigger_allowed` vector as its internal pre-trigger gate.
+The touch-anchor projector SHALL use the existing `SideSetupEvaluation.pre_trigger_allowed` vector as its internal strategy gate. It SHALL also reuse the already evaluated touch-anchor `close_ok` side precondition.
 
-The engine SHALL NOT change the calculation of `pre_trigger_allowed` and SHALL NOT publish it as a new top-level lifecycle state as part of this change.
+For long, `close_ok` SHALL require close to be greater than or equal to anchor. For short, `close_ok` SHALL require close to be less than or equal to anchor. The projector SHALL NOT recalculate these comparisons or re-parse the trigger configuration.
+
+The engine SHALL NOT change the calculation of `pre_trigger_allowed` or the existing touch-anchor trace and SHALL NOT publish either value as a new top-level lifecycle state as part of this change.
 
 #### Scenario: Pre-trigger denial suppresses the triple
 
 - **WHEN** `pre_trigger_allowed` is false for a supported enabled side on a bar
 - **THEN** all three potential prices for that side and bar SHALL be `null`.
 
+#### Scenario: Wrong-side close suppresses a marketable plan
+
+- **WHEN** `touch_anchor` is configured for long and close is below anchor on a bar
+- **THEN** all three potential prices for long on that bar SHALL be `null`.
+- **WHEN** `touch_anchor` is configured for short and close is above anchor on a bar
+- **THEN** all three potential prices for short on that bar SHALL be `null`.
+
 ### Requirement: Touch-anchor price semantics
 
 Version 1 SHALL produce potential-entry records only for a configured `touch_anchor` trigger.
 
-When the pre-trigger gate and required values are ready, the potential entry price SHALL equal the current anchor EMA.
+When the pre-trigger gate, the touch-anchor `close_ok` precondition, and required values are ready, the potential entry price SHALL equal the current anchor EMA.
 
 For long, stop SHALL equal anchor minus selected raw initial stop distance and take SHALL equal anchor plus selected raw initial take distance.
 
@@ -72,6 +81,7 @@ For short, stop SHALL equal anchor plus selected raw initial stop distance and t
 
 - **WHEN** `touch_anchor` fires on a bar
 - **AND** `pre_trigger_allowed` is true on that bar
+- **AND** touch-anchor `close_ok` is true on that bar
 - **AND** all required prices and distances are valid
 - **THEN** the final entry mask MAY be true on that bar
 - **AND** the complete potential-entry triple SHALL remain present on that same bar.
@@ -99,7 +109,7 @@ Existing serialized stop/take ratios, readiness, profiles, evidence, and rule be
 
 ### Requirement: Positive and finite source values
 
-A potential price triple SHALL be present only when `pre_trigger_allowed` is true and the anchor, selected stop distance, selected take distance, and all derived prices are finite.
+A potential price triple SHALL be present only when `pre_trigger_allowed` and touch-anchor `close_ok` are true and the anchor, selected stop distance, selected take distance, and all derived prices are finite.
 
 The anchor, selected stop distance, selected take distance, and all derived prices SHALL also be strictly greater than zero.
 

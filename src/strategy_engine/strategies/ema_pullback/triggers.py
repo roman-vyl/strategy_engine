@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.indicators.contracts import FeatureFrame
@@ -47,6 +47,28 @@ class SideTriggerEvaluation:
             "trigger": self.trigger.to_wire(),
             "pre_risk_entry_allowed": list(self.pre_risk_entry_allowed),
         }
+
+
+def touch_anchor_close_ok(evaluation: SideTriggerEvaluation) -> tuple[bool, ...]:
+    """Return the typed close-side precondition from an evaluated touch trigger."""
+
+    trigger = evaluation.trigger
+    if trigger.component_id != "touch_anchor":
+        raise InvalidRequestError(
+            "potential entry trigger must be touch_anchor",
+            component_id=trigger.component_id,
+        )
+    values = trigger.trace.get("close_ok")
+    if (
+        values is None
+        or len(values) != len(trigger.allowed)
+        or any(not isinstance(value, bool) for value in values)
+    ):
+        raise InvalidRequestError(
+            "touch_anchor trigger must expose a bar-aligned boolean close_ok trace",
+            side=evaluation.side,
+        )
+    return cast(tuple[bool, ...], values)
 
 
 def _mapping(value: object, path: str) -> Mapping[str, Any]:

@@ -17,6 +17,10 @@ from strategy_engine.strategies.ema_pullback.potential_entries import (
     project_potential_entries,
 )
 from strategy_engine.strategies.ema_pullback.setups import SideSetupEvaluation
+from strategy_engine.strategies.ema_pullback.triggers import (
+    SideTriggerEvaluation,
+    TriggerMask,
+)
 
 
 def raw_spec() -> dict[str, object]:
@@ -167,8 +171,20 @@ def test_atr_raw_distance_is_applied_to_anchor_when_close_differs() -> None:
     allowed = (True,) * len(feature_frame.time_ms)
     setups = (SideSetupEvaluation("long", (), allowed, allowed),)
 
+    triggers = (
+        SideTriggerEvaluation(
+            "long",
+            TriggerMask(
+                "touch_anchor",
+                "long",
+                allowed,
+                {"close_ok": allowed},
+            ),
+            allowed,
+        ),
+    )
     projected = project_potential_entries(
-        spec, feature_frame, plan, setups, exits
+        feature_frame, plan, setups, triggers, exits
     )["long"]
 
     assert projected.stop_price[1] == pytest.approx(91.0 - 1.5)

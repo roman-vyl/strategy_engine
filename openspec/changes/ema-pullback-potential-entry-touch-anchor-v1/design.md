@@ -54,8 +54,8 @@ entry, stop, and take are all absent
 The projector consumes only existing calculation outputs:
 
 - `SideSetupEvaluation.pre_trigger_allowed` for the side;
+- the already evaluated `SideTriggerEvaluation` for trigger identity and the touch-anchor `close_ok` side precondition;
 - `FeatureFrame` and `EmaPullbackFeaturePlan` for the anchor EMA vector;
-- the configured trigger identity from the unchanged strategy spec;
 - selected raw initial stop-loss distance for the side and bar;
 - selected raw initial take-profit distance for the side and bar.
 
@@ -75,6 +75,7 @@ For every enabled side and bar, a potential entry may be produced only when:
 
 ```text
 pre_trigger_allowed is true
+AND touch_anchor.close_ok is true
 AND anchor EMA is available, finite, and greater than zero
 AND selected initial stop distance is available, finite, and greater than zero
 AND selected initial take distance is available, finite, and greater than zero
@@ -102,7 +103,9 @@ take_price = entry_price - take_distance
 
 The projector emits the complete triple only when all source values and all derived prices are finite and strictly greater than zero. Otherwise all three values at that bar are absent.
 
-The projector intentionally does not require `trigger.allowed` to be false. If `touch_anchor` fires on the same bar while `pre_trigger_allowed` and all required values remain valid, the existing final entry may be true and the potential-entry triple remains present. This additive projection describes the bar's potential price geometry; it does not infer Runtime position state.
+The projector reuses the already calculated touch-anchor `close_ok` trace instead of re-reading the spec or recalculating market geometry. For long, `close_ok` means close is at or above anchor; for short, it means close is at or below anchor. This prevents publishing an anchor price on the wrong side of the current market, where the intended resting touch plan would become immediately marketable.
+
+The projector intentionally does not require the touch itself or `trigger.allowed` to be false. If `touch_anchor` fires on the same bar while `pre_trigger_allowed`, `close_ok`, and all required values remain valid, the existing final entry may be true and the potential-entry triple remains present. This additive projection describes the bar's potential price geometry; it does not infer Runtime position state.
 
 ## 6. Raw exit-distance preservation
 
@@ -159,7 +162,7 @@ No `allowed`, `armed`, `trigger_type`, `order_kind`, label, plan ID, config hash
 
 A range request must still execute feature and strategy calculation once.
 
-The EMA Pullback evaluator may pass its existing local results directly to the new projector. A larger public pipeline rewrite or a mandatory new public evaluation bundle is not required for v1.
+The EMA Pullback evaluator passes its existing setup, trigger, feature, and exit-policy results directly to the new projector. A larger public pipeline rewrite or a mandatory new public evaluation bundle is not required for v1.
 
 Any internal structural extraction introduced for reuse must:
 

@@ -11,7 +11,7 @@
 
 - [x] Add the minimal immutable `PotentialEntry` model with `side`, `entry_price`, `stop_price`, and `take_price` vectors.
 - [x] Add a transport-neutral touch-anchor potential-entry projector.
-- [x] Use existing `SideSetupEvaluation.pre_trigger_allowed` as the internal pre-trigger gate.
+- [x] Use existing `SideSetupEvaluation.pre_trigger_allowed` and evaluated touch-anchor `close_ok` as internal projector gates.
 - [x] Read the anchor vector from the existing planned feature mapping.
 - [x] Calculate long and short absolute entry/stop/take prices from the anchor and selected raw distances.
 - [x] Enforce all-present-or-all-absent values at every bar.
@@ -35,6 +35,7 @@
 - [x] Test that close differing from anchor does not distort ATR-based potential stop/take distances.
 - [x] Test bar-to-bar changes when anchor or ATR distance changes.
 - [x] Test blocker/direction/setup denial through `pre_trigger_allowed` produces a fully absent triple.
+- [x] Test wrong-side touch-anchor close suppresses a marketable potential-entry triple.
 - [x] Test feature warmup or unavailable distance produces a fully absent triple.
 - [x] Test non-touch triggers serialize exactly as `potential_entries: {}`.
 - [x] Test `touch_anchor` includes only enabled-side keys and omits disabled sides.

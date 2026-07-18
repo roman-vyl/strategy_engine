@@ -27,3 +27,4 @@ The markdown master plan and detailed audit are authoritative when a reference d
 ## Current design work
 
 - `18_potential_entry_touch_anchor_v1.md` — high-level design for a non-invasive `PotentialEntry` vector projection using pre-trigger eligibility, anchor EMA, and raw initial stop/take distances.
+- `19_potential_entry_implementation_review.md` — code, architecture, real-data and Python-toolchain review of the implemented potential-entry slice.

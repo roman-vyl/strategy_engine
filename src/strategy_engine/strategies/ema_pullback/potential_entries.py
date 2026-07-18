@@ -6,7 +6,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from math import isfinite
-from typing import Any
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.values import normalized_decimal_text
@@ -14,6 +13,10 @@ from strategy_engine.indicators.contracts import FeatureFrame
 from strategy_engine.strategies.ema_pullback.exits import ExitPolicyEvaluation
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 from strategy_engine.strategies.ema_pullback.setups import SideSetupEvaluation
+from strategy_engine.strategies.ema_pullback.triggers import (
+    SideTriggerEvaluation,
+    touch_anchor_close_ok,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,20 +25,6 @@ class PotentialEntry:
     entry_price: tuple[float | None, ...]
     stop_price: tuple[float | None, ...]
     take_price: tuple[float | None, ...]
-
-
-def _mapping(value: object, path: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
-        raise InvalidRequestError(f"{path} must be an object")
-    return value
-
-
-def _trigger_component(raw_spec: Mapping[str, Any]) -> str:
-    components = _mapping(raw_spec.get("components", {}), "raw_spec.components")
-    trigger = components.get("trigger", {"component_id": "reclaim_anchor"})
-    if isinstance(trigger, str):
-        return trigger
-    return str(_mapping(trigger, "raw_spec.components.trigger").get("component_id", ""))
 
 
 def _anchor_values(
@@ -63,6 +52,7 @@ def _distances_for(
 
 def _project_side(
     setup: SideSetupEvaluation,
+    trigger_close_ok: tuple[bool, ...],
     anchors: tuple[float | None, ...],
     stop_distances: tuple[float | None, ...],
     take_distances: tuple[float | None, ...],
@@ -70,15 +60,21 @@ def _project_side(
     length = len(anchors)
     if not all(
         len(values) == length
-        for values in (setup.pre_trigger_allowed, stop_distances, take_distances)
+        for values in (
+            setup.pre_trigger_allowed,
+            trigger_close_ok,
+            stop_distances,
+            take_distances,
+        )
     ):
         raise InvalidRequestError("potential entry inputs must share the bar axis")
 
     entries: list[float | None] = []
     stops: list[float | None] = []
     takes: list[float | None] = []
-    for allowed, anchor, stop_distance, take_distance in zip(
+    for allowed, close_ok, anchor, stop_distance, take_distance in zip(
         setup.pre_trigger_allowed,
+        trigger_close_ok,
         anchors,
         stop_distances,
         take_distances,
@@ -86,6 +82,7 @@ def _project_side(
     ):
         if (
             not allowed
+            or not close_ok
             or anchor is None
             or stop_distance is None
             or take_distance is None
@@ -100,9 +97,13 @@ def _project_side(
             if setup.side == "long":
                 stop = entry - stop_distance
                 take = entry + take_distance
-            else:
+            elif setup.side == "short":
                 stop = entry + stop_distance
                 take = entry - take_distance
+            else:
+                raise InvalidRequestError(
+                    "trade side must be long or short", side=setup.side
+                )
             if not all(isfinite(value) and value > 0 for value in (entry, stop, take)):
                 entry = stop = take = None
         entries.append(entry)
@@ -112,23 +113,45 @@ def _project_side(
 
 
 def project_potential_entries(
-    raw_spec: Mapping[str, Any],
     frame: FeatureFrame,
     plan: EmaPullbackFeaturePlan,
     setups: tuple[SideSetupEvaluation, ...],
+    triggers: tuple[SideTriggerEvaluation, ...],
     exit_policy: ExitPolicyEvaluation,
 ) -> dict[str, PotentialEntry]:
     """Project enabled-side potential prices from already evaluated range data."""
 
-    if _trigger_component(raw_spec) != "touch_anchor":
+    component_ids = {item.trigger.component_id for item in triggers}
+    if len(component_ids) != 1:
+        raise InvalidRequestError(
+            "potential entry triggers must share one component",
+            component_ids=sorted(component_ids),
+        )
+    if component_ids != {"touch_anchor"}:
         return {}
+
+    trigger_by_side = {item.side: item for item in triggers}
+    if len(trigger_by_side) != len(triggers):
+        raise InvalidRequestError("potential entry triggers must have unique sides")
+
     anchors = _anchor_values(frame, plan)
     output: dict[str, PotentialEntry] = {}
     for setup in setups:
+        trigger = trigger_by_side.get(setup.side)
+        if trigger is None:
+            raise InvalidRequestError(
+                "missing trigger evaluation for potential entry side", side=setup.side
+            )
         stop_distances, take_distances = _distances_for(exit_policy, setup.side)
         output[setup.side] = _project_side(
-            setup, anchors, stop_distances, take_distances
+            setup,
+            touch_anchor_close_ok(trigger),
+            anchors,
+            stop_distances,
+            take_distances,
         )
+    if set(trigger_by_side) != set(output):
+        raise InvalidRequestError("setup and trigger sides must match")
     return output
 
 

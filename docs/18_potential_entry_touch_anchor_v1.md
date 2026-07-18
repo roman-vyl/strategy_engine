@@ -114,14 +114,17 @@ entry_price[N], stop_price[N], take_price[N]
 
 ## Как рассчитывается potential entry
 
-На каждом баре и для каждой стороны проектор проверяет:
+На каждом баре и для каждой стороны проектор использует уже рассчитанные результаты setup- и trigger-этапов:
 
 ```text
 pre_trigger_allowed
+AND touch_anchor.close_ok
 AND anchor EMA ready
 AND initial stop distance ready
 AND initial take distance ready
 ```
+
+`touch_anchor.close_ok` не означает, что касание уже произошло. Он только подтверждает правильную геометрию ожидающей заявки: для long текущий close находится не ниже anchor, а для short — не выше anchor. Без этого ограничения потенциальная цена anchor могла бы оказаться с неправильной стороны текущего рынка и превратиться в немедленно исполняемую, а не ожидающую touch-заявку.
 
 Если хотя бы одно обязательное значение отсутствует, не является конечным числом или меньше либо равно нулю, `PotentialEntry` на этом баре отсутствует. Те же требования применяются к рассчитанным entry, stop и take.
 
@@ -183,6 +186,7 @@ internal evaluation results
 Новый projector использует только:
 
 - `pre_trigger_allowed` по каждой стороне;
+- уже вычисленный `touch_anchor.close_ok` из trigger evaluation;
 - anchor EMA vector;
 - выбранную raw initial stop distance;
 - выбранную raw initial take distance.
@@ -200,6 +204,7 @@ internal evaluation results
 ```text
 bar N:
   pre_trigger_allowed = true
+  touch_anchor.close_ok = true
   anchor = 60 000
   ATR stop distance = 1 200
   ATR take distance = 3 600

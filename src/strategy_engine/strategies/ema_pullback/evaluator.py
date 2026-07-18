@@ -24,7 +24,7 @@ from strategy_engine.strategies.ema_pullback.triggers import evaluate_triggers
 
 
 class EmaPullbackRangeEvaluator:
-    """Evaluate strategy-owned features and contexts; decisions are not ported yet."""
+    """Evaluate the complete EMA Pullback strategy range once."""
 
     def __init__(
         self,
@@ -77,10 +77,10 @@ class EmaPullbackRangeEvaluator:
             consumption,
         )
         potential_entries = project_potential_entries(
-            request.strategy.raw_spec,
             frame,
             planned,
             setups,
+            triggers,
             exit_policy,
         )
         features: dict[str, object] = {}

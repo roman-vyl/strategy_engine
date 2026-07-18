@@ -4,6 +4,7 @@ from dataclasses import FrozenInstanceError, fields, replace
 
 import pytest
 
+from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.market import MarketStream
 from strategy_engine.domain.ranges import TimeRange
 from strategy_engine.indicators.contracts import FeatureFrame
@@ -17,6 +18,10 @@ from strategy_engine.strategies.ema_pullback.potential_entries import (
     project_potential_entries,
 )
 from strategy_engine.strategies.ema_pullback.setups import SideSetupEvaluation
+from strategy_engine.strategies.ema_pullback.triggers import (
+    SideTriggerEvaluation,
+    TriggerMask,
+)
 
 
 def raw_spec(trigger: str = "touch_anchor") -> dict[str, object]:
@@ -100,6 +105,23 @@ def setup(side: str, allowed: tuple[bool, ...] = (True, True, True, True)) -> Si
     return SideSetupEvaluation(side, (), allowed, allowed)
 
 
+def trigger(
+    side: str,
+    *,
+    component_id: str = "touch_anchor",
+    close_ok: tuple[bool, ...] = (True, True, True, True),
+    fired: tuple[bool, ...] = (False, False, False, False),
+) -> SideTriggerEvaluation:
+    trace: dict[str, tuple[object, ...]] = (
+        {"close_ok": close_ok} if component_id == "touch_anchor" else {}
+    )
+    return SideTriggerEvaluation(
+        side=side,
+        trigger=TriggerMask(component_id, side, fired, trace),
+        pre_risk_entry_allowed=fired,
+    )
+
+
 def test_potential_entry_is_minimal_and_immutable() -> None:
     assert [item.name for item in fields(PotentialEntry)] == [
         "side",
@@ -116,7 +138,11 @@ def test_touch_anchor_projects_long_and_short_raw_distance_geometry() -> None:
     spec = raw_spec()
     frame, plan = frame_and_plan(spec)
     output = project_potential_entries(
-        spec, frame, plan, (setup("long"), setup("short")), exit_policy()
+        frame,
+        plan,
+        (setup("long"), setup("short")),
+        (trigger("long"), trigger("short")),
+        exit_policy(),
     )
 
     assert set(output) == {"long", "short"}
@@ -131,10 +157,10 @@ def test_projection_changes_bar_by_bar_and_does_not_apply_close_relative_ratios(
     spec = raw_spec()
     frame, plan = frame_and_plan(spec, ("80", "90", "110", "140"))
     output = project_potential_entries(
-        spec,
         frame,
         plan,
         (setup("long"),),
+        (trigger("long"),),
         exit_policy(stop_long=(2.0, 3.0, 5.0, 8.0)),
     )["long"]
 
@@ -146,10 +172,10 @@ def test_pre_trigger_denial_and_warmup_suppress_the_complete_triple() -> None:
     spec = raw_spec()
     frame, plan = frame_and_plan(spec, (None, "101", "103", "105"))
     output = project_potential_entries(
-        spec,
         frame,
         plan,
         (setup("long", (True, False, True, True)),),
+        (trigger("long"),),
         exit_policy(stop_long=(1.0, 1.0, None, 1.0)),
     )["long"]
 
@@ -178,10 +204,10 @@ def test_non_positive_source_or_derived_price_suppresses_all_values(
     spec = raw_spec()
     frame, plan = frame_and_plan(spec, anchors)
     output = project_potential_entries(
-        spec,
         frame,
         plan,
         (setup("long"),),
+        (trigger("long"),),
         exit_policy(stop_long=stops, take_long=takes),
     )["long"]
     assert (output.entry_price[0], output.stop_price[0], output.take_price[0]) == (
@@ -195,15 +221,74 @@ def test_non_touch_trigger_is_empty_and_touch_includes_only_evaluated_sides() ->
     spec = raw_spec("reclaim_anchor")
     frame, plan = frame_and_plan(spec)
     assert project_potential_entries(
-        spec, frame, plan, (setup("long"), setup("short")), exit_policy()
+        frame,
+        plan,
+        (setup("long"), setup("short")),
+        (
+            trigger("long", component_id="reclaim_anchor"),
+            trigger("short", component_id="reclaim_anchor"),
+        ),
+        exit_policy(),
     ) == {}
 
     touch_spec = raw_spec()
     frame, plan = frame_and_plan(touch_spec)
     output = project_potential_entries(
-        touch_spec, frame, plan, (setup("long"),), exit_policy()
+        frame, plan, (setup("long"),), (trigger("long"),), exit_policy()
     )
     assert set(output) == {"long"}
+
+
+def test_touch_projection_rejects_missing_close_side_output() -> None:
+    spec = raw_spec()
+    frame, plan = frame_and_plan(spec)
+    malformed = SideTriggerEvaluation(
+        side="long",
+        trigger=TriggerMask(
+            component_id="touch_anchor",
+            side="long",
+            allowed=(False, False, False, False),
+            trace={},
+        ),
+        pre_risk_entry_allowed=(False, False, False, False),
+    )
+
+    with pytest.raises(
+        InvalidRequestError,
+        match="touch_anchor trigger must expose a bar-aligned boolean close_ok trace",
+    ):
+        project_potential_entries(
+            frame,
+            plan,
+            (setup("long"),),
+            (malformed,),
+            exit_policy(),
+        )
+
+
+def test_touch_close_side_precondition_suppresses_marketable_plan() -> None:
+    spec = raw_spec()
+    frame, plan = frame_and_plan(spec)
+    output = project_potential_entries(
+        frame,
+        plan,
+        (setup("long"), setup("short")),
+        (
+            trigger("long", close_ok=(False, True, True, True)),
+            trigger("short", close_ok=(True, False, True, True)),
+        ),
+        exit_policy(),
+    )
+
+    assert output["long"].entry_price[0] is None
+    assert output["long"].stop_price[0] is None
+    assert output["long"].take_price[0] is None
+    assert output["short"].entry_price[1] is None
+    assert output["short"].stop_price[1] is None
+    assert output["short"].take_price[1] is None
+    assert output["long"].entry_price[1:] == (101.0, 103.0, 105.0)
+    assert output["short"].entry_price[0] == 100.0
+    assert output["short"].entry_price[2:] == (103.0, 105.0)
 
 
 def test_wire_projection_uses_decimal_text_nulls_and_no_duplicated_metadata() -> None:
@@ -217,23 +302,47 @@ def test_wire_projection_uses_decimal_text_nulls_and_no_duplicated_metadata() ->
             "take_price": ["102.5", None],
         }
     }
-    assert set(wire["long"]) == {"entry_price", "stop_price", "take_price"}  # type: ignore[arg-type]
+    long_wire = wire["long"]
+    assert isinstance(long_wire, dict)
+    assert set(long_wire) == {"entry_price", "stop_price", "take_price"}
 
 
 def test_trigger_firing_state_is_not_an_input_to_projection() -> None:
     spec = raw_spec()
     frame, plan = frame_and_plan(spec)
-    projected = project_potential_entries(
-        spec, frame, plan, (setup("long"),), exit_policy()
+    not_fired = project_potential_entries(
+        frame,
+        plan,
+        (setup("long"),),
+        (trigger("long", fired=(False, False, False, False)),),
+        exit_policy(),
     )["long"]
-    assert all(value is not None for value in projected.entry_price)
+    fired = project_potential_entries(
+        frame,
+        plan,
+        (setup("long"),),
+        (trigger("long", fired=(True, True, True, True)),),
+        exit_policy(),
+    )["long"]
+
+    assert fired == not_fired
+    assert all(value is not None for value in fired.entry_price)
 
 
 def test_non_finite_values_are_suppressed_as_complete_triples() -> None:
     spec = raw_spec()
     frame, plan = frame_and_plan(spec, ("NaN", "101", "103", "105"))
-    policy = replace(exit_policy(), take_profit_distance_long=(float("inf"), 1.0, 1.0, 1.0))
-    output = project_potential_entries(spec, frame, plan, (setup("long"),), policy)["long"]
+    policy = replace(
+        exit_policy(),
+        take_profit_distance_long=(float("inf"), 1.0, 1.0, 1.0),
+    )
+    output = project_potential_entries(
+        frame,
+        plan,
+        (setup("long"),),
+        (trigger("long"),),
+        policy,
+    )["long"]
     assert output.entry_price[0] is None
     assert output.stop_price[0] is None
     assert output.take_price[0] is None

@@ -7,6 +7,7 @@ The existing EMA Pullback range pipeline produces final entry masks only after t
 The current engine already calculates all required source data:
 
 - `SideSetupEvaluation.pre_trigger_allowed` is the existing pre-trigger strategy gate;
+- evaluated `touch_anchor` output already exposes whether close remains on the correct side of the anchor for a resting touch plan;
 - the anchor EMA is already present in the planned feature frame;
 - the exit-policy pipeline already calculates the ATR or constant-USD distance used by initial stop and take rules.
 
@@ -16,7 +17,7 @@ The missing capability is a small vector projection that combines these existing
 
 - Add a minimal immutable `PotentialEntry` vector model containing only `side`, `entry_price`, `stop_price`, and `take_price`.
 - Add a touch-anchor potential-entry projector after the existing EMA Pullback calculations.
-- Use `pre_trigger_allowed` only as an internal projector input; do not add a separate public `allowed`, `armed`, or `global_entry_allowed` field.
+- Use `pre_trigger_allowed` and the already evaluated touch-anchor side precondition only as internal projector inputs; do not add a separate public `allowed`, `armed`, or `global_entry_allowed` field.
 - Set the potential entry price to the current anchor EMA for `touch_anchor`.
 - Preserve the selected raw initial stop/take distance inside exit-policy evaluation before legacy normalization to `distance / close`.
 - Calculate potential absolute stop/take prices from the anchor and those raw distances, requiring anchor, distances, and derived prices to be finite and strictly greater than zero.
