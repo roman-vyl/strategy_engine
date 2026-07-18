@@ -78,6 +78,10 @@ class ExitPolicyEvaluation:
     stop_loss_ratio_short: tuple[float | None, ...]
     take_profit_ratio_long: tuple[float | None, ...]
     take_profit_ratio_short: tuple[float | None, ...]
+    stop_loss_distance_long: tuple[float | None, ...]
+    stop_loss_distance_short: tuple[float | None, ...]
+    take_profit_distance_long: tuple[float | None, ...]
+    take_profit_distance_short: tuple[float | None, ...]
     stop_ready_long: tuple[bool, ...]
     stop_ready_short: tuple[bool, ...]
     signal_by_profile_long: dict[str, tuple[bool, ...]]
@@ -255,11 +259,11 @@ def _signal_rule(
     raise InvalidRequestError("unsupported signal exit component", component_id=component_id)
 
 
-def _distance_ratio(
+def _distance(
     df: pd.DataFrame,
     rule: Mapping[str, Any],
     plan: EmaPullbackFeaturePlan,
-) -> pd.Series:
+) -> tuple[pd.Series, pd.Series]:
     component_id = str(rule.get("component_id", ""))
     if component_id in {"atr_stop_loss", "atr_take_profit"}:
         instance_id = str(rule.get("instance_id", ""))
@@ -279,7 +283,7 @@ def _distance_ratio(
     close = df["close"].astype(float)
     if (close <= 0).any():
         raise InvalidRequestError("exit distance ratio requires positive close")
-    return (distance / close).astype(float)
+    return distance.astype(float), (distance / close).astype(float)
 
 
 def _policy_rules(raw_spec: Mapping[str, Any]) -> dict[str, tuple[Mapping[str, Any], ...]]:
@@ -359,6 +363,7 @@ def evaluate_exit_policy(
     context_state, profile_long, profile_short = _profiles(consumption, len(df))
     signal_long_by_instance: dict[str, pd.Series] = {}
     signal_short_by_instance: dict[str, pd.Series] = {}
+    distance_by_instance: dict[str, pd.Series] = {}
     ratio_by_instance: dict[str, pd.Series] = {}
     evidence: list[ExitRuleEvidence] = []
 
@@ -399,7 +404,8 @@ def evaluate_exit_policy(
                         component_id=component_id,
                         exit_kind=exit_kind,
                     )
-                ratio = _distance_ratio(df, rule, plan)
+                distance, ratio = _distance(df, rule, plan)
+                distance_by_instance[instance_id] = distance
                 ratio_by_instance[instance_id] = ratio
                 evidence.append(
                     ExitRuleEvidence(
@@ -418,6 +424,8 @@ def evaluate_exit_policy(
     signals_short: dict[str, pd.Series] = {}
     sl_by_profile: dict[str, pd.Series] = {}
     tp_by_profile: dict[str, pd.Series] = {}
+    sl_distance_by_profile: dict[str, pd.Series] = {}
+    tp_distance_by_profile: dict[str, pd.Series] = {}
     always = groups["always_on"]
     for profile in _PROFILE_ORDER:
         selected = always + groups[profile]
@@ -448,6 +456,22 @@ def evaluate_exit_policy(
             ],
             df.index,
         )
+        sl_distance_by_profile[profile] = _min(
+            [
+                distance_by_instance[str(rule.get("instance_id"))]
+                for rule in selected
+                if str(rule.get("exit_kind")) == "stop_loss"
+            ],
+            df.index,
+        )
+        tp_distance_by_profile[profile] = _min(
+            [
+                distance_by_instance[str(rule.get("instance_id"))]
+                for rule in selected
+                if str(rule.get("exit_kind")) == "take_profit"
+            ],
+            df.index,
+        )
 
     signal_long = _select_bool(profile_long, signals_long, df.index)
     signal_short = _select_bool(profile_short, signals_short, df.index)
@@ -455,6 +479,10 @@ def evaluate_exit_policy(
     sl_short = _select(profile_short, sl_by_profile, df.index)
     tp_long = _select(profile_long, tp_by_profile, df.index)
     tp_short = _select(profile_short, tp_by_profile, df.index)
+    sl_distance_long = _select(profile_long, sl_distance_by_profile, df.index)
+    sl_distance_short = _select(profile_short, sl_distance_by_profile, df.index)
+    tp_distance_long = _select(profile_long, tp_distance_by_profile, df.index)
+    tp_distance_short = _select(profile_short, tp_distance_by_profile, df.index)
     ready_by_profile = {
         profile: _ready(sl_by_profile[profile], tp_by_profile[profile])
         for profile in _PROFILE_ORDER
@@ -462,20 +490,32 @@ def evaluate_exit_policy(
     ready_long = _select_bool(profile_long, ready_by_profile, df.index)
     ready_short = _select_bool(profile_short, ready_by_profile, df.index)
     return ExitPolicyEvaluation(
-        context_state,
-        profile_long,
-        profile_short,
-        tuple(bool(value) for value in signal_long),
-        tuple(bool(value) for value in signal_short),
-        _optional_floats(sl_long),
-        _optional_floats(sl_short),
-        _optional_floats(tp_long),
-        _optional_floats(tp_short),
-        tuple(bool(value) for value in ready_long),
-        tuple(bool(value) for value in ready_short),
-        {key: tuple(bool(value) for value in item) for key, item in signals_long.items()},
-        {key: tuple(bool(value) for value in item) for key, item in signals_short.items()},
-        {key: _optional_floats(item) for key, item in sl_by_profile.items()},
-        {key: _optional_floats(item) for key, item in tp_by_profile.items()},
-        tuple(evidence),
+        context_state=context_state,
+        profile_long=profile_long,
+        profile_short=profile_short,
+        signal_exit_long=tuple(bool(value) for value in signal_long),
+        signal_exit_short=tuple(bool(value) for value in signal_short),
+        stop_loss_ratio_long=_optional_floats(sl_long),
+        stop_loss_ratio_short=_optional_floats(sl_short),
+        take_profit_ratio_long=_optional_floats(tp_long),
+        take_profit_ratio_short=_optional_floats(tp_short),
+        stop_loss_distance_long=_optional_floats(sl_distance_long),
+        stop_loss_distance_short=_optional_floats(sl_distance_short),
+        take_profit_distance_long=_optional_floats(tp_distance_long),
+        take_profit_distance_short=_optional_floats(tp_distance_short),
+        stop_ready_long=tuple(bool(value) for value in ready_long),
+        stop_ready_short=tuple(bool(value) for value in ready_short),
+        signal_by_profile_long={
+            key: tuple(bool(value) for value in item) for key, item in signals_long.items()
+        },
+        signal_by_profile_short={
+            key: tuple(bool(value) for value in item) for key, item in signals_short.items()
+        },
+        stop_loss_by_profile={
+            key: _optional_floats(item) for key, item in sl_by_profile.items()
+        },
+        take_profit_by_profile={
+            key: _optional_floats(item) for key, item in tp_by_profile.items()
+        },
+        rule_evidence=tuple(evidence),
     )

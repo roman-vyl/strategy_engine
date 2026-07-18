@@ -14,6 +14,10 @@ from strategy_engine.strategies.ema_pullback.direction_blockers import (
     evaluate_direction_and_blockers,
 )
 from strategy_engine.strategies.ema_pullback.exits import evaluate_exit_policy
+from strategy_engine.strategies.ema_pullback.potential_entries import (
+    potential_entries_to_wire,
+    project_potential_entries,
+)
 from strategy_engine.strategies.ema_pullback.risk import evaluate_risk_and_entries
 from strategy_engine.strategies.ema_pullback.setups import evaluate_setups
 from strategy_engine.strategies.ema_pullback.triggers import evaluate_triggers
@@ -72,6 +76,13 @@ class EmaPullbackRangeEvaluator:
             planned,
             consumption,
         )
+        potential_entries = project_potential_entries(
+            request.strategy.raw_spec,
+            frame,
+            planned,
+            setups,
+            exit_policy,
+        )
         features: dict[str, object] = {}
         if request.options.include_features:
             features = {
@@ -106,6 +117,7 @@ class EmaPullbackRangeEvaluator:
                 )
                 for side in ("long", "short")
             },
+            potential_entries=potential_entries_to_wire(potential_entries),
             exit_policy=exit_policy.to_wire(),
             component_evidence=(
                 {

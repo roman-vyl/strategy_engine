@@ -143,9 +143,69 @@ def test_strategy_range_builds_plan_and_features_inside_service() -> None:
     assert body["contexts"]["items"]["trend"]["state"][-1] == "up"
     assert set(body["entries"]) == {"long", "short"}
     assert body["entries"]["short"] == [False] * 12
+    assert body["potential_entries"] == {}
     assert body["validity"]["entries_ready"] is True
     evidence = body["component_evidence"]["direction_blockers"][0]
     assert evidence["direction"]["component_id"] == "ema_anchor_stack_trend"
+    assert market_data.calls == 1
+
+
+def test_touch_anchor_range_adds_enabled_side_potential_prices_without_recalculation() -> None:
+    app_services, market_data = services()
+    request = payload()
+    strategy = request["strategy"]
+    assert isinstance(strategy, dict)
+    spec = strategy["raw_spec"]
+    assert isinstance(spec, dict)
+    spec["trade_sides"] = {"enabled": ["long"]}
+    components = spec["components"]
+    assert isinstance(components, dict)
+    components["trigger"] = {"component_id": "touch_anchor"}
+    management = spec["trade_management"]
+    assert isinstance(management, dict)
+    policy = management["exit_policy"]
+    assert isinstance(policy, dict)
+    always_on = policy["always_on"]
+    assert isinstance(always_on, dict)
+    always_on["exits"] = [
+        {
+            "instance_id": "initial-stop",
+            "component_id": "constant_usd_stop_loss",
+            "exit_kind": "stop_loss",
+            "usd_distance": 0.25,
+        },
+        {
+            "instance_id": "initial-take",
+            "component_id": "constant_usd_take_profit",
+            "exit_kind": "take_profit",
+            "usd_distance": 0.5,
+        },
+    ]
+
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/range", json=request)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body["potential_entries"]) == {"long"}
+    projected = body["potential_entries"]["long"]
+    assert set(projected) == {"entry_price", "stop_price", "take_price"}
+    assert all(len(projected[key]) == 12 for key in projected)
+    assert all(
+        all(value is None for value in triple) or all(value is not None for value in triple)
+        for triple in zip(
+            projected["entry_price"],
+            projected["stop_price"],
+            projected["take_price"],
+            strict=True,
+        )
+    )
+    assert any(
+        entry and potential is not None
+        for entry, potential in zip(
+            body["entries"]["long"], projected["entry_price"], strict=True
+        )
+    )
     assert market_data.calls == 1
 
 

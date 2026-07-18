@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
@@ -12,6 +13,10 @@ from strategy_engine.strategies.ema_pullback.exits import evaluate_exit_policy
 from strategy_engine.strategies.ema_pullback.feature_plan import (
     build_feature_plan_from_canonical_spec,
 )
+from strategy_engine.strategies.ema_pullback.potential_entries import (
+    project_potential_entries,
+)
+from strategy_engine.strategies.ema_pullback.setups import SideSetupEvaluation
 
 
 def raw_spec() -> dict[str, object]:
@@ -108,7 +113,69 @@ def test_exit_policy_returns_signal_and_distance_outputs() -> None:
     assert result.stop_loss_ratio_long[0] is None
     assert result.stop_loss_ratio_long[1] == pytest.approx(1.5 / 101)
     assert result.take_profit_ratio_long[0] == pytest.approx(4 / 100)
+    assert result.stop_loss_distance_long == (None, 1.5, 3.0, 4.5)
+    assert result.stop_loss_distance_short == (None, 1.5, 3.0, 4.5)
+    assert result.take_profit_distance_long == (4.0, 4.0, 4.0, 4.0)
+    assert result.take_profit_distance_short == (4.0, 4.0, 4.0, 4.0)
     assert result.stop_ready_long == (False, True, True, True)
+
+
+def test_raw_distances_do_not_change_exit_policy_wire_output() -> None:
+    spec = raw_spec()
+    feature_frame, plan = frame(spec)
+    result = evaluate_exit_policy(spec, feature_frame, plan, ())
+    wire = result.to_wire()
+
+    assert set(wire) == {
+        "context_state",
+        "profile_long",
+        "profile_short",
+        "signal_exit",
+        "stop_loss_ratio",
+        "take_profit_ratio",
+        "stop_ready",
+        "by_profile",
+        "rules",
+    }
+    assert wire["stop_loss_ratio"] == {
+        "long": [
+            None,
+            "0.01485148514851485",
+            "0.029411764705882353",
+            "0.043689320388349516",
+        ],
+        "short": [
+            None,
+            "0.01485148514851485",
+            "0.029411764705882353",
+            "0.043689320388349516",
+        ],
+    }
+    assert wire["take_profit_ratio"] == {
+        "long": ["0.04", "0.039603960396039604", "0.0392156862745098", "0.038834951456310676"],
+        "short": ["0.04", "0.039603960396039604", "0.0392156862745098", "0.038834951456310676"],
+    }
+
+
+def test_atr_raw_distance_is_applied_to_anchor_when_close_differs() -> None:
+    spec = raw_spec()
+    feature_frame, plan = frame(spec)
+    series = dict(feature_frame.series)
+    series[plan.anchor_columns["anchor"]] = ("90", "91", "92", "93")
+    feature_frame = replace(feature_frame, series=series)
+    exits = evaluate_exit_policy(spec, feature_frame, plan, ())
+    allowed = (True,) * len(feature_frame.time_ms)
+    setups = (SideSetupEvaluation("long", (), allowed, allowed),)
+
+    projected = project_potential_entries(
+        spec, feature_frame, plan, setups, exits
+    )["long"]
+
+    assert projected.stop_price[1] == pytest.approx(91.0 - 1.5)
+    assert projected.stop_price[1] != pytest.approx(
+        91.0 * (1.0 - exits.stop_loss_ratio_long[1])  # type: ignore[operator]
+    )
+    assert projected.take_price[1] == pytest.approx(91.0 + 4.0)
 
 
 def test_unknown_exit_component_is_rejected() -> None:
@@ -155,3 +222,52 @@ def test_profile_selection_uses_side_relative_context_result() -> None:
     result = evaluate_exit_policy(spec, feature_frame, plan, consumption)
     assert result.signal_exit_long == (False, False, True, False)
     assert result.signal_exit_short == (False, True, False, False)
+
+
+def test_profile_distance_selection_preserves_the_same_minimum_raw_distance() -> None:
+    from strategy_engine.strategies.ema_pullback.context_consumption import (
+        ContextConsumptionRecord,
+    )
+
+    spec = raw_spec()
+    policy = spec["trade_management"]["exit_policy"]  # type: ignore[index]
+    policy["always_on"]["exits"].append(  # type: ignore[index]
+        {
+            "instance_id": "always-sl-2",
+            "component_id": "constant_usd_stop_loss",
+            "exit_kind": "stop_loss",
+            "usd_distance": 2.0,
+        }
+    )
+    policy["profiles"]["aligned"]["exits"] = [  # type: ignore[index]
+        {
+            "instance_id": "aligned-sl",
+            "component_id": "constant_usd_stop_loss",
+            "exit_kind": "stop_loss",
+            "usd_distance": 1.0,
+        }
+    ]
+    feature_frame, plan = frame(spec)
+    consumption = (
+        ContextConsumptionRecord(
+            role="exit_policy",
+            context_ref="htf",
+            policy_id="exit_profile_by_htf_state",
+            side=None,
+            component_id="exit_policy",
+            instance_id=None,
+            raw_state=("up", "down", "up", "down"),
+            profile_long=("aligned", "neutral", "aligned", "neutral"),
+            profile_short=("neutral", "aligned", "neutral", "aligned"),
+        ),
+    )
+
+    result = evaluate_exit_policy(spec, feature_frame, plan, consumption)
+
+    assert result.stop_loss_distance_long == (1.0, 1.5, 1.0, 2.0)
+    assert result.stop_loss_distance_short == (2.0, 1.0, 2.0, 1.0)
+    for index, raw_distance in enumerate(result.stop_loss_distance_long):
+        if raw_distance is not None:
+            assert result.stop_loss_ratio_long[index] == pytest.approx(
+                raw_distance / float(feature_frame.market_bars[index].close)
+            )

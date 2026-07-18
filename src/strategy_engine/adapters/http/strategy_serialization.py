@@ -27,6 +27,7 @@ def serialize_strategy_result(result: StrategyRangeResult) -> dict[str, object]:
         "features": result.features,
         "contexts": result.contexts,
         "entries": result.entries,
+        "potential_entries": result.potential_entries,
         "exit_policy": result.exit_policy,
         "component_evidence": result.component_evidence,
         "validity": result.validity,

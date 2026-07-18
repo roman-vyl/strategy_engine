@@ -58,6 +58,7 @@ class StrategyRangeResult:
     features: dict[str, Any]
     contexts: dict[str, Any]
     entries: dict[str, Any]
+    potential_entries: dict[str, Any]
     exit_policy: dict[str, Any]
     component_evidence: dict[str, Any]
     validity: dict[str, Any]
