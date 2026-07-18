@@ -23,3 +23,7 @@
 The markdown master plan and detailed audit are authoritative when a reference document differs.
 
 - `12_atr_indicator_vertical_slice_v1.md` — BBB-compatible ATR vertical slice, API contract, and parity evidence.
+
+## Current design work
+
+- `18_potential_entry_touch_anchor_v1.md` — high-level design for a non-invasive `PotentialEntry` vector projection using pre-trigger eligibility, anchor EMA, and raw initial stop/take distances.
