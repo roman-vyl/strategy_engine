@@ -12,9 +12,16 @@ from strategy_engine.service.registries import IndicatorRegistry, StrategyRegist
 from strategy_engine.service.settings import Settings
 from strategy_engine.strategies.application.build_feature_plan import BuildStrategyFeaturePlan
 from strategy_engine.strategies.application.catalog import StrategyCatalog
+from strategy_engine.strategies.application.evaluate_live_entry_projection import (
+    EvaluateLiveEntryProjection,
+)
 from strategy_engine.strategies.application.evaluate_managed_replay import EvaluateManagedReplay
+from strategy_engine.strategies.application.evaluate_open_trade_projection import (
+    EvaluateOpenTradeProjection,
+)
 from strategy_engine.strategies.application.evaluate_range import EvaluateStrategyRange
 from strategy_engine.strategies.application.evaluate_range_batch import EvaluateStrategyRangeBatch
+from strategy_engine.strategies.application.load_live_feature_frame import LoadLiveFeatureFrame
 from strategy_engine.strategies.application.validate_spec import ValidateStrategySpec
 from strategy_engine.strategies.ema_pullback.evaluator import EmaPullbackRangeEvaluator
 
@@ -30,6 +37,9 @@ class ApplicationServices:
     evaluate_strategy_range_batch: EvaluateStrategyRangeBatch
     market_data_client: MarketDataServiceClient
     evaluate_managed_replay: EvaluateManagedReplay | None = None
+    load_live_feature_frame: LoadLiveFeatureFrame | None = None
+    evaluate_live_entry_projection: EvaluateLiveEntryProjection | None = None
+    evaluate_open_trade_projection: EvaluateOpenTradeProjection | None = None
     build_strategy_feature_plan: BuildStrategyFeaturePlan = field(
         default_factory=BuildStrategyFeaturePlan
     )
@@ -65,6 +75,12 @@ def build_services(settings: Settings) -> ApplicationServices:
         strategy_registry,
         validate_strategy_spec,
     )
+    live_frame_loader = LoadLiveFeatureFrame(
+        market_data_client,
+        build_strategy_feature_plan,
+        evaluate_indicator_range,
+        validate_strategy_spec,
+    )
     return ApplicationServices(
         indicator_catalog=IndicatorCatalog(indicator_registry),
         validate_indicator_plan=validate_indicator_plan,
@@ -79,5 +95,8 @@ def build_services(settings: Settings) -> ApplicationServices:
             validate_strategy_spec,
         ),
         build_strategy_feature_plan=build_strategy_feature_plan,
+        load_live_feature_frame=live_frame_loader,
+        evaluate_live_entry_projection=EvaluateLiveEntryProjection(live_frame_loader),
+        evaluate_open_trade_projection=EvaluateOpenTradeProjection(live_frame_loader),
         market_data_client=market_data_client,
     )

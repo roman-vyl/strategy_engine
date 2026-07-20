@@ -8,7 +8,15 @@ from fastapi import APIRouter, Depends
 
 from strategy_engine.adapters.http.dependencies import services
 from strategy_engine.adapters.http.models import (
+    DesiredProtectionResponseModel,
+    ErrorResponseModel,
+    LiveEntryProjectionRequestModel,
+    LiveEntryProjectionResponseModel,
     ManagedReplayRequestModel,
+    OpenTradeDiagnosticsResponseModel,
+    OpenTradeProjectionRequestModel,
+    OpenTradeProjectionResponseModel,
+    StrategicCloseSignalResponseModel,
     StrategyAuthoringValidationRequestModel,
     StrategyRangeBatchRequestModel,
     StrategyRangeRequestModel,
@@ -109,6 +117,80 @@ def build_strategy_feature_plan(
     return app.build_strategy_feature_plan.execute(domain_strategy).to_wire()
 
 
+def _serialize_live_entry_projection(result: object) -> dict[str, object]:
+    from strategy_engine.strategies.contracts import LiveEntryProjectionResult
+
+    if not isinstance(result, LiveEntryProjectionResult):
+        raise TypeError("expected LiveEntryProjectionResult")
+    return {
+        "contract_version": result.contract_version,
+        "strategy_id": result.strategy_id,
+        "strategy_version": result.strategy_version,
+        "instance_id": result.instance_id,
+        "source_config_hash": result.source_config_hash,
+        "market": {
+            "ticker": result.market.ticker,
+            "base_timeframe": result.market.base_timeframe,
+        },
+        "target_bar_open_time_ms": result.target_bar_open_time_ms,
+        "market_data_hash": result.market_data_hash,
+        "plans_by_side": {
+            side: (
+                {
+                    "side": plan.side,
+                    "source_plan_bar_open_time_ms": plan.source_plan_bar_open_time_ms,
+                    "planned_entry_price": plan.planned_entry_price,
+                    "initial_stop_price": plan.initial_stop_price,
+                    "initial_take_price": plan.initial_take_price,
+                    "locked_exit_profile": plan.locked_exit_profile,
+                }
+                if plan is not None
+                else None
+            )
+            for side, plan in result.plans_by_side.items()
+        },
+    }
+
+
+def _serialize_open_trade_projection(result: object) -> OpenTradeProjectionResponseModel:
+    from strategy_engine.strategies.contracts import OpenTradeProjectionResult
+
+    if not isinstance(result, OpenTradeProjectionResult):
+        raise TypeError("expected OpenTradeProjectionResult")
+    return OpenTradeProjectionResponseModel(
+        contract_version=result.contract_version,
+        trade_id=result.trade_id,
+        instance_id=result.instance_id,
+        strategy_id=result.strategy_id,
+        strategy_version=result.strategy_version,
+        source_config_hash=result.source_config_hash,
+        market={
+            "ticker": result.market.ticker,
+            "base_timeframe": result.market.base_timeframe,
+        },
+        target_bar_open_time_ms=result.target_bar_open_time_ms,
+        market_data_hash=result.market_data_hash,
+        desired_protection=DesiredProtectionResponseModel(
+            stop_price=result.desired_protection.stop_price,
+            take_price=result.desired_protection.take_price,
+        ),
+        close_signal=StrategicCloseSignalResponseModel(
+            active=result.close_signal.active,
+            reason=result.close_signal.reason,
+            component_id=result.close_signal.component_id,
+            layer=result.close_signal.layer,
+        ),
+        diagnostics=OpenTradeDiagnosticsResponseModel(
+            phase=result.diagnostics.phase,
+            max_phase_reached=result.diagnostics.max_phase_reached,
+            bars_in_trade=result.diagnostics.bars_in_trade,
+            mfe_pct=result.diagnostics.mfe_pct,
+            mae_pct=result.diagnostics.mae_pct,
+            managed_events=list(result.diagnostics.managed_events),
+        ),
+    )
+
+
 @router.post("/strategy-evaluations/range")
 def evaluate_strategy_range(
     request: StrategyRangeRequestModel,
@@ -137,6 +219,46 @@ def evaluate_strategy_range_batch(
             for outcome in outcomes
         ]
     }
+
+
+@router.post(
+    "/strategy-evaluations/live-entry",
+    response_model=LiveEntryProjectionResponseModel,
+)
+def evaluate_live_entry_projection(
+    request: LiveEntryProjectionRequestModel,
+    app: ApplicationServices = Depends(services),
+) -> dict[str, object]:
+    if app.evaluate_live_entry_projection is None:
+        from strategy_engine.domain.errors import UnsupportedCapabilityError
+
+        raise UnsupportedCapabilityError("strategy:live_entry_projection")
+    result = app.evaluate_live_entry_projection.execute(request.to_domain())
+    return _serialize_live_entry_projection(result)
+
+
+@router.post(
+    "/strategy-evaluations/open-trade",
+    response_model=OpenTradeProjectionResponseModel,
+    responses={
+        409: {"model": ErrorResponseModel},
+        422: {"model": ErrorResponseModel},
+        501: {"model": ErrorResponseModel},
+        502: {"model": ErrorResponseModel},
+        503: {"model": ErrorResponseModel},
+        500: {"model": ErrorResponseModel},
+    },
+)
+def evaluate_open_trade_projection(
+    request: OpenTradeProjectionRequestModel,
+    app: ApplicationServices = Depends(services),
+) -> OpenTradeProjectionResponseModel:
+    if app.evaluate_open_trade_projection is None:
+        from strategy_engine.domain.errors import UnsupportedCapabilityError
+
+        raise UnsupportedCapabilityError("strategy:open_trade_projection")
+    result = app.evaluate_open_trade_projection.execute(request.to_domain())
+    return _serialize_open_trade_projection(result)
 
 
 @router.post("/strategy-evaluations/managed-replay")

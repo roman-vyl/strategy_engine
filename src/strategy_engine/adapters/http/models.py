@@ -14,7 +14,10 @@ from strategy_engine.indicators.contracts import (
     PlannedFeature,
 )
 from strategy_engine.strategies.contracts import (
+    ExecutedTradeReceipt,
+    LiveEntryProjectionRequest,
     ManagedReplayRequest,
+    OpenTradeProjectionRequest,
     StrategyBatchVariant,
     StrategyOutputOptions,
     StrategyRangeBatchRequest,
@@ -172,6 +175,56 @@ class StrategyRangeBatchRequestModel(BaseModel):
         )
 
 
+class LiveMarketModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: StrictStr
+    base_timeframe: StrictStr
+
+    def to_domain(self) -> MarketStream:
+        return MarketStream(self.ticker, self.base_timeframe)
+
+
+class LiveEntryProjectionRequestModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy: StrategySpecEnvelopeModel
+    market: LiveMarketModel
+    target_bar_open_time_ms: StrictInt
+
+    def to_domain(self) -> LiveEntryProjectionRequest:
+        return LiveEntryProjectionRequest(
+            strategy=self.strategy.to_domain(),
+            market=self.market.to_domain(),
+            target_bar_open_time_ms=self.target_bar_open_time_ms,
+        )
+
+
+class LiveEntryPlanResponseModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    side: StrictStr
+    source_plan_bar_open_time_ms: StrictInt
+    planned_entry_price: StrictStr
+    initial_stop_price: StrictStr
+    initial_take_price: StrictStr
+    locked_exit_profile: StrictStr
+
+
+class LiveEntryProjectionResponseModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: StrictStr
+    strategy_id: StrictStr
+    strategy_version: StrictStr
+    instance_id: StrictStr
+    source_config_hash: StrictStr
+    market: LiveMarketModel
+    target_bar_open_time_ms: StrictInt
+    market_data_hash: StrictStr
+    plans_by_side: dict[StrictStr, LiveEntryPlanResponseModel | None]
+
+
 class ManagedReplayRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -200,3 +253,97 @@ class ManagedReplayRequestModel(BaseModel):
 class StrategyAuthoringValidationRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
     instances: list[dict[str, Any]] = Field(min_length=1)
+
+
+class ExecutedTradeReceiptModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    trade_id: StrictStr
+    instance_id: StrictStr
+    strategy_id: StrictStr
+    strategy_version: StrictStr
+    source_config_hash: StrictStr
+    ticker: StrictStr
+    base_timeframe: StrictStr
+    side: StrictStr
+    source_plan_bar_open_time_ms: StrictInt
+    entry_bar_open_time_ms: StrictInt
+    planned_entry_price: StrictStr
+    executed_entry_price: StrictStr
+    initial_stop_price: StrictStr
+    initial_take_price: StrictStr
+    locked_exit_profile: StrictStr
+    abi_entry_correlation: StrictStr
+
+    def to_domain(self) -> ExecutedTradeReceipt:
+        return ExecutedTradeReceipt(**self.model_dump())
+
+
+class OpenTradeProjectionRequestModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy: StrategySpecEnvelopeModel
+    market: LiveMarketModel
+    target_bar_open_time_ms: StrictInt
+    executed_trade_receipt: ExecutedTradeReceiptModel
+
+    def to_domain(self) -> OpenTradeProjectionRequest:
+        return OpenTradeProjectionRequest(
+            strategy=self.strategy.to_domain(),
+            market=self.market.to_domain(),
+            target_bar_open_time_ms=self.target_bar_open_time_ms,
+            executed_trade_receipt=self.executed_trade_receipt.to_domain(),
+        )
+
+
+class DesiredProtectionResponseModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stop_price: StrictStr
+    take_price: StrictStr | None
+
+
+class StrategicCloseSignalResponseModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    active: StrictBool
+    reason: StrictStr | None
+    component_id: StrictStr | None
+    layer: StrictStr | None
+
+
+class OpenTradeDiagnosticsResponseModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    phase: StrictStr
+    max_phase_reached: StrictStr
+    bars_in_trade: StrictInt
+    mfe_pct: StrictStr
+    mae_pct: StrictStr
+    managed_events: list[dict[str, object]]
+
+
+class OpenTradeProjectionResponseModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: StrictStr
+    trade_id: StrictStr
+    instance_id: StrictStr
+    strategy_id: StrictStr
+    strategy_version: StrictStr
+    source_config_hash: StrictStr
+    market: LiveMarketModel
+    target_bar_open_time_ms: StrictInt
+    market_data_hash: StrictStr
+    desired_protection: DesiredProtectionResponseModel
+    close_signal: StrategicCloseSignalResponseModel
+    diagnostics: OpenTradeDiagnosticsResponseModel
+
+
+class ErrorResponseModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    error: StrictStr
+    message: StrictStr
+    details: dict[str, Any]
+    request_id: StrictStr
