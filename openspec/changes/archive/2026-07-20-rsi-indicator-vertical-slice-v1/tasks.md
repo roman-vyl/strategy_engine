@@ -8,4 +8,4 @@
 - [x] Preserve Decimal-text output and validity/warmup metadata.
 - [x] Add BBB golden parity for base and HTF RSI.
 - [x] Update API/catalog acceptance tests.
-- [ ] Run full local `make verify` with ruff and mypy.
+- [x] Run full local `make verify` with ruff and mypy.
