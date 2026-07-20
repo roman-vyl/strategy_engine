@@ -158,21 +158,49 @@ POST /v1/strategy-evaluations/range-batch
 POST /v1/strategy-evaluations/managed-replay
 ```
 
-Это временный compatibility adapter, необходимый потому, что текущий managed path итеративно связывает strategy policy с same-bar execution arbitration. Он переносится отдельно от чистого Strategy Engine core и не становится контрактом live Runtime.
+Существующий endpoint остаётся стабильным Research/compatibility contract для replay policy одной externally seeded сделки. Он не принимает Runtime lifecycle state и не владеет exchange execution.
 
-### 6.5 Future runtime boundary
+### 6.5 Strategy Runtime boundary
 
-> **Decision under review (Strategy Runtime redesign):** The Runtime wrapper remains outside Strategy Engine and remains the only path toward Abi. The provisional Engine-hosted runtime-instance endpoints and incremental session assumptions below are not approved contracts. They must be replaced or explicitly re-approved after the standalone `strategy_runtime` → Strategy Engine current-point contract is designed.
+Strategy Runtime остаётся отдельным сервисом и единственным orchestration path к Abi Executor.
 
+В актуальном Engine нет `current-point` endpoint. Live-интеграция добавляет два отдельных stateless use case:
 
-Концептуально резервируется, но не входит в первые OpenSpec:
+```text
+нет открытой позиции
+→ POST /v1/strategy-evaluations/live-entry
+→ target-bar pending entry plans
 
-```http
-POST /v1/runtime/strategy-instances
-POST /v1/runtime/strategy-instances/{id}/bars
+ABI подтверждает, что correlated position сейчас открыта, и есть immutable receipt
+→ POST /v1/strategy-evaluations/open-trade
+→ post-target desired stop/take + strategic close signal
 ```
 
-В реальной реализации Runtime wrapper должен вызывать Strategy Engine core внутри процесса или через coarse-grained session protocol. Один HTTP call на каждую внутреннюю component function запрещён.
+Оба use case получают от Runtime strategy spec, market identity и webhook target bar. Runtime не передаёт `from_ms`, warmup или candles.
+
+Engine использует общий internal live FeatureFrame path:
+
+```text
+MDS bounds
+→ require ready and committed target
+→ from earliest committed candle to target + timeframe step
+→ existing bounded candle read
+→ one FeaturePlan / one FeatureFrame
+```
+
+Новый MDS endpoint не требуется. На один live calculation допускаются один bounds read и один candle-range read. Research `/range`, `/range-batch` и compatibility `/managed-replay` остаются неизменными.
+
+Live-entry возвращает готовый target-bar plan с entry/stop/take, locked exit profile и source config hash. Runtime хранит его как mutable pending snapshot. После ABI fill Runtime создаёт immutable executed-trade receipt; `source_config_hash` находится внутри receipt.
+
+Перед open-trade Runtime обязан запросить ABI operational state. Если stop/take или другое exchange event уже закрыло позицию на завершившемся баре, ABI сообщает `not open`, и Runtime не вызывает Engine. Receipt сам по себе не доказывает существование позиции.
+
+Open-trade stateless воспроизводит policy-state management только от `entry+1` до target, использует `planned_entry_price` как strategy basis и возвращает post-target desired stop/take плюс target-active strategic close signal. Engine не симулирует защитные fills по OHLC и не переносит backtest execution arbitration между stop/take hits и close signals в live path. V1 не восстанавливает одноразовый strategic close signal с пропущенного промежуточного бара; это accepted trading risk.
+
+Подробный audit и implementation plan:
+
+- `docs/20_runtime_open_trade_management_audit.md`;
+- `docs/21_runtime_open_trade_management_plan.md`;
+- `docs/22_live_projections_architecture.md` — high-level strategy-family adapter boundary for both live paths.
 
 ## 7. Фазы программы
 
@@ -451,30 +479,42 @@ After acceptance:
 - retain BBB execution/report/BFF layers;
 - prohibit permanent local fallback.
 
-## Phase 12 — Runtime wrapper, separate program
+## Phase 12 — Strategy Runtime integration, separate program
 
-Not part of current extraction OpenSpecs, but target architecture is fixed:
+Target architecture:
 
 ```text
-MDS confirmed bars
-  → Runtime wrapper
-  → Indicator incremental state
-  → Strategy incremental state
-  → StrategyDecision
-  → Abi signal intent
+MDS confirmed-bar webhook
+  → Strategy Runtime
+  → query ABI current operational state
+  → reconcile local lifecycle with ABI truth
+  → select Engine use case
+  → Strategy Engine stateless calculation when permitted
+  → Strategy Runtime
+  → Abi desired-vs-actual reconciliation
 ```
 
-Runtime wrapper owns:
+Strategy Runtime owns:
 
-- subscriptions/polling;
-- confirmed-bar ordering;
-- checkpoint/replay;
-- strategy instance lifecycle;
-- execution feedback;
-- signal idempotency;
-- delivery to Abi.
+- webhook ordering and idempotency;
+- persisted strategy-instance lifecycle;
+- pending/open/closing/recovery states;
+- mutable pending-entry snapshots;
+- immutable executed-trade receipts;
+- ABI-gated selection between live-entry, open-trade, closure handling and recovery;
+- ABI handoff and correlation.
 
-Indicator/Strategy core must support future incremental adapters and mandatory batch-vs-incremental parity.
+Strategy Engine owns:
+
+- stateless Research range calculation;
+- shared live FeatureFrame acquisition through existing MDS bounds and candle APIs;
+- target-bar live-entry plans;
+- stateless post-entry management replay;
+- locked-profile standard exit selection;
+- post-target desired stop/take and target-active strategic close-signal projection;
+- strategy config and market-data provenance.
+
+No Engine-hosted Runtime state, incremental session or per-component RPC is part of the target design.
 
 ## 8. Global invariants
 
@@ -529,7 +569,7 @@ The copied BBB standard exit-policy boundary is now implemented. Range evaluatio
 
 ## Implemented: EMA Pullback managed policy v1
 
-Managed strategy policy is now available as a coarse-grained replay for one already-open trade. It owns monotonic phase transitions, break-even/lock-profit stop decisions, take-profile switching and phase/RSI/EMA-cross runtime-exit decisions. Decisions calculated on bar N are effective from bar N+1. OHLC hit arbitration, fills, fees, PnL and exchange order state remain outside Strategy Engine.
+Managed strategy policy is now available as a coarse-grained replay for one already-open trade. It owns monotonic phase transitions, break-even/lock-profit stop decisions, take-profile switching and phase/RSI/EMA-cross runtime-exit decisions. Decisions calculated on bar N are effective from bar N+1. In live operation Runtime calls this path only after ABI confirms the position is still open. OHLC protective-hit arbitration, fills, fees, PnL and exchange order state remain outside Strategy Engine; only canonical strategy-level close-signal composition remains inside.
 
 
 ## Normative cross-service seam

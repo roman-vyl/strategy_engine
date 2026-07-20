@@ -20,22 +20,10 @@ Current state:
 
 Runtime dependencies are declared in `pyproject.toml`: FastAPI, HTTPX, NumPy, pandas, Pydantic and Uvicorn. Development dependencies are available through the `dev` extra and include build, pytest, Ruff and mypy.
 
-## Python version
-
-Strategy Engine requires Python 3.12 or newer. The repository pins the local toolchain to Python 3.12 through `.python-version`. Create and activate one project virtual environment before installing dependencies; do not mix a system Python 3.9 interpreter with tools installed under Python 3.12.
-
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
-python --version
-```
-
-Every Make target invokes tools through the same selected interpreter (`$(PYTHON) -m ...`) and fails fast when that interpreter is older than Python 3.12. Override it explicitly when needed, for example `make verify PYTHON=.venv/bin/python`.
-
 ## Run
 
 ```bash
+python -m pip install -e '.[dev]'
 make verify
 make run
 ```
