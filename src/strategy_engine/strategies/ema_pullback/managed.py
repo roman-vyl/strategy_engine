@@ -154,6 +154,15 @@ class ManagedReplayResult:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class StartAfterEntryManagedProjection:
+    """Internal open-trade managed projection with receipt-seeded protection."""
+
+    replay: ManagedReplayResult
+    desired_stop_price: float
+    desired_take_price: float | None
+
+
 def _text(value: float | None) -> str | None:
     if value is None or not isfinite(value):
         return None
@@ -198,7 +207,7 @@ def _float(value: Any, path: str, *, positive: bool = False) -> float:
 def _int(value: Any, path: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise InvalidRequestError(f"{path} must be an integer >= 1")
-    return value
+    return int(value)
 
 
 def _series(frame: FeatureFrame, output_id: str) -> tuple[float | None, ...]:
@@ -257,13 +266,13 @@ def _phase_met(
     component_id = str(condition.get("component_id", ""))
     params = _mapping(condition.get("params", {}), "phase condition params")
     if component_id == "bars_in_trade":
-        threshold = _int(params.get("threshold"), "bars_in_trade.threshold")
-        return state.bars_in_trade >= threshold, {"threshold": threshold}
+        bars_threshold = _int(params.get("threshold"), "bars_in_trade.threshold")
+        return state.bars_in_trade >= bars_threshold, {"threshold": bars_threshold}
     if component_id == "mfe_pct":
-        threshold = _float(params.get("threshold"), "mfe_pct.threshold", positive=True)
-        return state.mfe_pct >= threshold, {"threshold": threshold}
+        pct_threshold = _float(params.get("threshold"), "mfe_pct.threshold", positive=True)
+        return state.mfe_pct >= pct_threshold, {"threshold": pct_threshold}
     if component_id == "mfe_atr":
-        threshold = _float(params.get("threshold"), "mfe_atr.threshold", positive=True)
+        atr_threshold = _float(params.get("threshold"), "mfe_atr.threshold", positive=True)
         atr = _mapping(params.get("atr"), "mfe_atr.atr")
         key = (str(atr.get("timeframe", "")), _int(atr.get("period"), "mfe_atr.atr.period"))
         output_id = _atr_output_id(plan, key[0], key[1])
@@ -271,7 +280,7 @@ def _phase_met(
         if value is None or value <= 0:
             return False, {"reason": "indicator_not_ready"}
         distance = abs(state.mfe_price - state.entry_price)
-        return distance >= threshold * value, {"threshold": threshold, "atr": value}
+        return distance >= atr_threshold * value, {"threshold": atr_threshold, "atr": value}
     if component_id == "adx_di_threshold":
         key = (
             str(params.get("timeframe", "")),
@@ -283,14 +292,14 @@ def _phase_met(
         minus = _feature_value(frame, columns.get("di_minus"), index)
         if adx is None or plus is None or minus is None:
             return False, {"reason": "indicator_not_ready"}
-        threshold = _float(
+        adx_threshold = _float(
             params.get("adx_threshold"), "adx_di_threshold.adx_threshold", positive=True
         )
         aligned = plus > minus if state.side == "long" else minus > plus
         require = params.get("require_di_alignment", True)
         if not isinstance(require, bool):
             raise InvalidRequestError("require_di_alignment must be boolean")
-        return adx >= threshold and (not require or aligned), {
+        return adx >= adx_threshold and (not require or aligned), {
             "adx": adx,
             "di_plus": plus,
             "di_minus": minus,
@@ -306,6 +315,7 @@ def _runtime_signal(
     index: int,
     frame: FeatureFrame,
     plan: EmaPullbackFeaturePlan,
+    evaluation_start_index: int,
 ) -> bool:
     component_id = str(rule.get("component_id", ""))
     params = _mapping(rule.get("params", {}), "runtime exit params")
@@ -313,7 +323,7 @@ def _runtime_signal(
         return str(params.get("exit_price", "close")) == "close"
     confirm = int(params.get("confirm_bars", 1))
     start = index - confirm + 1
-    if start < 0:
+    if start < evaluation_start_index:
         return False
     if component_id == "rsi_signal_exit":
         rsi = _mapping(params.get("rsi"), "runtime rsi")
@@ -339,20 +349,23 @@ def _runtime_signal(
         slow_id = plan.ema_columns.get((str(slow.get("timeframe", "")), int(slow.get("period", 0))))
         fast_values = _series(frame, fast_id or "")
         slow_values = _series(frame, slow_id or "")
-        return all(
-            fast_values[pos] is not None
-            and slow_values[pos] is not None
-            and (
-                fast_values[pos] <= slow_values[pos]
+        for pos in range(start, index + 1):
+            fast_value = fast_values[pos]
+            slow_value = slow_values[pos]
+            if fast_value is None or slow_value is None:
+                return False
+            crossed = (
+                fast_value <= slow_value
                 if state.side == "long"
-                else fast_values[pos] >= slow_values[pos]
+                else fast_value >= slow_value
             )
-            for pos in range(start, index + 1)
-        )
+            if not crossed:
+                return False
+        return True
     raise InvalidRequestError("unsupported runtime exit component", component_id=component_id)
 
 
-def evaluate_managed_replay(
+def _evaluate_managed_replay_core(
     raw_spec: Mapping[str, Any],
     frame: FeatureFrame,
     plan: EmaPullbackFeaturePlan,
@@ -361,6 +374,9 @@ def evaluate_managed_replay(
     side: Side,
     entry_time_ms: int,
     entry_price: float,
+    evaluation_start_offset: int,
+    initial_stop_price: float | None = None,
+    target_index: int | None = None,
 ) -> ManagedReplayResult:
     management = _mapping(raw_spec.get("trade_management", {}), "trade_management")
     config = _mapping(management.get("exit_management", {}), "exit_management")
@@ -383,9 +399,18 @@ def evaluate_managed_replay(
         entry_time_ms=entry_time_ms,
         entry_price=entry_price,
     )
+    if evaluation_start_offset not in (0, 1):
+        raise InvalidRequestError("evaluation_start_offset must be 0 or 1")
+    if target_index is None:
+        target_index = len(frame.time_ms) - 1
+    if target_index < entry_index or target_index >= len(frame.time_ms):
+        raise InvalidRequestError("target_index is outside the managed replay frame")
+    state.bars_in_trade = 1 if evaluation_start_offset == 1 else 0
+    state.active_stop_price = initial_stop_price
     events: list[ManagedPolicyEvent] = []
     bars: list[ManagedBarDecision] = []
-    for index in range(entry_index, len(frame.time_ms)):
+    evaluation_start_index = entry_index + evaluation_start_offset
+    for index in range(evaluation_start_index, target_index + 1):
         bar = frame.market_bars[index]
         high, low, close = float(bar.high), float(bar.low), float(bar.close)
         _update_extremes(state, index=index, high=high, low=low)
@@ -522,7 +547,12 @@ def evaluate_managed_replay(
                 _mapping(rule.get("activate_when"), "activate_when").get("phase_at_least", "")
             )
             if _at_least(state.phase, threshold) and _runtime_signal(
-                rule, state=state, index=index, frame=frame, plan=plan
+                rule,
+                state=state,
+                index=index,
+                frame=frame,
+                plan=plan,
+                evaluation_start_index=evaluation_start_index,
             ):
                 rule_id = str(rule.get("rule_id", ""))
                 armed.append(rule_id)
@@ -556,3 +586,72 @@ def evaluate_managed_replay(
             )
         )
     return ManagedReplayResult(trade_id, side, entry_time_ms, tuple(events), tuple(bars), state)
+
+
+def evaluate_managed_replay(
+    raw_spec: Mapping[str, Any],
+    frame: FeatureFrame,
+    plan: EmaPullbackFeaturePlan,
+    *,
+    trade_id: str,
+    side: Side,
+    entry_time_ms: int,
+    entry_price: float,
+) -> ManagedReplayResult:
+    """Preserve the public managed-replay entry-bar semantics."""
+
+    return _evaluate_managed_replay_core(
+        raw_spec,
+        frame,
+        plan,
+        trade_id=trade_id,
+        side=side,
+        entry_time_ms=entry_time_ms,
+        entry_price=entry_price,
+        evaluation_start_offset=0,
+    )
+
+
+def evaluate_start_after_entry_managed_projection(
+    raw_spec: Mapping[str, Any],
+    frame: FeatureFrame,
+    plan: EmaPullbackFeaturePlan,
+    *,
+    trade_id: str,
+    side: Side,
+    entry_time_ms: int,
+    planned_entry_price: float,
+    initial_stop_price: float,
+    initial_take_price: float,
+    target_time_ms: int,
+) -> StartAfterEntryManagedProjection:
+    """Replay open-trade management strictly after entry using plan-price basis."""
+
+    try:
+        target_index = frame.time_ms.index(target_time_ms)
+    except ValueError as exc:
+        raise InvalidRequestError("target_time_ms is not on the evaluation grid") from exc
+    if initial_stop_price <= 0 or initial_take_price <= 0:
+        raise InvalidRequestError("initial stop and take prices must be positive")
+    replay = _evaluate_managed_replay_core(
+        raw_spec,
+        frame,
+        plan,
+        trade_id=trade_id,
+        side=side,
+        entry_time_ms=entry_time_ms,
+        entry_price=planned_entry_price,
+        evaluation_start_offset=1,
+        initial_stop_price=initial_stop_price,
+        target_index=target_index,
+    )
+    desired_take_price = (
+        None
+        if replay.final_state.active_take_profile == "disable_initial_tp"
+        else initial_take_price
+    )
+    return StartAfterEntryManagedProjection(
+        replay=replay,
+        desired_stop_price=replay.final_state.active_stop_price or initial_stop_price,
+        desired_take_price=desired_take_price,
+    )
