@@ -8,3 +8,5 @@
 - [x] Add base and HTF golden parity against copied BBB code.
 - [x] Add HTTP acceptance and update capability tests.
 - [x] Update documentation and master-plan status.
+- [ ] Reject `NaN` and infinite ATR-distance multipliers as non-finite values.
+- [ ] Add validator and HTTP regression coverage for non-finite multipliers.
