@@ -25,3 +25,14 @@ class CandleRangePayload(BaseModel):
     to_ms: StrictInt
     market_data_hash: StrictStr
     candles: list[CandlePayload]
+
+
+class StreamBoundsPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: StrictStr
+    ticker: StrictStr
+    timeframe: StrictStr
+    state: StrictStr
+    earliest_committed_open_time_ms: StrictInt | None
+    latest_committed_open_time_ms: StrictInt | None

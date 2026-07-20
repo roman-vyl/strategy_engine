@@ -6,9 +6,17 @@ from typing import Any
 
 import httpx
 
-from strategy_engine.adapters.market_data_service.models import CandleRangePayload
-from strategy_engine.domain.errors import MarketDataUnavailableError, UpstreamContractError
+from strategy_engine.adapters.market_data_service.models import (
+    CandleRangePayload,
+    StreamBoundsPayload,
+)
+from strategy_engine.domain.errors import (
+    MarketDataUnavailableError,
+    UnknownResourceError,
+    UpstreamContractError,
+)
 from strategy_engine.domain.market import MarketBar, MarketFrame, MarketStream
+from strategy_engine.domain.market_data import StreamBounds
 from strategy_engine.domain.ranges import TimeRange, timeframe_duration_ms
 from strategy_engine.domain.values import parse_decimal_text
 
@@ -34,6 +42,45 @@ class MarketDataServiceClient:
     def close(self) -> None:
         if self._owned_client:
             self._client.close()
+
+    def load_bounds(self, market: MarketStream) -> StreamBounds:
+        try:
+            response = self._client.get(
+                f"/v1/streams/{market.ticker}/{market.base_timeframe}/bounds"
+            )
+        except httpx.HTTPError as exc:
+            raise MarketDataUnavailableError("Market Data Service request failed") from exc
+        if response.status_code != 200:
+            if response.status_code == 404:
+                raise UnknownResourceError(
+                    "Market Data Service stream is unknown",
+                    ticker=market.ticker,
+                    timeframe=market.base_timeframe,
+                )
+            self._raise_upstream_error(response)
+        try:
+            payload = StreamBoundsPayload.model_validate(response.json())
+        except Exception as exc:
+            raise UpstreamContractError("invalid Market Data Service bounds response") from exc
+        if payload.contract_version != "market_stream_bounds.v1":
+            raise UpstreamContractError(
+                "unsupported Market Data Service bounds contract",
+                contract_version=payload.contract_version,
+            )
+        if payload.ticker != market.ticker or payload.timeframe != market.base_timeframe:
+            raise UpstreamContractError(
+                "Market Data Service bounds identity does not match request",
+                expected_ticker=market.ticker,
+                actual_ticker=payload.ticker,
+                expected_timeframe=market.base_timeframe,
+                actual_timeframe=payload.timeframe,
+            )
+        return StreamBounds(
+            market=market,
+            state=payload.state,
+            earliest_committed_open_time_ms=payload.earliest_committed_open_time_ms,
+            latest_committed_open_time_ms=payload.latest_committed_open_time_ms,
+        )
 
     def load_range(
         self,

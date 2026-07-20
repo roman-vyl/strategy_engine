@@ -45,3 +45,25 @@ class MarketDataUnavailableError(StrategyEngineError):
 class UpstreamContractError(StrategyEngineError):
     def __init__(self, message: str, **details: Any) -> None:
         super().__init__("upstream_contract_error", message, details, 502)
+
+
+class MarketStreamNotReadyError(StrategyEngineError):
+    def __init__(self, message: str = "Market stream is not ready", **details: Any) -> None:
+        super().__init__("market_stream_not_ready", message, details, 409)
+
+
+class TargetBarNotCommittedError(StrategyEngineError):
+    def __init__(self, message: str = "Target bar is not committed", **details: Any) -> None:
+        super().__init__("target_bar_not_committed", message, details, 409)
+
+
+class TradeContractMismatchError(StrategyEngineError):
+    def __init__(
+        self, message: str = "Trade contract does not match request", **details: Any
+    ) -> None:
+        super().__init__("trade_contract_mismatch", message, details, 409)
+
+
+class TradeHistoryUnavailableError(StrategyEngineError):
+    def __init__(self, message: str = "Trade history is unavailable", **details: Any) -> None:
+        super().__init__("trade_history_unavailable", message, details, 409)

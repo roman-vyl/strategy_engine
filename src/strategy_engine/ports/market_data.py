@@ -5,10 +5,13 @@ from __future__ import annotations
 from typing import Protocol
 
 from strategy_engine.domain.market import MarketFrame, MarketStream
+from strategy_engine.domain.market_data import StreamBounds
 from strategy_engine.domain.ranges import TimeRange
 
 
 class MarketDataPort(Protocol):
+    def load_bounds(self, market: MarketStream) -> StreamBounds: ...
+
     def load_range(
         self,
         market: MarketStream,
