@@ -10,4 +10,4 @@
 - [x] Return Decimal text and exact validity/warmup metadata.
 - [x] Add BBB golden parity for base and HTF ATR.
 - [x] Add mixed EMA+ATR single-request API acceptance.
-- [ ] Run full local `make verify` with ruff and mypy.
+- [x] Run full local `make verify` with ruff and mypy.
