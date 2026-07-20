@@ -13,7 +13,9 @@ from strategy_engine.strategies.ema_pullback.managed import (
 )
 
 
-def _spec(*, stop_buffer: float = 0.0, take_action: str = "keep_initial") -> dict[str, object]:
+def _spec(
+    *, stop_buffer: float = 0.0, take_action: str = "keep_initial", mode: str | None = "managed"
+) -> dict[str, object]:
     return {
         "anchor_stack": {
             "fast": {"source": "close", "timeframe": "base", "period": 2},
@@ -34,7 +36,7 @@ def _spec(*, stop_buffer: float = 0.0, take_action: str = "keep_initial") -> dic
                 },
             },
             "exit_management": {
-                "mode": "managed",
+                **({"mode": mode} if mode is not None else {}),
                 "phase_rules": [
                     {
                         "rule_id": "to-protected",
@@ -120,8 +122,9 @@ def _project(
     initial_take_price: float = 120.0,
     stop_buffer: float = 0.0,
     take_action: str = "keep_initial",
+    mode: str | None = "managed",
 ):
-    raw = _spec(stop_buffer=stop_buffer, take_action=take_action)
+    raw = _spec(stop_buffer=stop_buffer, take_action=take_action, mode=mode)
     frame, plan = _frame(raw)
     return evaluate_start_after_entry_managed_projection(
         raw,
@@ -198,3 +201,26 @@ def test_initial_take_can_be_disabled_by_managed_take_profile() -> None:
 
     assert result.replay.final_state.active_take_profile == "disable_initial_tp"
     assert result.desired_take_price is None
+
+
+def test_live_projection_accepts_missing_and_diagnostic_modes() -> None:
+    missing = _project(target_time_ms=300_000, mode=None)
+    diagnostic = _project(target_time_ms=300_000, mode="diagnostic_only")
+    managed = _project(target_time_ms=300_000, mode="managed")
+
+    assert missing.desired_stop_price == managed.desired_stop_price
+    assert diagnostic.desired_stop_price == managed.desired_stop_price
+    assert missing.replay.final_state.phase == managed.replay.final_state.phase
+    assert diagnostic.replay.final_state.phase == managed.replay.final_state.phase
+
+
+def test_noop_projection_preserves_high_precision_receipt_prices() -> None:
+    result = _project(
+        target_time_ms=0,
+        planned_entry_price=Decimal("0.1234567890123456789"),
+        initial_stop_price=Decimal("0.12"),
+        initial_take_price=Decimal("0.13"),
+    )
+
+    assert result.desired_stop_price == Decimal("0.12")
+    assert result.desired_take_price == Decimal("0.13")

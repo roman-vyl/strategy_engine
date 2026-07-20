@@ -29,6 +29,15 @@ def normalized_decimal_text(value: Decimal) -> str:
     return "0" if text in {"-0", ""} else text
 
 
+def parse_normalized_decimal_text(value: str) -> Decimal:
+    """Parse canonical plain decimal text without changing its numeric value."""
+
+    parsed = parse_decimal_text(value)
+    if value != normalized_decimal_text(parsed):
+        raise InvalidRequestError("decimal text must be normalized", value=value)
+    return parsed
+
+
 def canonical_json_hash(value: Any) -> str:
     payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()

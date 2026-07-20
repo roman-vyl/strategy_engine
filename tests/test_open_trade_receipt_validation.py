@@ -100,3 +100,10 @@ def test_validation_has_no_market_data_dependency() -> None:
     request = _request(replace(_receipt(_strategy()), instance_id="wrong"))
     with pytest.raises(TradeContractMismatchError):
         validate_open_trade_request(request)
+
+
+@pytest.mark.parametrize("raw", ["010.0", "1.2300", "-0", "+10", "1E+1"])
+def test_receipt_prices_require_normalized_decimal_text(raw: str) -> None:
+    receipt = replace(_receipt(_strategy()), planned_entry_price=raw)
+    with pytest.raises(InvalidRequestError, match="decimal text must be normalized"):
+        validate_open_trade_request(_request(receipt))

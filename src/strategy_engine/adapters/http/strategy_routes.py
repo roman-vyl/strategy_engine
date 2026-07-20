@@ -12,6 +12,7 @@ from strategy_engine.adapters.http.models import (
     ErrorResponseModel,
     LiveEntryProjectionRequestModel,
     LiveEntryProjectionResponseModel,
+    LiveMarketModel,
     ManagedReplayRequestModel,
     OpenTradeDiagnosticsResponseModel,
     OpenTradeProjectionRequestModel,
@@ -164,10 +165,10 @@ def _serialize_open_trade_projection(result: object) -> OpenTradeProjectionRespo
         strategy_id=result.strategy_id,
         strategy_version=result.strategy_version,
         source_config_hash=result.source_config_hash,
-        market={
-            "ticker": result.market.ticker,
-            "base_timeframe": result.market.base_timeframe,
-        },
+        market=LiveMarketModel(
+            ticker=result.market.ticker,
+            base_timeframe=result.market.base_timeframe,
+        ),
         target_bar_open_time_ms=result.target_bar_open_time_ms,
         market_data_hash=result.market_data_hash,
         desired_protection=DesiredProtectionResponseModel(
@@ -224,6 +225,15 @@ def evaluate_strategy_range_batch(
 @router.post(
     "/strategy-evaluations/live-entry",
     response_model=LiveEntryProjectionResponseModel,
+    responses={
+        404: {"model": ErrorResponseModel},
+        409: {"model": ErrorResponseModel},
+        422: {"model": ErrorResponseModel},
+        501: {"model": ErrorResponseModel},
+        502: {"model": ErrorResponseModel},
+        503: {"model": ErrorResponseModel},
+        500: {"model": ErrorResponseModel},
+    },
 )
 def evaluate_live_entry_projection(
     request: LiveEntryProjectionRequestModel,
@@ -241,6 +251,7 @@ def evaluate_live_entry_projection(
     "/strategy-evaluations/open-trade",
     response_model=OpenTradeProjectionResponseModel,
     responses={
+        404: {"model": ErrorResponseModel},
         409: {"model": ErrorResponseModel},
         422: {"model": ErrorResponseModel},
         501: {"model": ErrorResponseModel},

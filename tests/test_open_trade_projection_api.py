@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from strategy_engine.adapters.http.app import create_app
@@ -236,6 +237,81 @@ def test_open_trade_openapi_publishes_success_and_error_contracts() -> None:
     response_ref = operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
     assert request_ref.endswith("/OpenTradeProjectionRequestModel")
     assert response_ref.endswith("/OpenTradeProjectionResponseModel")
-    for status in ("409", "422", "501", "502", "503", "500"):
+    for status in ("404", "409", "422", "501", "502", "503", "500"):
         error_ref = operation["responses"][status]["content"]["application/json"]["schema"]["$ref"]
         assert error_ref.endswith("/ErrorResponseModel")
+
+
+def test_live_projection_openapi_declares_market_stream_not_found() -> None:
+    app_services, _ = _services()
+    schema = create_app(services=app_services).openapi()
+    for path in (
+        "/v1/strategy-evaluations/live-entry",
+        "/v1/strategy-evaluations/open-trade",
+    ):
+        assert "404" in schema["paths"][path]["post"]["responses"]
+
+
+@pytest.mark.parametrize("mode", [None, "diagnostic_only", "managed"])
+def test_open_trade_real_path_accepts_all_live_management_modes(mode: str | None) -> None:
+    app_services, _ = _services()
+    assert app_services.load_live_feature_frame is not None
+    app_services.evaluate_open_trade_projection = EvaluateOpenTradeProjection(
+        app_services.load_live_feature_frame
+    )
+    payload = _managed_payload()
+    strategy = payload["strategy"]
+    assert isinstance(strategy, dict)
+    raw_spec = strategy["raw_spec"]
+    assert isinstance(raw_spec, dict)
+    trade_management = raw_spec["trade_management"]
+    assert isinstance(trade_management, dict)
+    exit_management = trade_management["exit_management"]
+    assert isinstance(exit_management, dict)
+    if mode is None:
+        exit_management.pop("mode", None)
+    else:
+        exit_management["mode"] = mode
+    strategy_domain = StrategySpecEnvelope(
+        strategy_id=strategy["strategy_id"],
+        strategy_version=strategy["strategy_version"],
+        instance_id=strategy["instance_id"],
+        raw_spec=raw_spec,
+        compatibility_profile=strategy["compatibility_profile"],
+    )
+    receipt = payload["executed_trade_receipt"]
+    assert isinstance(receipt, dict)
+    receipt["source_config_hash"] = strategy_domain.config_hash
+
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/open-trade", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["desired_protection"] == {
+        "stop_price": "9.5",
+        "take_price": "11",
+    }
+
+
+def test_open_trade_real_path_preserves_high_precision_receipt_protection() -> None:
+    app_services, _ = _services()
+    assert app_services.load_live_feature_frame is not None
+    app_services.evaluate_open_trade_projection = EvaluateOpenTradeProjection(
+        app_services.load_live_feature_frame
+    )
+    payload = _managed_payload()
+    receipt = payload["executed_trade_receipt"]
+    assert isinstance(receipt, dict)
+    receipt["planned_entry_price"] = "10.1234567890123456789"
+    receipt["executed_entry_price"] = "10.123456789012345679"
+    receipt["initial_stop_price"] = "9.1234567890123456789"
+    receipt["initial_take_price"] = "11.1234567890123456789"
+
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/open-trade", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["desired_protection"] == {
+        "stop_price": "9.1234567890123456789",
+        "take_price": "11.1234567890123456789",
+    }

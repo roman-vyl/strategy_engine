@@ -146,6 +146,7 @@ def test_mds_client_rejects_unsupported_or_malformed_bounds_contract() -> None:
         },
     )
     for payload in payloads:
+
         def handler(request: httpx.Request, payload: dict[str, object] = payload) -> httpx.Response:
             return httpx.Response(200, json=payload)
 
@@ -158,12 +159,13 @@ def test_mds_client_rejects_unsupported_or_malformed_bounds_contract() -> None:
 
 
 def test_mds_client_maps_unknown_and_unavailable_bounds() -> None:
-    from strategy_engine.domain.errors import MarketDataUnavailableError, UnknownResourceError
+    from strategy_engine.domain.errors import MarketDataUnavailableError, MarketStreamNotFoundError
 
     for status_code, error_type in (
-        (404, UnknownResourceError),
+        (404, MarketStreamNotFoundError),
         (503, MarketDataUnavailableError),
     ):
+
         def handler(request: httpx.Request, status_code: int = status_code) -> httpx.Response:
             return httpx.Response(status_code, json={"error": "fixture"})
 
@@ -173,3 +175,25 @@ def test_mds_client_maps_unknown_and_unavailable_bounds() -> None:
         )
         with pytest.raises(error_type):
             adapter.load_bounds(MarketStream("BTCUSDT.P", "1m"))
+
+
+def test_mds_client_rejects_inverted_bounds_as_upstream_contract_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "contract_version": "market_stream_bounds.v1",
+                "ticker": "BTCUSDT.P",
+                "timeframe": "1m",
+                "state": "ready",
+                "earliest_committed_open_time_ms": 120_000,
+                "latest_committed_open_time_ms": 60_000,
+            },
+        )
+
+    adapter = MarketDataServiceClient(
+        "http://mds",
+        client=httpx.Client(base_url="http://mds", transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(UpstreamContractError, match="inverted stream bounds"):
+        adapter.load_bounds(MarketStream("BTCUSDT.P", "1m"))

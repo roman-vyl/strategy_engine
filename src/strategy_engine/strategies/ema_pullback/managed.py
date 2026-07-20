@@ -156,11 +156,11 @@ class ManagedReplayResult:
 
 @dataclass(frozen=True, slots=True)
 class StartAfterEntryManagedProjection:
-    """Internal open-trade managed projection with receipt-seeded protection."""
+    """Internal open-trade projection with exact receipt-seeded protection."""
 
     replay: ManagedReplayResult
-    desired_stop_price: float
-    desired_take_price: float | None
+    desired_stop_price: Decimal
+    desired_take_price: Decimal | None
 
 
 def _text(value: float | None) -> str | None:
@@ -354,11 +354,7 @@ def _runtime_signal(
             slow_value = slow_values[pos]
             if fast_value is None or slow_value is None:
                 return False
-            crossed = (
-                fast_value <= slow_value
-                if state.side == "long"
-                else fast_value >= slow_value
-            )
+            crossed = fast_value <= slow_value if state.side == "long" else fast_value >= slow_value
             if not crossed:
                 return False
         return True
@@ -377,10 +373,11 @@ def _evaluate_managed_replay_core(
     evaluation_start_offset: int,
     initial_stop_price: float | None = None,
     target_index: int | None = None,
+    require_managed_mode: bool = True,
 ) -> ManagedReplayResult:
     management = _mapping(raw_spec.get("trade_management", {}), "trade_management")
     config = _mapping(management.get("exit_management", {}), "exit_management")
-    if config.get("mode") != "managed":
+    if require_managed_mode and config.get("mode") != "managed":
         raise InvalidRequestError("managed replay requires exit_management.mode='managed'")
     try:
         entry_index = frame.time_ms.index(entry_time_ms)
@@ -609,6 +606,7 @@ def evaluate_managed_replay(
         entry_time_ms=entry_time_ms,
         entry_price=entry_price,
         evaluation_start_offset=0,
+        require_managed_mode=True,
     )
 
 
@@ -620,9 +618,9 @@ def evaluate_start_after_entry_managed_projection(
     trade_id: str,
     side: Side,
     entry_time_ms: int,
-    planned_entry_price: float,
-    initial_stop_price: float,
-    initial_take_price: float,
+    planned_entry_price: Decimal | float,
+    initial_stop_price: Decimal | float,
+    initial_take_price: Decimal | float,
     target_time_ms: int,
 ) -> StartAfterEntryManagedProjection:
     """Replay open-trade management strictly after entry using plan-price basis."""
@@ -631,7 +629,22 @@ def evaluate_start_after_entry_managed_projection(
         target_index = frame.time_ms.index(target_time_ms)
     except ValueError as exc:
         raise InvalidRequestError("target_time_ms is not on the evaluation grid") from exc
-    if initial_stop_price <= 0 or initial_take_price <= 0:
+    planned_entry_decimal = (
+        planned_entry_price
+        if isinstance(planned_entry_price, Decimal)
+        else Decimal(str(planned_entry_price))
+    )
+    initial_stop_decimal = (
+        initial_stop_price
+        if isinstance(initial_stop_price, Decimal)
+        else Decimal(str(initial_stop_price))
+    )
+    initial_take_decimal = (
+        initial_take_price
+        if isinstance(initial_take_price, Decimal)
+        else Decimal(str(initial_take_price))
+    )
+    if initial_stop_decimal <= 0 or initial_take_decimal <= 0:
         raise InvalidRequestError("initial stop and take prices must be positive")
     replay = _evaluate_managed_replay_core(
         raw_spec,
@@ -640,18 +653,24 @@ def evaluate_start_after_entry_managed_projection(
         trade_id=trade_id,
         side=side,
         entry_time_ms=entry_time_ms,
-        entry_price=planned_entry_price,
+        entry_price=float(planned_entry_decimal),
         evaluation_start_offset=1,
-        initial_stop_price=initial_stop_price,
+        initial_stop_price=float(initial_stop_decimal),
         target_index=target_index,
+        require_managed_mode=False,
+    )
+    desired_stop_price = (
+        initial_stop_decimal
+        if replay.final_state.active_stop_rule_id is None
+        else Decimal(str(replay.final_state.active_stop_price))
     )
     desired_take_price = (
         None
         if replay.final_state.active_take_profile == "disable_initial_tp"
-        else initial_take_price
+        else initial_take_decimal
     )
     return StartAfterEntryManagedProjection(
         replay=replay,
-        desired_stop_price=replay.final_state.active_stop_price or initial_stop_price,
+        desired_stop_price=desired_stop_price,
         desired_take_price=desired_take_price,
     )

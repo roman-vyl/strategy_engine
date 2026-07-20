@@ -12,7 +12,7 @@ from strategy_engine.adapters.market_data_service.models import (
 )
 from strategy_engine.domain.errors import (
     MarketDataUnavailableError,
-    UnknownResourceError,
+    MarketStreamNotFoundError,
     UpstreamContractError,
 )
 from strategy_engine.domain.market import MarketBar, MarketFrame, MarketStream
@@ -52,8 +52,7 @@ class MarketDataServiceClient:
             raise MarketDataUnavailableError("Market Data Service request failed") from exc
         if response.status_code != 200:
             if response.status_code == 404:
-                raise UnknownResourceError(
-                    "Market Data Service stream is unknown",
+                raise MarketStreamNotFoundError(
                     ticker=market.ticker,
                     timeframe=market.base_timeframe,
                 )

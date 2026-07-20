@@ -6,7 +6,7 @@ import re
 
 from strategy_engine.domain.errors import InvalidRequestError, TradeContractMismatchError
 from strategy_engine.domain.ranges import timeframe_duration_ms
-from strategy_engine.domain.values import parse_decimal_text
+from strategy_engine.domain.values import parse_normalized_decimal_text
 from strategy_engine.strategies.contracts import OpenTradeProjectionRequest
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -56,10 +56,10 @@ def validate_open_trade_request(request: OpenTradeProjectionRequest) -> None:
     ):
         raise InvalidRequestError("trade timestamps must satisfy source_plan <= entry <= target")
 
-    planned = parse_decimal_text(receipt.planned_entry_price)
-    executed = parse_decimal_text(receipt.executed_entry_price)
-    stop = parse_decimal_text(receipt.initial_stop_price)
-    take = parse_decimal_text(receipt.initial_take_price)
+    planned = parse_normalized_decimal_text(receipt.planned_entry_price)
+    executed = parse_normalized_decimal_text(receipt.executed_entry_price)
+    stop = parse_normalized_decimal_text(receipt.initial_stop_price)
+    take = parse_normalized_decimal_text(receipt.initial_take_price)
     if any(value <= 0 for value in (planned, executed, stop, take)):
         raise InvalidRequestError("receipt prices must be positive")
     valid_geometry = stop < planned < take if receipt.side == "long" else take < planned < stop

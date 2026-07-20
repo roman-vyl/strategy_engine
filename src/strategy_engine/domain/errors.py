@@ -37,6 +37,13 @@ class UnsupportedCapabilityError(StrategyEngineError):
         )
 
 
+class MarketStreamNotFoundError(StrategyEngineError):
+    def __init__(
+        self, message: str = "Market Data Service stream is unknown", **details: Any
+    ) -> None:
+        super().__init__("market_stream_not_found", message, details, 404)
+
+
 class MarketDataUnavailableError(StrategyEngineError):
     def __init__(self, message: str, **details: Any) -> None:
         super().__init__("market_data_unavailable", message, details, 503)

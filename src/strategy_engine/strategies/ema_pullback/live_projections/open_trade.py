@@ -26,8 +26,9 @@ from strategy_engine.strategies.ema_pullback.managed import (
 )
 
 
-def _text(value: float) -> str:
-    return normalized_decimal_text(Decimal(str(value)))
+def _text(value: Decimal | float) -> str:
+    decimal_value = value if isinstance(value, Decimal) else Decimal(str(value))
+    return normalized_decimal_text(decimal_value)
 
 
 def _mapping(value: object, path: str) -> Mapping[str, Any]:
@@ -43,9 +44,7 @@ def _rules_for_locked_profile(
     policy = _mapping(management.get("exit_policy", {}), "exit_policy")
     always = _mapping(policy.get("always_on", {}), "exit_policy.always_on")
     profiles = _mapping(policy.get("profiles", {}), "exit_policy.profiles")
-    profile = _mapping(
-        profiles.get(locked_profile, {}), f"exit_policy.profiles.{locked_profile}"
-    )
+    profile = _mapping(profiles.get(locked_profile, {}), f"exit_policy.profiles.{locked_profile}")
     always_rules = always.get("exits", [])
     profile_rules = profile.get("exits", [])
     if not isinstance(always_rules, list) or not isinstance(profile_rules, list):
@@ -69,9 +68,7 @@ def _standard_signal_candidates(
     try:
         profile_signal = by_profile[locked_profile][target_index]
     except (KeyError, IndexError) as exc:
-        raise InvalidRequestError(
-            "locked exit profile does not contain target signal"
-        ) from exc
+        raise InvalidRequestError("locked exit profile does not contain target signal") from exc
     if not profile_signal:
         return ()
     evidence_by_instance = {
@@ -90,9 +87,7 @@ def _standard_signal_candidates(
         try:
             active = evidence.signal[target_index]  # type: ignore[index]
         except IndexError as exc:
-            raise InvalidRequestError(
-                "signal evidence does not contain target index"
-            ) from exc
+            raise InvalidRequestError("signal evidence does not contain target index") from exc
         if active:
             candidates.append((instance_id, evidence.component_id))
     return tuple(candidates)
@@ -163,9 +158,9 @@ class EmaPullbackOpenTradeProjectionAdapter:
             trade_id=receipt.trade_id,
             side=receipt.side,  # type: ignore[arg-type]
             entry_time_ms=receipt.entry_bar_open_time_ms,
-            planned_entry_price=float(parse_decimal_text(receipt.planned_entry_price)),
-            initial_stop_price=float(parse_decimal_text(receipt.initial_stop_price)),
-            initial_take_price=float(parse_decimal_text(receipt.initial_take_price)),
+            planned_entry_price=parse_decimal_text(receipt.planned_entry_price),
+            initial_stop_price=parse_decimal_text(receipt.initial_stop_price),
+            initial_take_price=parse_decimal_text(receipt.initial_take_price),
             target_time_ms=request.target_bar_open_time_ms,
         )
         standard = _standard_signal_candidates(
