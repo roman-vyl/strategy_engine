@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 
@@ -244,7 +244,7 @@ class ManagedReplayRequestModel(BaseModel):
             market=market,
             time_range=time_range,
             trade_id=self.trade_id,
-            side=self.side,
+            side=cast(Literal["long", "short"], self.side),
             entry_time_ms=self.entry_time_ms,
             entry_price=float(self.entry_price),
         )

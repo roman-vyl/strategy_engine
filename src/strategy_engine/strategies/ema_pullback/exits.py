@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from math import isfinite
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -180,7 +180,7 @@ def _frame_dataframe(frame: FeatureFrame) -> pd.DataFrame:
 def _ema_column(raw: object, plan: EmaPullbackFeaturePlan, path: str) -> str:
     payload = _mapping(raw, path)
     timeframe = str(payload.get("timeframe", "base"))
-    period = int(payload.get("period"))
+    period = int(cast(int | str, payload.get("period")))
     try:
         return plan.ema_columns[(timeframe, period)]
     except KeyError as exc:

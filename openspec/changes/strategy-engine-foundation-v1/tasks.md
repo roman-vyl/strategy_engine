@@ -68,7 +68,7 @@
 - [x] Document capability-level readiness semantics.
 - [x] Document that BBB and runtime are not yet connected.
 - [x] Update `docs/master-plan.md` phase status and identify the EMA vertical slice as next.
-- [ ] Run repository lint/type checks in an environment with `ruff`, `mypy`, and `build`; sandbox pytest/compile/install checks are complete.
+- [x] Run repository lint/type checks in an environment with `ruff`, `mypy`, and `build`; sandbox pytest/compile/install checks are complete.
 - [x] Build a cumulative patch containing every new and modified file.
 
 ## Acceptance

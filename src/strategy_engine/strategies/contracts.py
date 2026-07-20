@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from strategy_engine.domain.market import MarketStream
 from strategy_engine.domain.ranges import TimeRange
@@ -86,7 +86,7 @@ class ManagedReplayRequest:
     market: MarketStream
     time_range: TimeRange
     trade_id: str
-    side: str
+    side: Literal["long", "short"]
     entry_time_ms: int
     entry_price: float
 

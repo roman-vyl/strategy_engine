@@ -49,15 +49,18 @@ def authoring_instance_to_envelope(instance: Mapping[str, Any]) -> StrategySpecE
     for index, raw in enumerate(raw_blockers):
         item = dict(_mapping(raw, f"strategy.blockers[{index}]"))
         cid = str(item.get("component_id", ""))
-        out = {"instance_id": str(item.get("instance_id", cid)), "component_id": cid}
+        blocker_out: dict[str, Any] = {
+            "instance_id": str(item.get("instance_id", cid)),
+            "component_id": cid,
+        }
         if "context_consumption" in item:
-            out["context_consumption"] = item["context_consumption"]
+            blocker_out["context_consumption"] = item["context_consumption"]
         if cid == "rsi_lookback_extreme_blocker":
             rsi = item.get("rsi") or {
                 "timeframe": item.get("timeframe", "base"),
                 "period": item.get("period", 14),
             }
-            out.update(
+            blocker_out.update(
                 {
                     "rsi": rsi,
                     "lookback": item.get("lookback", 20),
@@ -71,22 +74,22 @@ def authoring_instance_to_envelope(instance: Mapping[str, Any]) -> StrategySpecE
                 for k, v in item.items()
                 if k not in {"instance_id", "component_id", "context_consumption"}
             }
-            out["trend_strength"] = params
-        blockers.append(out)
+            blocker_out["trend_strength"] = params
+        blockers.append(blocker_out)
     setups = []
     raw_setups = strategy.get("setups", [])
     if not isinstance(raw_setups, list):
         raise InvalidRequestError("strategy.setups must be an array")
     for index, raw in enumerate(raw_setups):
         item = dict(_mapping(raw, f"strategy.setups[{index}]"))
-        out = {
+        setup_out: dict[str, Any] = {
             "instance_id": str(item.pop("instance_id", "")),
             "component_id": str(item.pop("component_id", "")),
         }
         if "context_consumption" in item:
-            out["context_consumption"] = item.pop("context_consumption")
-        out["params"] = item
-        setups.append(out)
+            setup_out["context_consumption"] = item.pop("context_consumption")
+        setup_out["params"] = item
+        setups.append(setup_out)
     direction = _mapping(strategy.get("direction"), "strategy.direction")
     trigger = dict(_mapping(strategy.get("trigger"), "strategy.trigger"))
     risk = _mapping(strategy.get("risk"), "strategy.risk")

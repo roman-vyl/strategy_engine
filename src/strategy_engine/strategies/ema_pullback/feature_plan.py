@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.indicators.contracts import IndicatorPlan, PlannedFeature
@@ -62,7 +62,7 @@ def _sequence(value: Any, path: str) -> tuple[Any, ...]:
 def _positive_int(value: Any, path: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise InvalidRequestError(f"{path} must be a positive integer")
-    return value
+    return cast(int, value)
 
 
 def _ema_id(timeframe: str, period: int) -> str:
@@ -223,7 +223,7 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
         payload = _mapping(distance, f"exits[{index}].distance")
         timeframe = str(payload.get("timeframe", "base"))
         period = _positive_int(payload.get("period", 14), f"exits[{index}].distance.period")
-        multiplier = float(payload.get("multiplier"))
+        multiplier = float(cast(int | float | str, payload.get("multiplier")))
         base_id = add_atr(timeframe, period)
         distance_id = f"{base_id}_x{_multiplier_token(multiplier)}"
         add(
