@@ -10,3 +10,5 @@
 - [x] Mark standard range evaluation `decisions_ready`.
 - [x] Add direct legacy BBB parity tests.
 - [x] Keep managed exit semantics explicitly out of scope.
+- [ ] Treat a configured all-null stop or take series as not ready during warmup.
+- [ ] Add regression coverage distinguishing configured all-null protection from an absent rule kind.
