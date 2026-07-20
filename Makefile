@@ -1,24 +1,18 @@
-PYTHON ?= python
+.PHONY: test lint typecheck verify run build
 
-.PHONY: check-python test lint typecheck verify run build
+test:
+	python -m pytest
 
-check-python:
-	@$(PYTHON) scripts/check_python_version.py
+lint:
+	ruff check src tests
 
-test: check-python
-	$(PYTHON) -m pytest
-
-lint: check-python
-	$(PYTHON) -m ruff check src tests
-
-typecheck: check-python
-	$(PYTHON) -m mypy src
+typecheck:
+	mypy src
 
 verify: lint typecheck test
 
-run: check-python
-	$(PYTHON) -m uvicorn strategy_engine.adapters.http.app:create_app \
-		--factory --host 127.0.0.1 --port 8090
+run:
+	uvicorn strategy_engine.adapters.http.app:create_app --factory --host 127.0.0.1 --port 8090
 
-build: check-python
-	$(PYTHON) -m build
+build:
+	python -m build
