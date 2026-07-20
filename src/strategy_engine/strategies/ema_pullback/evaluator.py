@@ -1,4 +1,4 @@
-"""Feature and context stage ema_pullback range evaluator."""
+"""EMA Pullback range evaluator."""
 
 from __future__ import annotations
 
@@ -6,21 +6,8 @@ from strategy_engine.indicators.application.evaluate_range import EvaluateIndica
 from strategy_engine.indicators.contracts import IndicatorRangeRequest
 from strategy_engine.strategies.application.build_feature_plan import BuildStrategyFeaturePlan
 from strategy_engine.strategies.contracts import StrategyRangeRequest, StrategyRangeResult
-from strategy_engine.strategies.ema_pullback.context_consumption import (
-    build_context_consumption_evidence,
-)
-from strategy_engine.strategies.ema_pullback.contexts import build_context_bundle
-from strategy_engine.strategies.ema_pullback.direction_blockers import (
-    evaluate_direction_and_blockers,
-)
-from strategy_engine.strategies.ema_pullback.exits import evaluate_exit_policy
-from strategy_engine.strategies.ema_pullback.potential_entries import (
-    potential_entries_to_wire,
-    project_potential_entries,
-)
-from strategy_engine.strategies.ema_pullback.risk import evaluate_risk_and_entries
-from strategy_engine.strategies.ema_pullback.setups import evaluate_setups
-from strategy_engine.strategies.ema_pullback.triggers import evaluate_triggers
+from strategy_engine.strategies.ema_pullback.evaluation import evaluate_ema_pullback_frame
+from strategy_engine.strategies.ema_pullback.potential_entries import potential_entries_to_wire
 
 
 class EmaPullbackRangeEvaluator:
@@ -44,45 +31,7 @@ class EmaPullbackRangeEvaluator:
                 expected_market_data_hash=request.expected_market_data_hash,
             )
         )
-        context_bundle = build_context_bundle(
-            request.strategy.raw_spec,
-            frame,
-            planned,
-        )
-        consumption = build_context_consumption_evidence(request.strategy.raw_spec, context_bundle)
-        direction_blockers = evaluate_direction_and_blockers(
-            request.strategy.raw_spec, frame, planned, consumption
-        )
-        setups = evaluate_setups(
-            request.strategy.raw_spec,
-            frame,
-            planned,
-            consumption,
-            direction_blockers,
-        )
-        triggers = evaluate_triggers(
-            request.strategy.raw_spec,
-            frame,
-            planned,
-            setups,
-        )
-        entries = evaluate_risk_and_entries(
-            request.strategy.raw_spec,
-            triggers,
-        )
-        exit_policy = evaluate_exit_policy(
-            request.strategy.raw_spec,
-            frame,
-            planned,
-            consumption,
-        )
-        potential_entries = project_potential_entries(
-            frame,
-            planned,
-            setups,
-            triggers,
-            exit_policy,
-        )
+        evaluation = evaluate_ema_pullback_frame(request.strategy, frame, planned)
         features: dict[str, object] = {}
         if request.options.include_features:
             features = {
@@ -109,24 +58,30 @@ class EmaPullbackRangeEvaluator:
             market=request.market,
             requested_range=request.time_range,
             features=features,
-            contexts=(context_bundle.to_wire() if request.options.include_contexts else {}),
+            contexts=(
+                evaluation.contexts.to_wire() if request.options.include_contexts else {}
+            ),
             entries={
                 side: next(
-                    (list(item.entry_allowed) for item in entries if item.side == side),
+                    (list(item.entry_allowed) for item in evaluation.entries if item.side == side),
                     [False] * len(frame.time_ms),
                 )
                 for side in ("long", "short")
             },
-            potential_entries=potential_entries_to_wire(potential_entries),
-            exit_policy=exit_policy.to_wire(),
+            potential_entries=potential_entries_to_wire(evaluation.potential_entries),
+            exit_policy=evaluation.exit_policy.to_wire(),
             component_evidence=(
                 {
-                    "context_consumption": [item.to_wire() for item in consumption],
-                    "direction_blockers": [item.to_wire() for item in direction_blockers],
-                    "setups": [item.to_wire() for item in setups],
-                    "triggers": [item.to_wire() for item in triggers],
-                    "risk_entries": [item.to_wire() for item in entries],
-                    "exit_policy": exit_policy.to_wire(),
+                    "context_consumption": [
+                        item.to_wire() for item in evaluation.consumption
+                    ],
+                    "direction_blockers": [
+                        item.to_wire() for item in evaluation.direction_blockers
+                    ],
+                    "setups": [item.to_wire() for item in evaluation.setups],
+                    "triggers": [item.to_wire() for item in evaluation.triggers],
+                    "risk_entries": [item.to_wire() for item in evaluation.entries],
+                    "exit_policy": evaluation.exit_policy.to_wire(),
                 }
                 if request.options.include_component_evidence
                 else {}

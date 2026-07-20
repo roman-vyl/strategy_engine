@@ -89,3 +89,101 @@ class ManagedReplayRequest:
     side: str
     entry_time_ms: int
     entry_price: float
+
+
+@dataclass(frozen=True, slots=True)
+class LiveEntryProjectionRequest:
+    strategy: StrategySpecEnvelope
+    market: MarketStream
+    target_bar_open_time_ms: int
+
+
+@dataclass(frozen=True, slots=True)
+class LiveEntryPlan:
+    side: str
+    source_plan_bar_open_time_ms: int
+    planned_entry_price: str
+    initial_stop_price: str
+    initial_take_price: str
+    locked_exit_profile: str
+
+
+@dataclass(frozen=True, slots=True)
+class LiveEntryProjectionResult:
+    contract_version: str
+    strategy_id: str
+    strategy_version: str
+    instance_id: str
+    source_config_hash: str
+    market: MarketStream
+    target_bar_open_time_ms: int
+    market_data_hash: str
+    plans_by_side: dict[str, LiveEntryPlan | None]
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutedTradeReceipt:
+    trade_id: str
+    instance_id: str
+    strategy_id: str
+    strategy_version: str
+    source_config_hash: str
+    ticker: str
+    base_timeframe: str
+    side: str
+    source_plan_bar_open_time_ms: int
+    entry_bar_open_time_ms: int
+    planned_entry_price: str
+    executed_entry_price: str
+    initial_stop_price: str
+    initial_take_price: str
+    locked_exit_profile: str
+    abi_entry_correlation: str
+
+
+@dataclass(frozen=True, slots=True)
+class OpenTradeProjectionRequest:
+    strategy: StrategySpecEnvelope
+    market: MarketStream
+    target_bar_open_time_ms: int
+    executed_trade_receipt: ExecutedTradeReceipt
+
+
+@dataclass(frozen=True, slots=True)
+class DesiredProtection:
+    stop_price: str
+    take_price: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class StrategicCloseSignal:
+    active: bool
+    reason: str | None
+    component_id: str | None
+    layer: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class OpenTradeDiagnostics:
+    phase: str
+    max_phase_reached: str
+    bars_in_trade: int
+    mfe_pct: str
+    mae_pct: str
+    managed_events: tuple[dict[str, object], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class OpenTradeProjectionResult:
+    contract_version: str
+    trade_id: str
+    instance_id: str
+    strategy_id: str
+    strategy_version: str
+    source_config_hash: str
+    market: MarketStream
+    target_bar_open_time_ms: int
+    market_data_hash: str
+    desired_protection: DesiredProtection
+    close_signal: StrategicCloseSignal
+    diagnostics: OpenTradeDiagnostics
