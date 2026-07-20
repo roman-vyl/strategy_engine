@@ -397,6 +397,10 @@ Only the requested target bar determines the returned `close_signal`. A transien
 
 `diagnostics` are optional for execution and exist for audit and parity. Runtime/ABI must not treat phase, MFE/MAE, or managed events as exchange commands.
 
+For live open-trade projection, `exit_management.mode` is not a capability gate. Missing `mode`, `diagnostic_only`, and `managed` all use the same post-entry projection path and evaluate the configured management rules. The historical public `/managed-replay` contract retains its existing managed-mode requirement.
+
+Receipt and public protection prices remain canonical decimal text at service boundaries. Receipt-seeded values are preserved as `Decimal` and are not round-tripped through float when unchanged. Exchange tick-size, lot-step, and order-aware quantization are explicitly owned by ABI, not Strategy Engine.
+
 Engine never returns quantity, order IDs, fill price, exit time, realized PnL, `move_stop`, `replace_order`, `cancel_take`, `close_order`, or Bybit-specific parameters.
 
 ## 6. Error model

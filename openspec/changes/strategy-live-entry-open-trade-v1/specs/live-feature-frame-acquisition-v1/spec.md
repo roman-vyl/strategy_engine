@@ -132,9 +132,7 @@ Live-entry and open-trade evaluation SHALL invoke the same live FeatureFrame acq
 
 ### Requirement: Handle the two-read race without partial output
 
-Bounds and candles MAY be separate MDS reads.
-
-If MDS readiness or range availability changes between them, Engine SHALL return a typed readiness, upstream-contract, or availability error and SHALL NOT return a partial live result.
+Bounds and candles MAY be separate MDS reads, but Engine SHALL return a typed readiness, upstream-contract, or availability error and SHALL NOT return a partial live result if MDS readiness or range availability changes between them.
 
 #### Scenario: Candle read is rejected after accepted bounds
 

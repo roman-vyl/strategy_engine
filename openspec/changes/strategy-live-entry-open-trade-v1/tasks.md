@@ -25,7 +25,7 @@
 ## Slice 3 — Receipt contract and pre-market validation
 
 - [x] Add immutable `ExecutedTradeReceipt` domain and HTTP models with all specified identity, time, price, profile, and ABI-correlation fields.
-- [x] Validate IDs, hash syntax, enums, alignment, time ordering, decimal values, and side-relative stop/entry/take geometry.
+- [x] Validate IDs, hash syntax, enums, alignment, time ordering, normalized decimal text, and side-relative stop/entry/take geometry.
 - [x] Validate request strategy, instance, market, and computed config hash against the receipt before any MDS call.
 - [x] Add typed `trade_contract_mismatch` and `trade_history_unavailable` application errors and stable HTTP mappings.
 - [x] Test that all pre-market validation failures perform zero MDS reads.
@@ -37,7 +37,7 @@
 - [x] Exclude entry-bar OHLC from MFE/MAE and all managed/close rules.
 - [x] Preserve `bars_in_trade = 1` on entry and `bars_in_trade = 2` on the first post-entry bar.
 - [x] Use `planned_entry_price` for all entry-relative managed mathematics while retaining executed price only as receipt provenance.
-- [x] Seed desired stop/take from receipt absolute initial levels and enforce tighten-only stop composition.
+- [x] Seed desired stop/take from exact receipt Decimal levels, avoid no-op float round trips, and enforce tighten-only stop composition.
 - [x] Test entry-target, first-post-entry, planned/executed divergence, phase, MFE/MAE, stop, and take semantics.
 
 ## Slice 5 — Confirmed-open desired protection and close signal
@@ -59,6 +59,8 @@
 - [x] Preserve the v1 full-history FeatureFrame and broad evaluator reuse; do not introduce entry-only or exit-only FeaturePlan specialization in this slice.
 - [x] Add architecture tests proving unsupported strategy families fail through registry lookup and that generic use cases contain no EMA Pullback-specific branches.
 - [x] Re-run live-entry parity, open-trade composition, managed replay compatibility, and the full repository suite after the refactor.
+- [x] Treat missing, `diagnostic_only`, and `managed` mode identically in the live open-trade adapter while preserving public `/managed-replay` compatibility.
+- [x] Map unknown MDS streams to `market_stream_not_found`, publish HTTP 404 for both live endpoints, and add inverted-bounds regression coverage.
 
 ## Slice 6 — Open-trade HTTP surface
 
@@ -70,14 +72,15 @@
 ## Slice 7 — Compatibility integration and performance gates
 
 - [ ] Prove `/range`, `/range-batch`, PotentialEntry vectors, exit-policy vectors, and `/managed-replay` remain unchanged.
-- [ ] Add Engine-to-MDS integration tests using real bounds and bounded-candle wire DTOs.
+- [ ] Add an opt-in sibling-repository Engine-to-MDS HTTP smoke harness as a temporary bridge; keep it outside normal `make verify`.
+- [ ] Design and create a dedicated multi-repository integration/system-test service, then add Engine-to-MDS integration tests using real bounds and bounded-candle wire DTOs.
 - [ ] Add end-to-end Engine HTTP tests for live-entry and open-trade.
 - [ ] Verify Engine does not import Runtime or ABI packages.
 - [ ] Benchmark maximum configured ready history on 5m and 1h, multiple active instances, latency, memory, and MDS payload size.
 - [ ] Record whether internal caching is needed before production without changing the public v1 contracts.
 - [ ] Update maintained architecture and API documentation.
 - [ ] Run the full repository verification suite.
-- [ ] Run strict OpenSpec validation for `strategy-live-entry-open-trade-v1`.
+- [x] Run strict OpenSpec validation for `strategy-live-entry-open-trade-v1`.
 
 ## Acceptance
 

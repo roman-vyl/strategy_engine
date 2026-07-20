@@ -121,6 +121,8 @@ The receipt SHALL NOT contain calculation origin, warmup, current phase, MFE/MAE
 
 ### Requirement: Validate receipt price geometry
 
+Engine SHALL validate receipt price geometry against `planned_entry_price` before any MDS access.
+
 For a long receipt:
 
 ```text
