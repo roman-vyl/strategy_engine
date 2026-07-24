@@ -207,11 +207,8 @@ When more than one candidate exists in the same layer, selection is deterministi
 
 ## 11. Public result invariants implemented before HTTP serialization
 
-The application results already carry fixed contract versions:
-
-```text
-strategy_live_entry_projection.v1
-strategy_open_trade_projection.v1
-```
+The live application results and HTTP responses do not carry a redundant
+payload-level `contract_version`. Their contracts are identified by the
+dedicated endpoint and its published HTTP schema.
 
 Live-entry always returns stable `long` and `short` keys, each containing a complete plan or `null`. Open-trade always returns a non-null desired stop, an optional desired take, one strategic close-signal structure, exact `market_data_hash`, and diagnostics. These are transport-neutral domain results; the HTTP step must serialize them without reconstructing strategy internals.

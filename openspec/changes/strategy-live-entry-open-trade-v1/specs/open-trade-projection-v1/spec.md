@@ -300,7 +300,6 @@ A transient strategic close signal present only on an earlier skipped bar SHALL 
 A successful response SHALL contain:
 
 ```text
-contract_version = strategy_open_trade_projection.v1
 trade_id
 instance_id
 strategy_id
@@ -323,6 +322,9 @@ diagnostics.mfe_pct
 diagnostics.mae_pct
 diagnostics.managed_events[]
 ```
+
+The response SHALL NOT contain a payload-level `contract_version`; the endpoint
+and its published HTTP schema define the contract.
 
 Prices and percentages SHALL serialize as normalized decimal text or `null` where allowed.
 

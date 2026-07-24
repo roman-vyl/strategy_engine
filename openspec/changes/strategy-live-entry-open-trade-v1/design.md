@@ -190,7 +190,6 @@ neutral
 
 ```json
 {
-  "contract_version": "strategy_live_entry_projection.v1",
   "strategy_id": "ema_pullback",
   "strategy_version": "1",
   "instance_id": "btc-ema-live-01",
@@ -358,7 +357,6 @@ Only the requested target bar determines the returned `close_signal`. A transien
 
 ```json
 {
-  "contract_version": "strategy_open_trade_projection.v1",
   "trade_id": "trade-123",
   "instance_id": "btc-ema-live-01",
   "strategy_id": "ema_pullback",

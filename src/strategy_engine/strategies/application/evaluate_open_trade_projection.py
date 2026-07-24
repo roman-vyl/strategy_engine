@@ -47,7 +47,6 @@ class EvaluateOpenTradeProjection:
         )
         receipt = request.executed_trade_receipt
         return OpenTradeProjectionResult(
-            contract_version="strategy_open_trade_projection.v1",
             trade_id=receipt.trade_id,
             instance_id=request.strategy.instance_id,
             strategy_id=request.strategy.strategy_id,

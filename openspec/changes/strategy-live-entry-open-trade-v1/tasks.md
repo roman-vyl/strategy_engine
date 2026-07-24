@@ -71,6 +71,7 @@
 
 ## Slice 7 — Compatibility integration and performance gates
 
+- [x] Remove the redundant payload-level `contract_version` from both Runtime-facing live projection responses while preserving MDS and Research endpoint version fields.
 - [ ] Prove `/range`, `/range-batch`, PotentialEntry vectors, exit-policy vectors, and `/managed-replay` remain unchanged.
 - [ ] Add an opt-in sibling-repository Engine-to-MDS HTTP smoke harness as a temporary bridge; keep it outside normal `make verify`.
 - [ ] Design and create a dedicated multi-repository integration/system-test service, then add Engine-to-MDS integration tests using real bounds and bounded-candle wire DTOs.

@@ -46,7 +46,6 @@ The generic application layer SHALL add shared identity and provenance and SHALL
 A successful response SHALL contain:
 
 ```text
-contract_version = strategy_live_entry_projection.v1
 strategy_id
 strategy_version
 instance_id
@@ -58,6 +57,9 @@ market_data_hash
 plans_by_side.long
 plans_by_side.short
 ```
+
+The response SHALL NOT contain a payload-level `contract_version`; the endpoint
+and its published HTTP schema define the contract.
 
 Both side keys SHALL always be present and SHALL contain either a complete plan object or `null`.
 

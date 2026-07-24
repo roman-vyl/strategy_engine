@@ -110,7 +110,6 @@ class LiveEntryPlan:
 
 @dataclass(frozen=True, slots=True)
 class LiveEntryProjectionResult:
-    contract_version: str
     strategy_id: str
     strategy_version: str
     instance_id: str
@@ -175,7 +174,6 @@ class OpenTradeDiagnostics:
 
 @dataclass(frozen=True, slots=True)
 class OpenTradeProjectionResult:
-    contract_version: str
     trade_id: str
     instance_id: str
     strategy_id: str

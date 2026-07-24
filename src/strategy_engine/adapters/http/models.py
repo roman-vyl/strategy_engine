@@ -214,7 +214,6 @@ class LiveEntryPlanResponseModel(BaseModel):
 class LiveEntryProjectionResponseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    contract_version: StrictStr
     strategy_id: StrictStr
     strategy_version: StrictStr
     instance_id: StrictStr
@@ -326,7 +325,6 @@ class OpenTradeDiagnosticsResponseModel(BaseModel):
 class OpenTradeProjectionResponseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    contract_version: StrictStr
     trade_id: StrictStr
     instance_id: StrictStr
     strategy_id: StrictStr

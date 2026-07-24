@@ -39,7 +39,6 @@ class EvaluateLiveEntryProjection:
             request, bundle
         )
         return LiveEntryProjectionResult(
-            contract_version="strategy_live_entry_projection.v1",
             strategy_id=request.strategy.strategy_id,
             strategy_version=request.strategy.strategy_version,
             instance_id=request.strategy.instance_id,

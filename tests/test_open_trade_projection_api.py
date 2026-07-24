@@ -96,7 +96,6 @@ def _managed_payload() -> dict[str, object]:
 def _result() -> OpenTradeProjectionResult:
     strategy = _strategy()
     return OpenTradeProjectionResult(
-        contract_version="strategy_open_trade_projection.v1",
         trade_id="trade-1",
         instance_id="live-1",
         strategy_id="ema_pullback",
@@ -133,7 +132,6 @@ def test_open_trade_http_returns_typed_desired_state() -> None:
 
     assert response.status_code == 200
     assert response.json() == {
-        "contract_version": "strategy_open_trade_projection.v1",
         "trade_id": "trade-1",
         "instance_id": "live-1",
         "strategy_id": "ema_pullback",
@@ -171,7 +169,7 @@ def test_open_trade_http_wires_real_application_use_case() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["contract_version"] == "strategy_open_trade_projection.v1"
+    assert "contract_version" not in body
     assert body["trade_id"] == "trade-1"
     assert body["market_data_hash"] == "fixture-market-hash"
     assert body["desired_protection"]["stop_price"] == "9.5"

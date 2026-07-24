@@ -124,7 +124,6 @@ def _serialize_live_entry_projection(result: object) -> dict[str, object]:
     if not isinstance(result, LiveEntryProjectionResult):
         raise TypeError("expected LiveEntryProjectionResult")
     return {
-        "contract_version": result.contract_version,
         "strategy_id": result.strategy_id,
         "strategy_version": result.strategy_version,
         "instance_id": result.instance_id,
@@ -159,7 +158,6 @@ def _serialize_open_trade_projection(result: object) -> OpenTradeProjectionRespo
     if not isinstance(result, OpenTradeProjectionResult):
         raise TypeError("expected OpenTradeProjectionResult")
     return OpenTradeProjectionResponseModel(
-        contract_version=result.contract_version,
         trade_id=result.trade_id,
         instance_id=result.instance_id,
         strategy_id=result.strategy_id,

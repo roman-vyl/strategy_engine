@@ -157,7 +157,7 @@ def test_live_entry_http_returns_atomic_plan_and_provenance() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["contract_version"] == "strategy_live_entry_projection.v1"
+    assert "contract_version" not in body
     assert body["market"] == {"ticker": "BTCUSDT.P", "base_timeframe": "5m"}
     assert body["target_bar_open_time_ms"] == 3_300_000
     assert body["market_data_hash"] == "fixture-market-hash"
