@@ -112,7 +112,6 @@ def _payload(*, enabled: list[str] | None = None) -> dict[str, object]:
     return {
         "strategy": {
             "strategy_id": "ema_pullback",
-            "instance_id": "live-1",
             "raw_spec": _spec(enabled=enabled),
         },
         "market": {"ticker": "BTCUSDT.P", "base_timeframe": "5m"},
@@ -156,18 +155,14 @@ def _services(*, state: str = "ready") -> tuple[ApplicationServices, FakeMarketD
     )
 
 
-def test_live_entry_http_returns_atomic_plan_and_provenance() -> None:
+def test_live_entry_http_returns_only_atomic_plan_result() -> None:
     app_services, market_data = _services()
     with TestClient(create_app(services=app_services)) as client:
         response = client.post("/v1/strategy-evaluations/live-entry", json=_payload())
 
     assert response.status_code == 200
     body = response.json()
-    assert "contract_version" not in body
-    assert body["market"] == {"ticker": "BTCUSDT.P", "base_timeframe": "5m"}
-    assert body["target_bar_open_time_ms"] == 3_300_000
-    assert "market_data_hash" not in body
-    assert "source_config_hash" not in body
+    assert set(body) == {"plans_by_side"}
     assert set(body["plans_by_side"]) == {"long", "short"}
     assert body["plans_by_side"]["short"] is None
     plan = body["plans_by_side"]["long"]
@@ -178,6 +173,22 @@ def test_live_entry_http_returns_atomic_plan_and_provenance() -> None:
     assert Decimal(plan["planned_entry_price"]) < Decimal(plan["initial_take_price"])
     assert market_data.bounds_calls == 1
     assert market_data.range_calls == 1
+
+
+def test_live_entry_http_rejects_removed_instance_id() -> None:
+    app_services, market_data = _services()
+    payload = _payload()
+    strategy = payload["strategy"]
+    assert isinstance(strategy, dict)
+    strategy["instance_id"] = "live-1"
+
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/live-entry", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_request"
+    assert market_data.bounds_calls == 0
+    assert market_data.range_calls == 0
 
 
 def test_live_entry_http_keeps_stable_null_side_keys() -> None:
@@ -261,9 +272,6 @@ def test_live_entry_openapi_publishes_request_and_response_contracts() -> None:
     assert request_ref.endswith("/LiveEntryProjectionRequestModel")
     assert response_ref.endswith("/LiveEntryProjectionResponseModel")
     live_strategy_schema = schema["components"]["schemas"]["LiveStrategySpecModel"]
-    assert "compatibility_profile" not in live_strategy_schema["properties"]
-    assert "strategy_version" not in live_strategy_schema["properties"]
+    assert set(live_strategy_schema["properties"]) == {"strategy_id", "raw_spec"}
     response_schema = schema["components"]["schemas"]["LiveEntryProjectionResponseModel"]
-    assert "strategy_version" not in response_schema["properties"]
-    assert "source_config_hash" not in response_schema["properties"]
-    assert "market_data_hash" not in response_schema["properties"]
+    assert set(response_schema["properties"]) == {"plans_by_side"}

@@ -139,9 +139,9 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
     )
     from strategy_engine.strategies.contracts import (
         ExecutedTradeReceipt,
+        LiveStrategySpec,
         OpenTradeProjectionRequest,
         OpenTradeProjectionResult,
-        StrategySpecEnvelope,
     )
     from strategy_engine.strategies.ema_pullback.live_projections import (
         open_trade as adapter_module,
@@ -152,7 +152,7 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
         StartAfterEntryManagedProjection,
     )
 
-    strategy = StrategySpecEnvelope("ema_pullback", "1", "instance-1", _spec())
+    strategy = LiveStrategySpec("ema_pullback", _spec())
     receipt = ExecutedTradeReceipt(
         side="long",
         source_plan_bar_open_time_ms=0,
@@ -239,6 +239,8 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
     assert result.desired_protection.take_price is None
     assert result.close_signal.reason == "signal:aligned-ema"
     assert result.diagnostics.phase == "protected"
-    assert {item.name for item in fields(OpenTradeProjectionResult)}.isdisjoint(
-        {"fill_price", "exit_price", "exit_time", "pnl", "quantity", "order_ids", "commands"}
-    )
+    assert {item.name for item in fields(OpenTradeProjectionResult)} == {
+        "desired_protection",
+        "close_signal",
+        "diagnostics",
+    }

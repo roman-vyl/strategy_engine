@@ -130,7 +130,6 @@ Bounds и candles являются двумя HTTP reads. Если stream тер
 LiveEntryProjectionRequest
   strategy
     strategy_id
-    instance_id
     raw_spec
   market
     ticker
@@ -158,10 +157,6 @@ Validation:
 
 ```text
 LiveEntryProjectionResult
-  strategy_id
-  instance_id
-  market
-  target_bar_open_time_ms
   plans_by_side
     long: LiveEntryPlan | null
     short: LiveEntryPlan | null
@@ -181,8 +176,9 @@ Rules:
 - profile берётся на том же target index;
 - Runtime не извлекает profile из отдельного vector response;
 - neutral result является успешным response с null plans;
-- strategy/instance/market/target пока возвращаются как временные эхо-поля
-  совместимости текущего Runtime и удаляются только отдельным двусторонним change.
+- Runtime-owned `instance_id` не входит в request;
+- response не содержит strategy/instance/market/target echoes и связывается с
+  исходным Runtime context синхронным вызовом.
 
 ## 4. Pending plan и fill boundary
 
@@ -257,9 +253,9 @@ receipt prices positive и normalized
 stop/planned-entry/take geometry соответствует side
 ```
 
-Receipt не дублирует request identity или market. Поэтому до MDS выполняется
-только intrinsic receipt validation; outer strategy/instance/market остаются
-единственным источником этих значений.
+Receipt не дублирует request strategy или market и не содержит Runtime instance
+identity. Поэтому до MDS выполняется только intrinsic receipt validation;
+strategy/market берутся из outer request, а instance context остаётся в Runtime.
 
 ### 6.3 Coverage validation
 
@@ -342,11 +338,6 @@ Intermediate transient strategic close signals не становятся termina
 
 ```text
 OpenTradeProjectionResult
-  instance_id
-  strategy_id
-  market
-  target_bar_open_time_ms
-
   desired_protection.stop_price
   desired_protection.take_price | null
 
@@ -364,9 +355,9 @@ OpenTradeProjectionResult
 
 Desired protection — состояние после обработки target bar, предназначенное для последующего realtime движения. Оно не утверждает, что уровни были активны или исполнены внутри уже завершившегося target bar.
 
-`instance_id`, `strategy_id`, market и target пока сохраняются в response только
-для совместимости с текущим Runtime. Они не являются receipt identity; их
-удаление отложено в отдельный согласованный Runtime/Engine change.
+Response не содержит `instance_id`, `strategy_id`, market или target. Engine
+возвращает только результат расчёта, а Runtime связывает синхронный response с
+исходным strategy instance и request context.
 
 Engine не возвращает:
 
@@ -542,10 +533,11 @@ LoadLiveFeatureFrame
 
 HTTP success response должен быть точной сериализацией `OpenTradeProjectionResult`:
 
-- current Runtime-compatible response metadata;
 - `desired_protection`;
 - `close_signal`;
 - `diagnostics`.
+
+Request metadata и Runtime identity в success response не добавляются.
 
 OpenAPI должен публиковать именованные request/response models и единый typed error
 envelope для validation, readiness, target commitment, history

@@ -11,6 +11,7 @@ _REMOVED_LIVE_FIELDS = {
     "contract_version",
     "market_data_hash",
     "source_config_hash",
+    "instance_id",
     "strategy_version",
     "trade_id",
 }
@@ -38,7 +39,7 @@ def test_live_openapi_is_clean_and_research_routes_remain_published() -> None:
     live_entry_response = set(models["LiveEntryProjectionResponseModel"]["properties"])
     open_trade_response = set(models["OpenTradeProjectionResponseModel"]["properties"])
 
-    assert live_strategy == {"strategy_id", "instance_id", "raw_spec"}
+    assert live_strategy == {"strategy_id", "raw_spec"}
     assert receipt == {
         "side",
         "source_plan_bar_open_time_ms",
@@ -53,3 +54,9 @@ def test_live_openapi_is_clean_and_research_routes_remain_published() -> None:
     assert not _REMOVED_LIVE_FIELDS & receipt
     assert not _REMOVED_LIVE_FIELDS & live_entry_response
     assert not _REMOVED_LIVE_FIELDS & open_trade_response
+    assert live_entry_response == {"plans_by_side"}
+    assert open_trade_response == {
+        "desired_protection",
+        "close_signal",
+        "diagnostics",
+    }

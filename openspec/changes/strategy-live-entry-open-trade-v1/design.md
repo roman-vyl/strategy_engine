@@ -146,13 +146,11 @@ Each strategy-family adapter SHALL:
 - return an internal strategy-specific projection result;
 - avoid HTTP, Runtime lifecycle, ABI state, exchange commands, MDS transport, and persisted mutable session state.
 
-The generic application use case SHALL combine the internal projection result with
-the request metadata currently required by Runtime to produce the public
-transport-neutral result. The HTTP layer SHALL serialize that result only.
-`strategy_id`, `instance_id`, market, and target echoes in the live responses are
-temporary Runtime-compatibility fields, not receipt provenance or a permanent
-identity design. Removing those response echoes requires a coordinated follow-up
-change on both sides of the Runtime/Engine boundary.
+The generic application use case SHALL expose only the strategy-specific
+calculation result through a public transport-neutral result. The HTTP layer
+SHALL serialize that result only. Runtime-owned instance identity and request
+context remain in Runtime; synchronous call context associates each response
+with its originating request.
 
 For v1, both adapters MAY reuse the existing full strategy FeaturePlan and broad strategy evaluator. The change SHALL NOT require an entry-only or exit-only FeaturePlan, nor a duplicated live-only strategy formula pipeline. Narrow feature or evaluator specialization is deferred until performance evidence requires it.
 
@@ -164,7 +162,6 @@ For v1, both adapters MAY reuse the existing full strategy FeaturePlan and broad
 {
   "strategy": {
     "strategy_id": "ema_pullback",
-    "instance_id": "btc-ema-live-01",
     "raw_spec": {}
   },
   "market": {
@@ -196,13 +193,6 @@ neutral
 
 ```json
 {
-  "strategy_id": "ema_pullback",
-  "instance_id": "btc-ema-live-01",
-  "market": {
-    "ticker": "BTCUSDT.P",
-    "base_timeframe": "5m"
-  },
-  "target_bar_open_time_ms": 1710000000000,
   "plans_by_side": {
     "long": null,
     "short": {
@@ -221,10 +211,9 @@ Both `long` and `short` keys are always present. Decimal prices use normalized d
 
 Engine does not persist this result. Runtime may replace its mutable pending snapshot on a later bar. ABI correlation determines which exact pending snapshot was filled.
 
-The response-level strategy, instance, market, and target fields shown above are
-retained only for compatibility with the current Runtime consumer. The receipt
-does not duplicate them. Their later removal is a separate coordinated contract
-change.
+The response contains only the calculated plan result. Runtime associates the
+synchronous response with its own originating strategy instance and request
+context.
 
 ## 4. Fill boundary and immutable receipt
 
@@ -267,7 +256,6 @@ exchange order IDs, historical features, and actual current market state.
 {
   "strategy": {
     "strategy_id": "ema_pullback",
-    "instance_id": "btc-ema-live-01",
     "raw_spec": {}
   },
   "market": {
@@ -344,8 +332,8 @@ The live open-trade path MUST NOT run the backtest execution simulator's same-ba
 
 The open-trade adapter SHALL return a strategy-specific internal projection
 containing only the calculated protection, strategic close signal, and strategy
-diagnostics. The generic application use case SHALL add the response metadata
-currently required by Runtime to form `OpenTradeProjectionResult`.
+diagnostics. The generic application use case SHALL expose those calculation
+fields directly as `OpenTradeProjectionResult`.
 
 The managed calculation core carries no Runtime trade identity. Public
 `/managed-replay` preserves its existing Research-facing `trade_id` through a
@@ -357,13 +345,6 @@ Only the requested target bar determines the returned `close_signal`. A transien
 
 ```json
 {
-  "instance_id": "btc-ema-live-01",
-  "strategy_id": "ema_pullback",
-  "market": {
-    "ticker": "BTCUSDT.P",
-    "base_timeframe": "5m"
-  },
-  "target_bar_open_time_ms": 1710000300000,
   "desired_protection": {
     "stop_price": "65000",
     "take_price": null
@@ -391,10 +372,9 @@ Only the requested target bar determines the returned `close_signal`. A transien
 
 `diagnostics` are optional for execution and exist for audit and parity. Runtime/ABI must not treat phase, MFE/MAE, or managed events as exchange commands.
 
-The response-level strategy, instance, market, and target fields are temporary
-compatibility echoes for the current Runtime client. They are not part of the
-executed-trade receipt and are not the intended final cross-module identity
-surface. Removing them is deferred to a coordinated Runtime/Engine change.
+The response contains only the calculated desired protection, close signal, and
+diagnostics. It carries no Runtime identity, request echoes, replacement ID, or
+correlation ID.
 
 For live open-trade projection, `exit_management.mode` is not a capability gate. Missing `mode`, `diagnostic_only`, and `managed` all use the same post-entry projection path and evaluate the configured management rules. The historical public `/managed-replay` contract retains its existing managed-mode requirement.
 

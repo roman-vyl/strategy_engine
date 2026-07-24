@@ -11,7 +11,7 @@ POST /v1/strategy-evaluations/open-trade
 ```
 
 The request SHALL contain exactly a live strategy envelope
-(`strategy_id`, temporarily retained `instance_id`, and `raw_spec`), market
+(`strategy_id` and `raw_spec`), market
 identity (`ticker` and `base_timeframe`), `target_bar_open_time_ms`, and
 `executed_trade_receipt`. Unknown fields SHALL be rejected by the strict HTTP
 model.
@@ -24,6 +24,11 @@ Runtime SHALL call the endpoint only after ABI operational state confirms that t
 
 - **WHEN** ABI has confirmed the correlated position is currently open and a valid immutable receipt and matching strategy request are submitted
 - **THEN** Engine SHALL evaluate desired strategic state through the shared live FeatureFrame path.
+
+#### Scenario: Removed Runtime instance ID is supplied
+
+- **WHEN** an open-trade strategy envelope contains `instance_id`
+- **THEN** strict HTTP validation SHALL reject the request before MDS access.
 
 ### Requirement: Publish typed HTTP transport contracts
 
@@ -71,9 +76,9 @@ The generic use case SHALL NOT contain strategy-family-specific calculation bran
 
 The adapter SHALL receive explicit validated inputs, the complete live FeatureFrame, target index, and immutable receipt. It MAY reuse the existing broad strategy evaluator and full strategy FeaturePlan in v1. It SHALL return an internal strategy-specific projection containing desired protection, target-active strategic close signal, and diagnostics.
 
-The generic application layer SHALL add the request metadata currently required
-by Runtime to produce `OpenTradeProjectionResult`. It SHALL NOT add receipt
-identity, configuration-hash, or MDS-hash provenance.
+The generic application layer SHALL expose the calculated desired protection,
+close signal, and diagnostics as `OpenTradeProjectionResult`. It SHALL NOT add
+request metadata, receipt identity, configuration-hash, or MDS-hash provenance.
 
 #### Scenario: EMA Pullback open-trade projection
 
@@ -276,11 +281,6 @@ A transient strategic close signal present only on an earlier skipped bar SHALL 
 A successful response SHALL contain:
 
 ```text
-instance_id
-strategy_id
-market.ticker
-market.base_timeframe
-target_bar_open_time_ms
 desired_protection.stop_price
 desired_protection.take_price | null
 close_signal.active
@@ -300,10 +300,9 @@ Prices and percentages SHALL serialize as normalized decimal text or `null` wher
 The response SHALL NOT contain exchange commands, quantity, exchange order IDs, fill price, exit time, realized PnL, or Bybit-specific parameters.
 The strict response model SHALL contain no fields beyond the schema above.
 
-The response-level strategy, instance, market, and target fields SHALL be treated
-as temporary compatibility echoes for the current Runtime consumer. They SHALL
-NOT be interpreted as receipt identity. Removing them requires a separate
-coordinated Runtime/Engine contract change.
+The response SHALL NOT echo `strategy_id`, Runtime-owned `instance_id`, market
+identity, base timeframe, or `target_bar_open_time_ms`. Runtime SHALL associate
+the synchronous result with its originating request and strategy instance.
 
 #### Scenario: No strategic close is required
 

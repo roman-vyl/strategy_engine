@@ -134,7 +134,6 @@ def request(target: int = 3_300_000) -> LiveFeatureFrameRequest:
     return LiveFeatureFrameRequest(
         strategy=LiveStrategySpec(
             strategy_id="ema_pullback",
-            instance_id="fixture-live",
             raw_spec=minimal_spec(),
         ),
         market=MarketStream("BTCUSDT.P", "5m"),

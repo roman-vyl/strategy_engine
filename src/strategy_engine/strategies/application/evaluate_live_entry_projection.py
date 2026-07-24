@@ -39,9 +39,5 @@ class EvaluateLiveEntryProjection:
             request, bundle
         )
         return LiveEntryProjectionResult(
-            strategy_id=request.strategy.strategy_id,
-            instance_id=request.strategy.instance_id,
-            market=request.market,
-            target_bar_open_time_ms=request.target_bar_open_time_ms,
             plans_by_side=projection.plans_by_side,
         )

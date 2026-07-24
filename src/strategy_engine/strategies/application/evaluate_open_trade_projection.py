@@ -46,10 +46,6 @@ class EvaluateOpenTradeProjection:
             request, bundle
         )
         return OpenTradeProjectionResult(
-            instance_id=request.strategy.instance_id,
-            strategy_id=request.strategy.strategy_id,
-            market=request.market,
-            target_bar_open_time_ms=request.target_bar_open_time_ms,
             desired_protection=DesiredProtection(
                 projection.desired_protection.stop_price,
                 projection.desired_protection.take_price,

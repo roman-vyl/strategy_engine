@@ -223,7 +223,6 @@ POST /v1/strategy-evaluations/live-entry
 LiveEntryProjectionRequest
   strategy
     strategy_id
-    instance_id
     raw_spec
   market
     ticker
@@ -235,10 +234,6 @@ Engine строит live FeatureFrame и возвращает только targe
 
 ```text
 LiveEntryProjectionResult
-  strategy_id
-  instance_id
-  market
-  target_bar_open_time_ms
   plans_by_side
     long | short
       side
@@ -255,10 +250,9 @@ LiveEntryProjectionResult
 
 Runtime может bar-to-bar заменять mutable pending-entry snapshot. Это Runtime lifecycle, а не Engine state.
 
-Поля `strategy_id`, `instance_id`, `market` и target в response пока остаются
-эхо-полями совместимости для текущего Runtime-клиента. Они не переносятся в
-receipt. Их удаление требует отдельного согласованного изменения обеих сторон
-контракта.
+Runtime-owned `instance_id` не передаётся Engine. Response содержит только
+`plans_by_side`; синхронный Runtime call связывает результат с исходными
+strategy instance, market и target.
 
 ## 5. Executed-trade receipt после fill
 
@@ -282,7 +276,7 @@ ExecutedTradeReceipt
 - `planned_entry_price`, initial stop/take и profile копируются из исполнившегося live-entry plan;
 - `executed_entry_price` добавляется из подтверждённого ABI fill;
 - receipt создаётся один раз и не дописывается последующими managed outputs;
-- strategy, instance и market берутся только из внешнего request и не дублируются в receipt;
+- strategy и market берутся из внешнего request, Runtime instance identity остаётся в Runtime и ничего из этого не дублируется в receipt;
 - current ABI stop/take, quantity и order IDs не становятся strategy inputs.
 
 ## 6. Open-trade projection после fill
@@ -333,10 +327,6 @@ target_bar является последним bar загруженного fram
 
 ```text
 OpenTradeProjectionResult
-  instance_id
-  strategy_id
-  market
-  target_bar_open_time_ms
   desired_protection.stop_price
   desired_protection.take_price | null
   close_signal
@@ -345,9 +335,9 @@ OpenTradeProjectionResult
 
 `break_even_stop` является plan-basis стратегическим уровнем, а не гарантией фактического PnL `0.00` после slippage, commissions и funding.
 
-Response identity/market/target остаются временными эхо-полями совместимости
-текущего Runtime. Receipt-bound trade ID, ABI correlation и hash provenance в
-live-контракт не возвращаются.
+Response содержит только рассчитанные desired protection, close signal и
+diagnostics. Runtime identity, request context, receipt-bound trade ID, ABI
+correlation и hash provenance в live-контракт не возвращаются.
 
 ## 7. Пропущенные transient exits
 

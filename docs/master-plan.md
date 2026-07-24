@@ -176,7 +176,9 @@ ABI подтверждает, что correlated position сейчас откры
 → post-target desired stop/take + strategic close signal
 ```
 
-Оба use case получают от Runtime strategy spec, market identity и webhook target bar. Runtime не передаёт `from_ms`, warmup или candles.
+Оба use case получают от Runtime strategy spec (`strategy_id` и `raw_spec`),
+market identity и webhook target bar. Runtime-owned `instance_id` не пересекает
+границу Engine. Runtime не передаёт `from_ms`, warmup или candles.
 
 Engine использует общий internal live FeatureFrame path:
 
@@ -197,9 +199,10 @@ profile. Runtime хранит его как mutable pending snapshot. После
 stop/take и locked profile. Receipt не дублирует strategy, instance или market
 identity и не содержит Runtime trade ID, ABI correlation либо hash provenance.
 
-Текущие live responses временно сохраняют `strategy_id`, `instance_id`, market и
-target как эхо-поля совместимости существующего Runtime-клиента. Их удаление
-является отдельным согласованным изменением обеих сторон контракта.
+Live responses возвращают только результат расчёта: `plans_by_side` для
+live-entry и `desired_protection`, `close_signal`, `diagnostics` для open-trade.
+Они не дублируют strategy identity, Runtime instance identity, market или target;
+синхронный вызов связывает результат с исходным Runtime context.
 
 Перед open-trade Runtime обязан запросить ABI operational state. Если stop/take или другое exchange event уже закрыло позицию на завершившемся баре, ABI сообщает `not open`, и Runtime не вызывает Engine. Receipt сам по себе не доказывает существование позиции.
 

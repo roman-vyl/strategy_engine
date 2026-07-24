@@ -11,7 +11,7 @@ POST /v1/strategy-evaluations/live-entry
 ```
 
 The request SHALL contain exactly a live strategy envelope
-(`strategy_id`, temporarily retained `instance_id`, and `raw_spec`), market
+(`strategy_id` and `raw_spec`), market
 identity (`ticker` and `base_timeframe`), and `target_bar_open_time_ms`.
 Unknown fields SHALL be rejected by the strict HTTP model.
 
@@ -22,6 +22,11 @@ The endpoint SHALL be stateless and SHALL NOT accept Runtime lifecycle or ABI or
 - **WHEN** a valid request is submitted for a supported strategy and market
 - **THEN** Engine SHALL evaluate the requested target through the shared live FeatureFrame path.
 
+#### Scenario: Removed Runtime instance ID is supplied
+
+- **WHEN** a live-entry strategy envelope contains `instance_id`
+- **THEN** strict HTTP validation SHALL reject the request before MDS access.
+
 ### Requirement: Delegate through a strategy-family live-entry adapter
 
 The generic live-entry application use case SHALL resolve a live-entry projection adapter through a dedicated live-entry registry using strategy family or strategy identity.
@@ -30,8 +35,8 @@ The generic use case SHALL NOT contain strategy-family-specific calculation bran
 
 The adapter SHALL receive explicit validated inputs and a complete live FeatureFrame, MAY reuse the existing broad strategy evaluator in v1, and SHALL return an internal strategy-specific live-entry projection.
 
-The generic application layer SHALL add the request metadata currently required
-by Runtime and SHALL produce the public `LiveEntryProjectionResult`.
+The generic application layer SHALL expose the calculated plans as the public
+`LiveEntryProjectionResult` without adding request metadata.
 
 #### Scenario: EMA Pullback live-entry projection
 
@@ -45,16 +50,11 @@ by Runtime and SHALL produce the public `LiveEntryProjectionResult`.
 - **THEN** Engine SHALL return a typed unsupported-strategy error
 - **AND** SHALL NOT fall back to a strategy-specific conditional branch.
 
-### Requirement: Return the current Runtime-compatible live-entry response
+### Requirement: Return only the live-entry calculation result
 
 A successful response SHALL contain:
 
 ```text
-strategy_id
-instance_id
-market.ticker
-market.base_timeframe
-target_bar_open_time_ms
 plans_by_side.long
 plans_by_side.short
 ```
@@ -62,10 +62,9 @@ plans_by_side.short
 Both side keys SHALL always be present and SHALL contain either a complete plan object or `null`.
 The strict response model SHALL contain no fields beyond the schema above.
 
-The response-level strategy, instance, market, and target fields SHALL be treated
-as temporary compatibility echoes for the current Runtime consumer. They SHALL
-NOT be copied into the executed-trade receipt. Removing them requires a separate
-coordinated Runtime/Engine contract change.
+The response SHALL NOT echo `strategy_id`, Runtime-owned `instance_id`, market
+identity, base timeframe, or `target_bar_open_time_ms`. Runtime SHALL associate
+the synchronous result with its originating request and strategy instance.
 
 #### Scenario: No plan on either side
 

@@ -15,7 +15,7 @@ from strategy_engine.strategies.contracts import (
 
 
 def _strategy() -> LiveStrategySpec:
-    return LiveStrategySpec("ema_pullback", "instance-1", {})
+    return LiveStrategySpec("ema_pullback", {})
 
 
 def _receipt() -> ExecutedTradeReceipt:

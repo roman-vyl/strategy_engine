@@ -124,11 +124,14 @@ def services() -> tuple[EvaluateLiveEntryProjection, EvaluateStrategyRange, Stra
     )
 
 
-def test_live_entry_returns_stable_side_keys_and_provenance() -> None:
+def test_live_entry_returns_only_stable_side_plan_result() -> None:
+    from dataclasses import fields
+
+    from strategy_engine.strategies.contracts import LiveEntryProjectionResult
+
     live, _, strategy = services()
     live_strategy = LiveStrategySpec(
         strategy.strategy_id,
-        strategy.instance_id,
         strategy.raw_spec,
     )
     result = live.execute(
@@ -144,6 +147,7 @@ def test_live_entry_returns_stable_side_keys_and_provenance() -> None:
     assert Decimal(plan.initial_stop_price) < Decimal(plan.planned_entry_price)
     assert Decimal(plan.planned_entry_price) < Decimal(plan.initial_take_price)
     assert plan.locked_exit_profile in {"aligned", "countertrend", "neutral"}
+    assert {item.name for item in fields(LiveEntryProjectionResult)} == {"plans_by_side"}
 
 
 def test_live_entry_matches_target_index_range_projection() -> None:
@@ -151,7 +155,6 @@ def test_live_entry_matches_target_index_range_projection() -> None:
     market = MarketStream("BTCUSDT.P", "5m")
     live_strategy = LiveStrategySpec(
         strategy.strategy_id,
-        strategy.instance_id,
         strategy.raw_spec,
     )
     live_result = live.execute(

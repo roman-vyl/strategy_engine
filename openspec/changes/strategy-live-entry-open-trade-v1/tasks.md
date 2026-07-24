@@ -45,7 +45,7 @@
 - [x] Add locked-profile standard signal selection for receipt side at target index.
 - [x] Reuse canonical strategy-level composition/attribution only among target-active strategic close rules.
 - [x] Do not run backtest execution-fill arbitration between protective-level hits and strategic close signals in the live open-trade path.
-- [x] Build `OpenTradeProjectionResult` around `desired_protection`, `close_signal`, current Runtime-compatible response metadata, and diagnostics.
+- [x] Build `OpenTradeProjectionResult` around `desired_protection`, `close_signal`, and diagnostics.
 - [x] Define desired stop/take as post-target-bar levels effective after target processing, not as inferred fills inside target.
 - [x] Confirm that intermediate transient strategic exits are not recovered and document the accepted v1 trading risk in tests.
 - [x] Test multiple simultaneous strategic close rules and preserve existing canonical strategy attribution.
@@ -78,7 +78,8 @@
 - [x] Remove Runtime-owned `trade_id` from open-trade receipt/result and split the identity-free managed core from the unchanged Research `/managed-replay` attribution wrapper.
 - [x] Introduce a live-specific strategy input and remove the Research-only `compatibility_profile` from both live request schemas without changing Research envelopes.
 - [x] Remove the unused `strategy_version` selector and echo from live requests, receipts, and responses while preserving Research version contracts.
-- [x] Remove duplicated strategy, instance, and market echoes from the executed-trade receipt and use the outer request as their single source.
+- [x] Remove duplicated strategy, instance, and market echoes from the executed-trade receipt; keep strategy and market in the outer request and Runtime instance identity in Runtime.
+- [x] Remove Runtime-owned `instance_id` from both live requests and remove all strategy, instance, market, and target request echoes from both live results and responses.
 - [x] Remove stale generated distributions and egg-info, and add source/archive plus live-OpenAPI release regression checks.
 - [x] Prove `/range`, `/range-batch`, PotentialEntry vectors, exit-policy vectors, and `/managed-replay` remain unchanged.
 - [ ] Add an opt-in sibling-repository Engine-to-MDS HTTP smoke harness as a temporary bridge; keep it outside normal `make verify`.

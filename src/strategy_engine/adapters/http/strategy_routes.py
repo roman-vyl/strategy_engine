@@ -12,7 +12,6 @@ from strategy_engine.adapters.http.models import (
     ErrorResponseModel,
     LiveEntryProjectionRequestModel,
     LiveEntryProjectionResponseModel,
-    LiveMarketModel,
     ManagedReplayRequestModel,
     OpenTradeDiagnosticsResponseModel,
     OpenTradeProjectionRequestModel,
@@ -124,13 +123,6 @@ def _serialize_live_entry_projection(result: object) -> dict[str, object]:
     if not isinstance(result, LiveEntryProjectionResult):
         raise TypeError("expected LiveEntryProjectionResult")
     return {
-        "strategy_id": result.strategy_id,
-        "instance_id": result.instance_id,
-        "market": {
-            "ticker": result.market.ticker,
-            "base_timeframe": result.market.base_timeframe,
-        },
-        "target_bar_open_time_ms": result.target_bar_open_time_ms,
         "plans_by_side": {
             side: (
                 {
@@ -155,13 +147,6 @@ def _serialize_open_trade_projection(result: object) -> OpenTradeProjectionRespo
     if not isinstance(result, OpenTradeProjectionResult):
         raise TypeError("expected OpenTradeProjectionResult")
     return OpenTradeProjectionResponseModel(
-        instance_id=result.instance_id,
-        strategy_id=result.strategy_id,
-        market=LiveMarketModel(
-            ticker=result.market.ticker,
-            base_timeframe=result.market.base_timeframe,
-        ),
-        target_bar_open_time_ms=result.target_bar_open_time_ms,
         desired_protection=DesiredProtectionResponseModel(
             stop_price=result.desired_protection.stop_price,
             take_price=result.desired_protection.take_price,

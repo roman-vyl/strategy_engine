@@ -112,23 +112,19 @@ The first implementation may register only EMA Pullback, but the extension seam 
 
 Each strategy-specific adapter returns an internal projection result appropriate to that family.
 
-The generic application use case then combines that result with the request
-metadata currently required by Runtime:
+The generic application use case exposes that calculation result without adding
+request metadata:
 
 ```text
 strategy-specific projection result
-    + strategy identity
-    + market identity
-    + target bar
     -> generic application result
 ```
 
 The HTTP layer later performs serialization only. It must not inspect strategy internals or reconstruct the projection from raw evaluator objects.
 
-The response-level strategy, instance, market, and target values are temporary
-compatibility echoes for the current Runtime client. They are not copied into
-the receipt and are not the final identity design. Their removal requires a
-separate coordinated Runtime/Engine contract change.
+Runtime-owned `instance_id` remains in Runtime and is not accepted by either live
+request. Live responses contain no strategy, instance, market, or target echoes;
+the synchronous Runtime call associates each result with its originating context.
 
 ## 7. Encapsulation invariant
 
@@ -179,12 +175,12 @@ strategies/application/load_live_feature_frame.py
 
 strategies/application/evaluate_live_entry_projection.py
     -> resolves the live-entry registry
-    -> adds current Runtime-compatible response metadata
+    -> returns only plans_by_side
 
 strategies/application/evaluate_open_trade_projection.py
     -> validates the receipt before market access
     -> resolves the open-trade registry
-    -> adds current Runtime-compatible response metadata
+    -> returns only desired protection, close signal, and diagnostics
 
 strategies/live_projections/
     -> neutral protocols, separate registries, default registrations
@@ -238,5 +234,6 @@ identity-free; the separate Research `/managed-replay` endpoint keeps its
 existing `trade_id` request/response label through a transport wrapper.
 
 The executed-trade receipt contains only entry and management calculation
-facts. Strategy identity, instance identity, ticker, and base timeframe come
-from the outer request once; timestamp alignment uses that request timeframe.
+facts. Strategy identity, ticker, and base timeframe come from the outer request;
+Runtime instance identity never enters Engine, and timestamp alignment uses the
+request timeframe.
