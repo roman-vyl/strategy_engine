@@ -128,10 +128,6 @@ class LiveEntryProjectionResult:
 
 @dataclass(frozen=True, slots=True)
 class ExecutedTradeReceipt:
-    instance_id: str
-    strategy_id: str
-    ticker: str
-    base_timeframe: str
     side: str
     source_plan_bar_open_time_ms: int
     entry_bar_open_time_ms: int

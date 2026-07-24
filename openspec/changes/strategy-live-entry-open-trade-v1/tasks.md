@@ -26,7 +26,7 @@
 
 - [x] Add immutable `ExecutedTradeReceipt` domain and HTTP models with the specified identity, time, price, and profile fields.
 - [x] Validate IDs, enums, alignment, time ordering, normalized decimal text, and side-relative stop/entry/take geometry.
-- [x] Validate request strategy, instance, and market against the receipt before any MDS call.
+- [x] Validate receipt time alignment against the single request market timeframe before any MDS call.
 - [x] Add typed `trade_contract_mismatch` and `trade_history_unavailable` application errors and stable HTTP mappings.
 - [x] Test that all pre-market validation failures perform zero MDS reads.
 
@@ -78,6 +78,7 @@
 - [x] Remove Runtime-owned `trade_id` from open-trade receipt/result and split the identity-free managed core from the unchanged Research `/managed-replay` attribution wrapper.
 - [x] Introduce a live-specific strategy input and remove the Research-only `compatibility_profile` from both live request schemas without changing Research envelopes.
 - [x] Remove the unused `strategy_version` selector and echo from live requests, receipts, and responses while preserving Research version contracts.
+- [x] Remove duplicated strategy, instance, and market echoes from the executed-trade receipt and use the outer request as their single source.
 - [ ] Prove `/range`, `/range-batch`, PotentialEntry vectors, exit-policy vectors, and `/managed-replay` remain unchanged.
 - [ ] Add an opt-in sibling-repository Engine-to-MDS HTTP smoke harness as a temporary bridge; keep it outside normal `make verify`.
 - [ ] Design and create a dedicated multi-repository integration/system-test service, then add Engine-to-MDS integration tests using real bounds and bounded-candle wire DTOs.

@@ -228,3 +228,7 @@ validation.
 Open-trade carries no Runtime-owned `trade_id`. Its managed calculation is
 identity-free; the separate Research `/managed-replay` endpoint keeps its
 existing `trade_id` request/response label through a transport wrapper.
+
+The executed-trade receipt contains only entry and management calculation
+facts. Strategy identity, instance identity, ticker, and base timeframe come
+from the outer request once; timestamp alignment uses that request timeframe.

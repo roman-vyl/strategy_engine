@@ -42,10 +42,6 @@ def _payload() -> dict[str, object]:
         "market": {"ticker": "BTCUSDT.P", "base_timeframe": "5m"},
         "target_bar_open_time_ms": 3_300_000,
         "executed_trade_receipt": {
-            "instance_id": "live-1",
-            "strategy_id": "ema_pullback",
-            "ticker": "BTCUSDT.P",
-            "base_timeframe": "5m",
             "side": "long",
             "source_plan_bar_open_time_ms": 2_700_000,
             "entry_bar_open_time_ms": 3_000_000,
@@ -248,6 +244,33 @@ def test_open_trade_http_rejects_removed_strategy_version() -> None:
     assert market_data.range_calls == 0
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("strategy_id", "ema_pullback"),
+        ("instance_id", "live-1"),
+        ("ticker", "BTCUSDT.P"),
+        ("base_timeframe", "5m"),
+    ],
+)
+def test_open_trade_http_rejects_removed_receipt_echo(
+    field: str, value: str
+) -> None:
+    app_services, market_data = _services()
+    payload = _payload()
+    receipt = payload["executed_trade_receipt"]
+    assert isinstance(receipt, dict)
+    receipt[field] = value
+
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/open-trade", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_request"
+    assert market_data.bounds_calls == 0
+    assert market_data.range_calls == 0
+
+
 def test_open_trade_http_preserves_typed_application_error() -> None:
     app_services, _ = _services()
 
@@ -297,6 +320,8 @@ def test_open_trade_openapi_publishes_success_and_error_contracts() -> None:
     assert "strategy_version" not in live_strategy_schema["properties"]
     assert "strategy_version" not in receipt_schema["properties"]
     assert "strategy_version" not in response_schema["properties"]
+    for removed_echo in ("strategy_id", "instance_id", "ticker", "base_timeframe"):
+        assert removed_echo not in receipt_schema["properties"]
     assert "trade_id" not in receipt_schema["properties"]
     assert "trade_id" not in response_schema["properties"]
     assert "abi_entry_correlation" not in receipt_schema["properties"]

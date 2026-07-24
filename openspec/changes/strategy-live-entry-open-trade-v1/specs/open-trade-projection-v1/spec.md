@@ -98,10 +98,6 @@ The generic application layer SHALL add shared trade, strategy, market, target, 
 The receipt SHALL contain:
 
 ```text
-instance_id
-strategy_id
-ticker
-base_timeframe
 side
 source_plan_bar_open_time_ms
 entry_bar_open_time_ms
@@ -112,12 +108,18 @@ initial_take_price
 locked_exit_profile
 ```
 
-IDs SHALL be non-empty. Times SHALL be aligned. Prices SHALL be positive normalized decimal text. Side and profile SHALL use supported enums.
+Times SHALL be aligned. Prices SHALL be positive normalized decimal text. Side and profile SHALL use supported enums.
 
-The receipt SHALL NOT contain `trade_id`, `source_config_hash`, another
-configuration hash, `abi_entry_correlation`, calculation origin, warmup,
-current phase, MFE/MAE, active stop/take, quantity, order IDs, or FeatureFrame
-data.
+The receipt SHALL NOT duplicate request identity or market fields
+(`strategy_id`, `instance_id`, `ticker`, `base_timeframe`). It also SHALL NOT
+contain `trade_id`, `source_config_hash`, another configuration hash,
+`abi_entry_correlation`, calculation origin, warmup, current phase, MFE/MAE,
+active stop/take, quantity, order IDs, or FeatureFrame data.
+
+#### Scenario: Removed receipt echo is supplied
+
+- **WHEN** a receipt contains a duplicated strategy or market field
+- **THEN** strict HTTP validation SHALL reject the request before MDS access.
 
 #### Scenario: Removed Runtime trade identity is supplied
 
@@ -137,7 +139,7 @@ data.
 #### Scenario: Receipt is complete
 
 - **WHEN** every required field is present and valid
-- **THEN** Engine MAY proceed to identity validation.
+- **THEN** Engine MAY proceed to intrinsic receipt validation.
 
 #### Scenario: Receipt is incomplete or malformed
 
@@ -168,23 +170,6 @@ initial_take_price < planned_entry_price < initial_stop_price
 - **WHEN** a long receipt has stop at or above planned entry or take at or below planned entry
 - **THEN** Engine SHALL return `invalid_request` before MDS access.
 
-### Requirement: Bind the receipt to strategy instance and market
-
-Before MDS access, Engine SHALL require:
-
-```text
-request.strategy.strategy_id      == receipt.strategy_id
-request.strategy.instance_id      == receipt.instance_id
-request.market.ticker             == receipt.ticker
-request.market.base_timeframe     == receipt.base_timeframe
-```
-
-#### Scenario: Instance or market mismatch
-
-- **WHEN** any strategy identity, instance, ticker, or timeframe field differs
-- **THEN** Engine SHALL return `trade_contract_mismatch`
-- **AND** SHALL NOT read MDS.
-
 ### Requirement: Validate trade time ordering
 
 Engine SHALL require:
@@ -193,7 +178,7 @@ Engine SHALL require:
 source_plan_bar_open_time_ms <= entry_bar_open_time_ms <= target_bar_open_time_ms
 ```
 
-All three bars SHALL be aligned to the receipt base timeframe.
+All three bars SHALL be aligned to `request.market.base_timeframe`.
 
 #### Scenario: Target precedes entry
 

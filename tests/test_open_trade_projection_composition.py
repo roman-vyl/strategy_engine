@@ -154,10 +154,6 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
 
     strategy = StrategySpecEnvelope("ema_pullback", "1", "instance-1", _spec())
     receipt = ExecutedTradeReceipt(
-        instance_id="instance-1",
-        strategy_id="ema_pullback",
-        ticker="BTCUSDT.P",
-        base_timeframe="5m",
         side="long",
         source_plan_bar_open_time_ms=0,
         entry_bar_open_time_ms=300_000,

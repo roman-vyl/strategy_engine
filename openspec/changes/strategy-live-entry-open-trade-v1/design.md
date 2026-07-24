@@ -223,11 +223,6 @@ The receipt wire object is:
 
 ```text
 ExecutedTradeReceipt
-  instance_id
-  strategy_id
-  ticker
-  base_timeframe
-
   side
   source_plan_bar_open_time_ms
   entry_bar_open_time_ms
@@ -241,7 +236,6 @@ ExecutedTradeReceipt
 
 Receipt invariants:
 
-- IDs are non-empty strings;
 - side is `long` or `short`;
 - profile is a supported profile ID;
 - all times are base-timeframe aligned;
@@ -250,7 +244,9 @@ Receipt invariants:
 - for long, `initial_stop_price < planned_entry_price < initial_take_price`;
 - for short, `initial_take_price < planned_entry_price < initial_stop_price`;
 
-The receipt deliberately excludes `from_ms`, warmup, previous phase, MFE/MAE, active stop/take, quantity, exchange order IDs, historical features, and actual current market state.
+The receipt deliberately excludes duplicated strategy/instance/market echoes,
+`from_ms`, warmup, previous phase, MFE/MAE, active stop/take, quantity,
+exchange order IDs, historical features, and actual current market state.
 
 ## 5. Open-trade projection
 
@@ -277,13 +273,12 @@ The receipt deliberately excludes `from_ms`, warmup, previous phase, MFE/MAE, ac
 Before any MDS call, `EvaluateOpenTradeProjection` validates:
 
 ```text
-request.strategy_id      == receipt.strategy_id
-request.instance_id      == receipt.instance_id
-request market           == receipt ticker/timeframe
 source_plan_bar <= entry_bar <= target_bar
 ```
 
-It also validates receipt IDs, side, profile, decimal values, alignment, and price geometry. A mismatch is a contract error and no market-data read occurs.
+It also validates receipt side, profile, decimal values, request-timeframe
+alignment, and price geometry. An invalid receipt is rejected before any
+market-data read.
 
 ### 5.3 Coverage validation
 

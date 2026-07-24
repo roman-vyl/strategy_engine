@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from strategy_engine.domain.errors import InvalidRequestError, TradeContractMismatchError
+from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.ranges import timeframe_duration_ms
 from strategy_engine.domain.values import parse_normalized_decimal_text
 from strategy_engine.strategies.contracts import OpenTradeProjectionRequest
@@ -10,22 +10,8 @@ from strategy_engine.strategies.contracts import OpenTradeProjectionRequest
 _SUPPORTED_SIDES = frozenset({"long", "short"})
 _SUPPORTED_PROFILES = frozenset({"always_on", "aligned", "countertrend", "neutral"})
 
-
-def _require_non_empty(name: str, value: str) -> None:
-    if not value.strip():
-        raise InvalidRequestError(f"{name} must be non-empty", field=name)
-
-
 def validate_open_trade_request(request: OpenTradeProjectionRequest) -> None:
     receipt = request.executed_trade_receipt
-    for name in (
-        "instance_id",
-        "strategy_id",
-        "ticker",
-        "base_timeframe",
-    ):
-        _require_non_empty(name, getattr(receipt, name))
-
     if receipt.side not in _SUPPORTED_SIDES:
         raise InvalidRequestError("side must be long or short", side=receipt.side)
     if receipt.locked_exit_profile not in _SUPPORTED_PROFILES:
@@ -34,7 +20,7 @@ def validate_open_trade_request(request: OpenTradeProjectionRequest) -> None:
             locked_exit_profile=receipt.locked_exit_profile,
         )
 
-    step_ms = timeframe_duration_ms(receipt.base_timeframe)
+    step_ms = timeframe_duration_ms(request.market.base_timeframe)
     for name in ("source_plan_bar_open_time_ms", "entry_bar_open_time_ms"):
         value = getattr(receipt, name)
         if value < 0 or value % step_ms != 0:
@@ -57,15 +43,3 @@ def validate_open_trade_request(request: OpenTradeProjectionRequest) -> None:
     valid_geometry = stop < planned < take if receipt.side == "long" else take < planned < stop
     if not valid_geometry:
         raise InvalidRequestError("receipt stop/entry/take geometry is invalid")
-
-    mismatches: dict[str, object] = {}
-    if request.strategy.strategy_id != receipt.strategy_id:
-        mismatches["strategy_id"] = receipt.strategy_id
-    if request.strategy.instance_id != receipt.instance_id:
-        mismatches["instance_id"] = receipt.instance_id
-    if request.market.ticker != receipt.ticker:
-        mismatches["ticker"] = receipt.ticker
-    if request.market.base_timeframe != receipt.base_timeframe:
-        mismatches["base_timeframe"] = receipt.base_timeframe
-    if mismatches:
-        raise TradeContractMismatchError(mismatches=mismatches)

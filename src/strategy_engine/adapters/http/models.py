@@ -270,10 +270,6 @@ class StrategyAuthoringValidationRequestModel(BaseModel):
 class ExecutedTradeReceiptModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    instance_id: StrictStr
-    strategy_id: StrictStr
-    ticker: StrictStr
-    base_timeframe: StrictStr
     side: StrictStr
     source_plan_bar_open_time_ms: StrictInt
     entry_bar_open_time_ms: StrictInt
