@@ -114,7 +114,9 @@ Runtime does not send or derive `from_ms`. The receipt does not persist a calcul
 
 Bounds and candles are separate MDS reads. If the stream becomes non-ready, the range becomes unavailable, or MDS rejects the bounded read after bounds were accepted, Engine returns a typed upstream/readiness error and does not produce a partial projection.
 
-The `market_data_hash` returned by MDS for the exact candle range is propagated unchanged. Engine does not calculate a substitute hash.
+The `market_data_hash` returned by MDS for the exact candle range remains
+available inside the live-frame acquisition pipeline. Engine does not calculate
+a substitute hash and does not expose the MDS hash to Runtime.
 
 ### 2.5 Live Projections adaptation boundary
 
@@ -199,7 +201,6 @@ neutral
     "base_timeframe": "5m"
   },
   "target_bar_open_time_ms": 1710000000000,
-  "market_data_hash": "<mds-sha256>",
   "plans_by_side": {
     "long": null,
     "short": {
@@ -349,7 +350,7 @@ For a confirmed-open position, `EvaluateOpenTradeProjection` resolves the strate
 
 The live open-trade path MUST NOT run the backtest execution simulator's same-bar arbitration between protective-price hits and strategic close signals. That arbitration existed because backtest had to invent a single fill from OHLC data when no real orders or exchange events existed. In live operation, protective fills are real exchange facts resolved before Engine invocation by the ABI gate.
 
-The open-trade adapter SHALL return a strategy-specific internal projection containing only the calculated protection, strategic close signal, and strategy diagnostics. The generic application use case SHALL add trade identity, strategy identity, config hash, market identity, target bar, and `market_data_hash` to form `OpenTradeProjectionResult`.
+The open-trade adapter SHALL return a strategy-specific internal projection containing only the calculated protection, strategic close signal, and strategy diagnostics. The generic application use case SHALL add trade identity, strategy identity, config hash, market identity, and target bar to form `OpenTradeProjectionResult`.
 
 Only the requested target bar determines the returned `close_signal`. A transient strategic close signal on a skipped earlier bar is not recovered in v1. This is an accepted trading risk; no catch-up, terminal scan, durable cursor, or retry queue is added.
 
@@ -367,7 +368,6 @@ Only the requested target bar determines the returned `close_signal`. A transien
     "base_timeframe": "5m"
   },
   "target_bar_open_time_ms": 1710000300000,
-  "market_data_hash": "<mds-sha256>",
   "desired_protection": {
     "stop_price": "65000",
     "take_price": null

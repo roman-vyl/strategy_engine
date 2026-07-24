@@ -308,7 +308,6 @@ source_config_hash
 market.ticker
 market.base_timeframe
 target_bar_open_time_ms
-market_data_hash
 desired_protection.stop_price
 desired_protection.take_price | null
 close_signal.active

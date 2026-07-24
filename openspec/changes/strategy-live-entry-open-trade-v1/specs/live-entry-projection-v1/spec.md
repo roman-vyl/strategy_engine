@@ -53,7 +53,6 @@ source_config_hash
 market.ticker
 market.base_timeframe
 target_bar_open_time_ms
-market_data_hash
 plans_by_side.long
 plans_by_side.short
 ```
@@ -128,16 +127,17 @@ Runtime SHALL NOT derive, fill, or replace the profile after the plan is returne
 - **THEN** an earlier returned plan SHALL retain its original locked profile
 - **AND** a newly returned plan MAY contain the later profile.
 
-### Requirement: Return Engine and MDS provenance
+### Requirement: Keep MDS provenance inside Engine
 
 `source_config_hash` SHALL be computed by Engine from the request strategy envelope.
 
-`market_data_hash` SHALL be the unchanged MDS-owned hash for the exact loaded live range.
+The MDS-owned `market_data_hash` SHALL remain available to Engine's internal
+live-frame acquisition, but SHALL NOT be exposed in the Runtime-facing response.
 
 #### Scenario: Successful live-entry projection
 
 - **WHEN** Engine returns a live-entry result
-- **THEN** Runtime SHALL have sufficient identity and provenance to bind a filled plan to its source config and candle range.
+- **THEN** Runtime SHALL receive the calculated plan without MDS provenance metadata.
 
 ### Requirement: Preserve existing evaluation contracts
 

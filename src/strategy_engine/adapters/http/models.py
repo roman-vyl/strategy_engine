@@ -220,7 +220,6 @@ class LiveEntryProjectionResponseModel(BaseModel):
     source_config_hash: StrictStr
     market: LiveMarketModel
     target_bar_open_time_ms: StrictInt
-    market_data_hash: StrictStr
     plans_by_side: dict[StrictStr, LiveEntryPlanResponseModel | None]
 
 
@@ -332,7 +331,6 @@ class OpenTradeProjectionResponseModel(BaseModel):
     source_config_hash: StrictStr
     market: LiveMarketModel
     target_bar_open_time_ms: StrictInt
-    market_data_hash: StrictStr
     desired_protection: DesiredProtectionResponseModel
     close_signal: StrategicCloseSignalResponseModel
     diagnostics: OpenTradeDiagnosticsResponseModel

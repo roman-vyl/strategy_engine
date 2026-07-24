@@ -118,7 +118,6 @@ strategy-specific projection result
     + config hash
     + market identity
     + target bar
-    + market_data_hash
     -> generic application result
 ```
 
@@ -211,4 +210,10 @@ The live application results and HTTP responses do not carry a redundant
 payload-level `contract_version`. Their contracts are identified by the
 dedicated endpoint and its published HTTP schema.
 
-Live-entry always returns stable `long` and `short` keys, each containing a complete plan or `null`. Open-trade always returns a non-null desired stop, an optional desired take, one strategic close-signal structure, exact `market_data_hash`, and diagnostics. These are transport-neutral domain results; the HTTP step must serialize them without reconstructing strategy internals.
+Live-entry always returns stable `long` and `short` keys, each containing a
+complete plan or `null`. Open-trade always returns a non-null desired stop, an
+optional desired take, one strategic close-signal structure, and diagnostics.
+The MDS-owned `market_data_hash` stays inside Engine's live-frame acquisition
+pipeline and is not part of either Runtime-facing result. These are
+transport-neutral domain results; the HTTP step must serialize them without
+reconstructing strategy internals.

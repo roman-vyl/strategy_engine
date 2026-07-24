@@ -7,7 +7,7 @@
 - [x] Implement MDS bounds HTTP consumption and typed mapping for unknown, non-ready, unavailable, and malformed responses.
 - [x] Add `LoadLiveFeatureFrame` with target alignment, ready-state, bound, range, and target-final-bar validation.
 - [x] Reuse the existing feature-plan, indicator, and HTF feature pipeline exactly once per live request, leaving EMA Pullback strategy evaluation to the calling live use case.
-- [x] Propagate the exact MDS-owned `market_data_hash` without recalculation.
+- [x] Preserve the exact MDS-owned `market_data_hash` inside the shared live-frame bundle without recalculation.
 - [x] Test a target equal to latest and a target older than latest.
 - [x] Test empty bounds, non-ready state, target outside bounds, identity mismatch, gapped/incomplete candles, and the bounds/candles race.
 
@@ -19,7 +19,7 @@
 - [x] Return stable `long` and `short` keys with complete plans or `null`.
 - [x] Enforce normalized decimal serialization, supported profiles, and side-relative price geometry.
 - [x] Add `POST /v1/strategy-evaluations/live-entry` request/response models, route, wiring, and OpenAPI contract.
-- [x] Test long, short, neutral, disabled-side, incomplete-triple, invalid-geometry, config-hash, and market-data-hash behavior.
+- [x] Test long, short, neutral, disabled-side, incomplete-triple, invalid-geometry, and config-hash behavior.
 - [x] Add parity tests proving the live plan matches target-index range evaluation on the same full-ready-history fixture.
 
 ## Slice 3 — Receipt contract and pre-market validation
@@ -72,6 +72,7 @@
 ## Slice 7 — Compatibility integration and performance gates
 
 - [x] Remove the redundant payload-level `contract_version` from both Runtime-facing live projection responses while preserving MDS and Research endpoint version fields.
+- [x] Remove `market_data_hash` from both Runtime-facing live projection results and HTTP schemas while preserving internal MDS/FeatureFrame and Research provenance.
 - [ ] Prove `/range`, `/range-batch`, PotentialEntry vectors, exit-policy vectors, and `/managed-replay` remain unchanged.
 - [ ] Add an opt-in sibling-repository Engine-to-MDS HTTP smoke harness as a temporary bridge; keep it outside normal `make verify`.
 - [ ] Design and create a dedicated multi-repository integration/system-test service, then add Engine-to-MDS integration tests using real bounds and bounded-candle wire DTOs.

@@ -133,7 +133,6 @@ def _serialize_live_entry_projection(result: object) -> dict[str, object]:
             "base_timeframe": result.market.base_timeframe,
         },
         "target_bar_open_time_ms": result.target_bar_open_time_ms,
-        "market_data_hash": result.market_data_hash,
         "plans_by_side": {
             side: (
                 {
@@ -168,7 +167,6 @@ def _serialize_open_trade_projection(result: object) -> OpenTradeProjectionRespo
             base_timeframe=result.market.base_timeframe,
         ),
         target_bar_open_time_ms=result.target_bar_open_time_ms,
-        market_data_hash=result.market_data_hash,
         desired_protection=DesiredProtectionResponseModel(
             stop_price=result.desired_protection.stop_price,
             take_price=result.desired_protection.take_price,

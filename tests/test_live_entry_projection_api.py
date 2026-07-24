@@ -160,7 +160,7 @@ def test_live_entry_http_returns_atomic_plan_and_provenance() -> None:
     assert "contract_version" not in body
     assert body["market"] == {"ticker": "BTCUSDT.P", "base_timeframe": "5m"}
     assert body["target_bar_open_time_ms"] == 3_300_000
-    assert body["market_data_hash"] == "fixture-market-hash"
+    assert "market_data_hash" not in body
     assert len(body["source_config_hash"]) == 64
     assert set(body["plans_by_side"]) == {"long", "short"}
     assert body["plans_by_side"]["short"] is None
@@ -222,3 +222,5 @@ def test_live_entry_openapi_publishes_request_and_response_contracts() -> None:
     response_ref = operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
     assert request_ref.endswith("/LiveEntryProjectionRequestModel")
     assert response_ref.endswith("/LiveEntryProjectionResponseModel")
+    response_schema = schema["components"]["schemas"]["LiveEntryProjectionResponseModel"]
+    assert "market_data_hash" not in response_schema["properties"]

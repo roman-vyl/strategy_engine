@@ -116,7 +116,6 @@ class LiveEntryProjectionResult:
     source_config_hash: str
     market: MarketStream
     target_bar_open_time_ms: int
-    market_data_hash: str
     plans_by_side: dict[str, LiveEntryPlan | None]
 
 
@@ -181,7 +180,6 @@ class OpenTradeProjectionResult:
     source_config_hash: str
     market: MarketStream
     target_bar_open_time_ms: int
-    market_data_hash: str
     desired_protection: DesiredProtection
     close_signal: StrategicCloseSignal
     diagnostics: OpenTradeDiagnostics

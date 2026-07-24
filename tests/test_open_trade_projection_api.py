@@ -103,7 +103,6 @@ def _result() -> OpenTradeProjectionResult:
         source_config_hash=strategy.config_hash,
         market=MarketStream("BTCUSDT.P", "5m"),
         target_bar_open_time_ms=3_300_000,
-        market_data_hash="fixture-market-hash",
         desired_protection=DesiredProtection(stop_price="10.25", take_price=None),
         close_signal=StrategicCloseSignal(
             active=True,
@@ -139,7 +138,6 @@ def test_open_trade_http_returns_typed_desired_state() -> None:
         "source_config_hash": _strategy().config_hash,
         "market": {"ticker": "BTCUSDT.P", "base_timeframe": "5m"},
         "target_bar_open_time_ms": 3_300_000,
-        "market_data_hash": "fixture-market-hash",
         "desired_protection": {"stop_price": "10.25", "take_price": None},
         "close_signal": {
             "active": True,
@@ -171,7 +169,7 @@ def test_open_trade_http_wires_real_application_use_case() -> None:
     body = response.json()
     assert "contract_version" not in body
     assert body["trade_id"] == "trade-1"
-    assert body["market_data_hash"] == "fixture-market-hash"
+    assert "market_data_hash" not in body
     assert body["desired_protection"]["stop_price"] == "9.5"
     assert market_data.bounds_calls == 1
     assert market_data.range_calls == 1
@@ -235,6 +233,8 @@ def test_open_trade_openapi_publishes_success_and_error_contracts() -> None:
     response_ref = operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
     assert request_ref.endswith("/OpenTradeProjectionRequestModel")
     assert response_ref.endswith("/OpenTradeProjectionResponseModel")
+    response_schema = schema["components"]["schemas"]["OpenTradeProjectionResponseModel"]
+    assert "market_data_hash" not in response_schema["properties"]
     for status in ("404", "409", "422", "501", "502", "503", "500"):
         error_ref = operation["responses"][status]["content"]["application/json"]["schema"]["$ref"]
         assert error_ref.endswith("/ErrorResponseModel")

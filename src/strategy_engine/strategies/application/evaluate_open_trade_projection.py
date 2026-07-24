@@ -54,7 +54,6 @@ class EvaluateOpenTradeProjection:
             source_config_hash=request.strategy.config_hash,
             market=request.market,
             target_bar_open_time_ms=request.target_bar_open_time_ms,
-            market_data_hash=bundle.market_data_hash,
             desired_protection=DesiredProtection(
                 projection.desired_protection.stop_price,
                 projection.desired_protection.take_price,

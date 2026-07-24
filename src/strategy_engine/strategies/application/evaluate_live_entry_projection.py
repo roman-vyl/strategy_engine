@@ -45,6 +45,5 @@ class EvaluateLiveEntryProjection:
             source_config_hash=request.strategy.config_hash,
             market=request.market,
             target_bar_open_time_ms=request.target_bar_open_time_ms,
-            market_data_hash=bundle.market_data_hash,
             plans_by_side=projection.plans_by_side,
         )
