@@ -110,19 +110,6 @@ class StrategySpecEnvelopeModel(BaseModel):
         )
 
 
-class LiveStrategySpecModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    strategy_id: StrictStr
-    raw_spec: dict[str, Any]
-
-    def to_domain(self) -> LiveStrategySpec:
-        return LiveStrategySpec(
-            strategy_id=self.strategy_id,
-            raw_spec=self.raw_spec,
-        )
-
-
 class StrategyOutputOptionsModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -189,27 +176,22 @@ class StrategyRangeBatchRequestModel(BaseModel):
         )
 
 
-class LiveMarketModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    ticker: StrictStr
-    base_timeframe: StrictStr
-
-    def to_domain(self) -> MarketStream:
-        return MarketStream(self.ticker, self.base_timeframe)
-
-
 class LiveEntryProjectionRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    strategy: LiveStrategySpecModel
-    market: LiveMarketModel
+    strategy_id: StrictStr
+    raw_spec: dict[str, Any]
+    ticker: StrictStr
+    base_timeframe: StrictStr
     target_bar_open_time_ms: StrictInt
 
     def to_domain(self) -> LiveEntryProjectionRequest:
         return LiveEntryProjectionRequest(
-            strategy=self.strategy.to_domain(),
-            market=self.market.to_domain(),
+            strategy=LiveStrategySpec(
+                strategy_id=self.strategy_id,
+                raw_spec=self.raw_spec,
+            ),
+            market=MarketStream(self.ticker, self.base_timeframe),
             target_bar_open_time_ms=self.target_bar_open_time_ms,
         )
 
@@ -280,15 +262,20 @@ class ExecutedTradeReceiptModel(BaseModel):
 class OpenTradeProjectionRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    strategy: LiveStrategySpecModel
-    market: LiveMarketModel
+    strategy_id: StrictStr
+    raw_spec: dict[str, Any]
+    ticker: StrictStr
+    base_timeframe: StrictStr
     target_bar_open_time_ms: StrictInt
     executed_trade_receipt: ExecutedTradeReceiptModel
 
     def to_domain(self) -> OpenTradeProjectionRequest:
         return OpenTradeProjectionRequest(
-            strategy=self.strategy.to_domain(),
-            market=self.market.to_domain(),
+            strategy=LiveStrategySpec(
+                strategy_id=self.strategy_id,
+                raw_spec=self.raw_spec,
+            ),
+            market=MarketStream(self.ticker, self.base_timeframe),
             target_bar_open_time_ms=self.target_bar_open_time_ms,
             executed_trade_receipt=self.executed_trade_receipt.to_domain(),
         )

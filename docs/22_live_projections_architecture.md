@@ -229,11 +229,17 @@ Research-only `strategy_version` or `compatibility_profile` selectors.
 authoring contracts retain their existing envelope, version, and compatibility
 validation.
 
+The public live HTTP requests are flat calculation payloads. Their top-level
+`strategy_id`, `raw_spec`, `ticker`, and `base_timeframe` fields are assembled
+by the transport adapter into the internal `LiveStrategySpec` and
+`MarketStream`. The live HTTP boundary does not publish or accept nested
+strategy/market wrappers, aliases, or a dual compatibility schema.
+
 Open-trade carries no Runtime-owned `trade_id`. Its managed calculation is
 identity-free; the separate Research `/managed-replay` endpoint keeps its
 existing `trade_id` request/response label through a transport wrapper.
 
 The executed-trade receipt contains only entry and management calculation
-facts. Strategy identity, ticker, and base timeframe come from the outer request;
-Runtime instance identity never enters Engine, and timestamp alignment uses the
-request timeframe.
+facts. Strategy identity, ticker, and base timeframe come from top-level request
+fields; Runtime instance identity never enters Engine, and timestamp alignment
+uses the request timeframe.

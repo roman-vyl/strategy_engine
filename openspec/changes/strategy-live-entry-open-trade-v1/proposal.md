@@ -56,8 +56,10 @@ Both calculations must use the same live market-history policy. Runtime must not
 ## Compatibility
 
 The two dedicated live contracts follow Runtime's breaking cleanup policy and
-do not accept Runtime-owned strategy-instance identity and do not expose request
-echoes, redundant payload versions, or MDS provenance hashes. Existing Research
-and compatibility endpoints remain unchanged. Existing PotentialEntry vectors,
-exit-policy vectors, managed replay, error envelope shape, strategy validation,
-and Engine-internal MDS-owned `market_data_hash` semantics remain authoritative.
+use flat request objects without transport-only strategy or market wrappers.
+They do not accept Runtime-owned strategy-instance identity and do not expose
+request echoes, redundant payload versions, or MDS provenance hashes. Existing
+Research and compatibility endpoints remain unchanged. Existing PotentialEntry
+vectors, exit-policy vectors, managed replay, error envelope shape, strategy
+validation, and Engine-internal MDS-owned `market_data_hash` semantics remain
+authoritative.

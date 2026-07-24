@@ -110,11 +110,10 @@ def _spec(*, enabled: list[str] | None = None) -> dict[str, object]:
 
 def _payload(*, enabled: list[str] | None = None) -> dict[str, object]:
     return {
-        "strategy": {
-            "strategy_id": "ema_pullback",
-            "raw_spec": _spec(enabled=enabled),
-        },
-        "market": {"ticker": "BTCUSDT.P", "base_timeframe": "5m"},
+        "strategy_id": "ema_pullback",
+        "raw_spec": _spec(enabled=enabled),
+        "ticker": "BTCUSDT.P",
+        "base_timeframe": "5m",
         "target_bar_open_time_ms": 3_300_000,
     }
 
@@ -178,9 +177,31 @@ def test_live_entry_http_returns_only_atomic_plan_result() -> None:
 def test_live_entry_http_rejects_removed_instance_id() -> None:
     app_services, market_data = _services()
     payload = _payload()
-    strategy = payload["strategy"]
-    assert isinstance(strategy, dict)
-    strategy["instance_id"] = "live-1"
+    payload["instance_id"] = "live-1"
+
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/live-entry", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_request"
+    assert market_data.bounds_calls == 0
+    assert market_data.range_calls == 0
+
+
+def test_live_entry_http_rejects_old_nested_payload() -> None:
+    app_services, market_data = _services()
+    flat = _payload()
+    payload = {
+        "strategy": {
+            "strategy_id": flat["strategy_id"],
+            "raw_spec": flat["raw_spec"],
+        },
+        "market": {
+            "ticker": flat["ticker"],
+            "base_timeframe": flat["base_timeframe"],
+        },
+        "target_bar_open_time_ms": flat["target_bar_open_time_ms"],
+    }
 
     with TestClient(create_app(services=app_services)) as client:
         response = client.post("/v1/strategy-evaluations/live-entry", json=payload)
@@ -208,9 +229,7 @@ def test_live_entry_http_keeps_stable_null_side_keys() -> None:
 def test_live_entry_http_rejects_removed_compatibility_profile() -> None:
     app_services, market_data = _services()
     payload = _payload()
-    strategy = payload["strategy"]
-    assert isinstance(strategy, dict)
-    strategy["compatibility_profile"] = "bbb_v1"
+    payload["compatibility_profile"] = "bbb_v1"
 
     with TestClient(create_app(services=app_services)) as client:
         response = client.post("/v1/strategy-evaluations/live-entry", json=payload)
@@ -224,9 +243,7 @@ def test_live_entry_http_rejects_removed_compatibility_profile() -> None:
 def test_live_entry_http_rejects_removed_strategy_version() -> None:
     app_services, market_data = _services()
     payload = _payload()
-    strategy = payload["strategy"]
-    assert isinstance(strategy, dict)
-    strategy["strategy_version"] = "v1"
+    payload["strategy_version"] = "v1"
 
     with TestClient(create_app(services=app_services)) as client:
         response = client.post("/v1/strategy-evaluations/live-entry", json=payload)
@@ -271,7 +288,15 @@ def test_live_entry_openapi_publishes_request_and_response_contracts() -> None:
     response_ref = operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
     assert request_ref.endswith("/LiveEntryProjectionRequestModel")
     assert response_ref.endswith("/LiveEntryProjectionResponseModel")
-    live_strategy_schema = schema["components"]["schemas"]["LiveStrategySpecModel"]
-    assert set(live_strategy_schema["properties"]) == {"strategy_id", "raw_spec"}
+    request_schema = schema["components"]["schemas"]["LiveEntryProjectionRequestModel"]
+    assert set(request_schema["properties"]) == {
+        "strategy_id",
+        "raw_spec",
+        "ticker",
+        "base_timeframe",
+        "target_bar_open_time_ms",
+    }
+    assert "LiveStrategySpecModel" not in schema["components"]["schemas"]
+    assert "LiveMarketModel" not in schema["components"]["schemas"]
     response_schema = schema["components"]["schemas"]["LiveEntryProjectionResponseModel"]
     assert set(response_schema["properties"]) == {"plans_by_side"}

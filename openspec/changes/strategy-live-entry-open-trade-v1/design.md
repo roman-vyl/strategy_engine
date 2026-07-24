@@ -160,19 +160,20 @@ For v1, both adapters MAY reuse the existing full strategy FeaturePlan and broad
 
 ```json
 {
-  "strategy": {
-    "strategy_id": "ema_pullback",
-    "raw_spec": {}
-  },
-  "market": {
-    "ticker": "BTCUSDT.P",
-    "base_timeframe": "5m"
-  },
+  "strategy_id": "ema_pullback",
+  "raw_spec": {},
+  "ticker": "BTCUSDT.P",
+  "base_timeframe": "5m",
   "target_bar_open_time_ms": 1710000000000
 }
 ```
 
-The request does not contain `from_ms`, `to_ms`, candles, warmup, FeaturePlan details, Runtime lifecycle, or ABI state.
+The HTTP request is deliberately flat. The route assembles internal
+`LiveStrategySpec` and `MarketStream` values from these top-level fields. The
+request does not contain nested strategy/market transport wrappers, `from_ms`,
+`to_ms`, candles, warmup, FeaturePlan details, Runtime lifecycle, or ABI state.
+The retired nested form is rejected as unknown/missing fields rather than
+accepted through aliases or a compatibility schema.
 
 ### 3.2 Target-bar plan assembly
 
@@ -254,18 +255,17 @@ exchange order IDs, historical features, and actual current market state.
 
 ```json
 {
-  "strategy": {
-    "strategy_id": "ema_pullback",
-    "raw_spec": {}
-  },
-  "market": {
-    "ticker": "BTCUSDT.P",
-    "base_timeframe": "5m"
-  },
+  "strategy_id": "ema_pullback",
+  "raw_spec": {},
+  "ticker": "BTCUSDT.P",
+  "base_timeframe": "5m",
   "target_bar_open_time_ms": 1710000300000,
   "executed_trade_receipt": {}
 }
 ```
+
+As with live-entry, the HTTP adapter constructs the internal strategy and market
+domain models from the flat payload. No dual nested/flat schema is supported.
 
 ### 5.2 Pre-market validation
 

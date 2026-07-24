@@ -10,10 +10,10 @@ Strategy Engine SHALL expose:
 POST /v1/strategy-evaluations/live-entry
 ```
 
-The request SHALL contain exactly a live strategy envelope
-(`strategy_id` and `raw_spec`), market
-identity (`ticker` and `base_timeframe`), and `target_bar_open_time_ms`.
-Unknown fields SHALL be rejected by the strict HTTP model.
+The request SHALL be one flat object containing exactly `strategy_id`,
+`raw_spec`, `ticker`, `base_timeframe`, and `target_bar_open_time_ms`.
+It SHALL NOT contain nested `strategy` or `market` transport wrappers. Unknown
+fields SHALL be rejected by the strict HTTP model.
 
 The endpoint SHALL be stateless and SHALL NOT accept Runtime lifecycle or ABI order state.
 
@@ -24,8 +24,14 @@ The endpoint SHALL be stateless and SHALL NOT accept Runtime lifecycle or ABI or
 
 #### Scenario: Removed Runtime instance ID is supplied
 
-- **WHEN** a live-entry strategy envelope contains `instance_id`
+- **WHEN** a live-entry request contains top-level `instance_id`
 - **THEN** strict HTTP validation SHALL reject the request before MDS access.
+
+#### Scenario: Retired nested request is supplied
+
+- **WHEN** a live-entry request supplies `strategy` or `market` wrapper objects
+- **THEN** strict HTTP validation SHALL reject the request before MDS access
+- **AND** Engine SHALL NOT apply aliases, dual schemas, or a compatibility adapter.
 
 ### Requirement: Delegate through a strategy-family live-entry adapter
 

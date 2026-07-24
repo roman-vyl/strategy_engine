@@ -80,6 +80,7 @@
 - [x] Remove the unused `strategy_version` selector and echo from live requests, receipts, and responses while preserving Research version contracts.
 - [x] Remove duplicated strategy, instance, and market echoes from the executed-trade receipt; keep strategy and market in the outer request and Runtime instance identity in Runtime.
 - [x] Remove Runtime-owned `instance_id` from both live requests and remove all strategy, instance, market, and target request echoes from both live results and responses.
+- [x] Flatten both live HTTP requests into strict top-level calculation fields and reject the retired nested strategy/market payloads.
 - [x] Remove stale generated distributions and egg-info, and add source/archive plus live-OpenAPI release regression checks.
 - [x] Prove `/range`, `/range-batch`, PotentialEntry vectors, exit-policy vectors, and `/managed-replay` remain unchanged.
 - [ ] Add an opt-in sibling-repository Engine-to-MDS HTTP smoke harness as a temporary bridge; keep it outside normal `make verify`.

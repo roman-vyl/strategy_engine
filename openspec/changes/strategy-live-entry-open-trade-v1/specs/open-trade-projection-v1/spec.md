@@ -10,11 +10,10 @@ Strategy Engine SHALL expose:
 POST /v1/strategy-evaluations/open-trade
 ```
 
-The request SHALL contain exactly a live strategy envelope
-(`strategy_id` and `raw_spec`), market
-identity (`ticker` and `base_timeframe`), `target_bar_open_time_ms`, and
-`executed_trade_receipt`. Unknown fields SHALL be rejected by the strict HTTP
-model.
+The request SHALL be one flat object containing exactly `strategy_id`,
+`raw_spec`, `ticker`, `base_timeframe`, `target_bar_open_time_ms`, and
+`executed_trade_receipt`. It SHALL NOT contain nested `strategy` or `market`
+transport wrappers. Unknown fields SHALL be rejected by the strict HTTP model.
 
 The endpoint SHALL be stateless and SHALL NOT accept previous managed state, actual exchange protection, quantity, or order commands.
 
@@ -27,16 +26,23 @@ Runtime SHALL call the endpoint only after ABI operational state confirms that t
 
 #### Scenario: Removed Runtime instance ID is supplied
 
-- **WHEN** an open-trade strategy envelope contains `instance_id`
+- **WHEN** an open-trade request contains top-level `instance_id`
 - **THEN** strict HTTP validation SHALL reject the request before MDS access.
+
+#### Scenario: Retired nested request is supplied
+
+- **WHEN** an open-trade request supplies `strategy` or `market` wrapper objects
+- **THEN** strict HTTP validation SHALL reject the request before MDS access
+- **AND** Engine SHALL NOT apply aliases, dual schemas, or a compatibility adapter.
 
 ### Requirement: Publish typed HTTP transport contracts
 
-The HTTP adapter SHALL publish explicit OpenAPI request and response schemas for the
-open-trade endpoint. The request schema SHALL forbid unknown fields and SHALL map
-exactly to `OpenTradeProjectionRequest`. The success schema SHALL map exactly to
-`OpenTradeProjectionResult`, including nested desired protection, close signal, and
-diagnostics objects.
+The HTTP adapter SHALL publish explicit OpenAPI request and response schemas for
+the open-trade endpoint. The request schema SHALL expose exactly the flat fields
+defined above, SHALL forbid unknown fields, and SHALL assemble the internal
+`LiveStrategySpec`, `MarketStream`, and `OpenTradeProjectionRequest`. The success
+schema SHALL map exactly to `OpenTradeProjectionResult`, including nested desired
+protection, close signal, and diagnostics objects.
 
 The HTTP adapter SHALL remain a thin serializer and SHALL NOT calculate strategy
 state, inspect EMA Pullback internals, or reinterpret application results.
@@ -111,8 +117,8 @@ Times SHALL be aligned. Prices SHALL be positive normalized decimal text. Side a
 
 The strict receipt model SHALL contain no fields beyond the schema above. It
 SHALL remain limited to immutable calculation inputs and SHALL NOT duplicate
-outer request metadata, Runtime lifecycle state, ABI state, quantity, order
-state, or FeatureFrame data.
+the request's top-level strategy or market fields, Runtime lifecycle state, ABI
+state, quantity, order state, or FeatureFrame data.
 
 #### Scenario: Receipt is complete
 
@@ -156,7 +162,7 @@ Engine SHALL require:
 source_plan_bar_open_time_ms <= entry_bar_open_time_ms <= target_bar_open_time_ms
 ```
 
-All three bars SHALL be aligned to `request.market.base_timeframe`.
+All three bars SHALL be aligned to the request's top-level `base_timeframe`.
 
 #### Scenario: Target precedes entry
 

@@ -34,12 +34,22 @@ def test_live_openapi_is_clean_and_research_routes_remain_published() -> None:
     } <= paths.keys()
 
     models = schema["components"]["schemas"]
-    live_strategy = set(models["LiveStrategySpecModel"]["properties"])
+    live_entry_request = set(models["LiveEntryProjectionRequestModel"]["properties"])
+    open_trade_request = set(models["OpenTradeProjectionRequestModel"]["properties"])
     receipt = set(models["ExecutedTradeReceiptModel"]["properties"])
     live_entry_response = set(models["LiveEntryProjectionResponseModel"]["properties"])
     open_trade_response = set(models["OpenTradeProjectionResponseModel"]["properties"])
 
-    assert live_strategy == {"strategy_id", "raw_spec"}
+    assert live_entry_request == {
+        "strategy_id",
+        "raw_spec",
+        "ticker",
+        "base_timeframe",
+        "target_bar_open_time_ms",
+    }
+    assert open_trade_request == live_entry_request | {"executed_trade_receipt"}
+    assert "LiveStrategySpecModel" not in models
+    assert "LiveMarketModel" not in models
     assert receipt == {
         "side",
         "source_plan_bar_open_time_ms",
@@ -50,7 +60,8 @@ def test_live_openapi_is_clean_and_research_routes_remain_published() -> None:
         "initial_take_price",
         "locked_exit_profile",
     }
-    assert not _REMOVED_LIVE_FIELDS & live_strategy
+    assert not _REMOVED_LIVE_FIELDS & live_entry_request
+    assert not _REMOVED_LIVE_FIELDS & open_trade_request
     assert not _REMOVED_LIVE_FIELDS & receipt
     assert not _REMOVED_LIVE_FIELDS & live_entry_response
     assert not _REMOVED_LIVE_FIELDS & open_trade_response

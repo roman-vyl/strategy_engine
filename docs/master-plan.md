@@ -176,8 +176,10 @@ ABI подтверждает, что correlated position сейчас откры
 → post-target desired stop/take + strategic close signal
 ```
 
-Оба use case получают от Runtime strategy spec (`strategy_id` и `raw_spec`),
-market identity и webhook target bar. Runtime-owned `instance_id` не пересекает
+Оба use case получают один плоский HTTP payload с `strategy_id`, `raw_spec`,
+`ticker`, `base_timeframe` и webhook target bar; open-trade дополнительно
+получает `executed_trade_receipt`. Вложенных transport wrappers `strategy` и
+`market` в live-контрактах нет. Runtime-owned `instance_id` не пересекает
 границу Engine. Runtime не передаёт `from_ms`, warmup или candles.
 
 Engine использует общий internal live FeatureFrame path:

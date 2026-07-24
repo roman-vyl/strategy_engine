@@ -128,14 +128,16 @@ Bounds и candles являются двумя HTTP reads. Если stream тер
 
 ```text
 LiveEntryProjectionRequest
-  strategy
-    strategy_id
-    raw_spec
-  market
-    ticker
-    base_timeframe
+  strategy_id
+  raw_spec
+  ticker
+  base_timeframe
   target_bar_open_time_ms
 ```
+
+HTTP contract плоский. Adapter собирает внутренние `LiveStrategySpec` и
+`MarketStream`; nested `strategy`/`market` payload не поддерживается и
+fail-closed отклоняется strict DTO.
 
 Validation:
 
@@ -236,8 +238,10 @@ Receipt не содержит:
 
 ```text
 OpenTradeProjectionRequest
-  strategy
-  market
+  strategy_id
+  raw_spec
+  ticker
+  base_timeframe
   target_bar_open_time_ms
   executed_trade_receipt
 ```
@@ -253,9 +257,10 @@ receipt prices positive и normalized
 stop/planned-entry/take geometry соответствует side
 ```
 
-Receipt не дублирует request strategy или market и не содержит Runtime instance
-identity. Поэтому до MDS выполняется только intrinsic receipt validation;
-strategy/market берутся из outer request, а instance context остаётся в Runtime.
+Receipt не дублирует top-level request strategy или market fields и не содержит
+Runtime instance identity. Поэтому до MDS выполняется только intrinsic receipt
+validation; внутренние strategy/market models собираются HTTP adapter из
+плоского request, а instance context остаётся в Runtime.
 
 ### 6.3 Coverage validation
 

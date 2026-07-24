@@ -29,11 +29,10 @@ def _strategy() -> LiveStrategySpec:
 def _payload() -> dict[str, object]:
     strategy = _strategy()
     return {
-        "strategy": {
-            "strategy_id": strategy.strategy_id,
-            "raw_spec": strategy.raw_spec,
-        },
-        "market": {"ticker": "BTCUSDT.P", "base_timeframe": "5m"},
+        "strategy_id": strategy.strategy_id,
+        "raw_spec": strategy.raw_spec,
+        "ticker": "BTCUSDT.P",
+        "base_timeframe": "5m",
         "target_bar_open_time_ms": 3_300_000,
         "executed_trade_receipt": {
             "side": "long",
@@ -50,9 +49,7 @@ def _payload() -> dict[str, object]:
 
 def _managed_payload() -> dict[str, object]:
     payload = _payload()
-    strategy = payload["strategy"]
-    assert isinstance(strategy, dict)
-    raw_spec = strategy["raw_spec"]
+    raw_spec = payload["raw_spec"]
     assert isinstance(raw_spec, dict)
     trade_management = raw_spec["trade_management"]
     assert isinstance(trade_management, dict)
@@ -63,7 +60,7 @@ def _managed_payload() -> dict[str, object]:
         "take_management": [],
         "runtime_exits": [],
     }
-    strategy["raw_spec"] = raw_spec
+    payload["raw_spec"] = raw_spec
     return payload
 
 
@@ -118,9 +115,32 @@ def test_open_trade_http_returns_typed_desired_state() -> None:
 def test_open_trade_http_rejects_removed_instance_id() -> None:
     app_services, market_data = _services()
     payload = _payload()
-    strategy = payload["strategy"]
-    assert isinstance(strategy, dict)
-    strategy["instance_id"] = "live-1"
+    payload["instance_id"] = "live-1"
+
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/open-trade", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_request"
+    assert market_data.bounds_calls == 0
+    assert market_data.range_calls == 0
+
+
+def test_open_trade_http_rejects_old_nested_payload() -> None:
+    app_services, market_data = _services()
+    flat = _payload()
+    payload = {
+        "strategy": {
+            "strategy_id": flat["strategy_id"],
+            "raw_spec": flat["raw_spec"],
+        },
+        "market": {
+            "ticker": flat["ticker"],
+            "base_timeframe": flat["base_timeframe"],
+        },
+        "target_bar_open_time_ms": flat["target_bar_open_time_ms"],
+        "executed_trade_receipt": flat["executed_trade_receipt"],
+    }
 
     with TestClient(create_app(services=app_services)) as client:
         response = client.post("/v1/strategy-evaluations/open-trade", json=payload)
@@ -217,9 +237,7 @@ def test_open_trade_http_rejects_removed_trade_id() -> None:
 def test_open_trade_http_rejects_removed_compatibility_profile() -> None:
     app_services, market_data = _services()
     payload = _payload()
-    strategy = payload["strategy"]
-    assert isinstance(strategy, dict)
-    strategy["compatibility_profile"] = "bbb_v1"
+    payload["compatibility_profile"] = "bbb_v1"
 
     with TestClient(create_app(services=app_services)) as client:
         response = client.post("/v1/strategy-evaluations/open-trade", json=payload)
@@ -233,9 +251,7 @@ def test_open_trade_http_rejects_removed_compatibility_profile() -> None:
 def test_open_trade_http_rejects_removed_strategy_version() -> None:
     app_services, market_data = _services()
     payload = _payload()
-    strategy = payload["strategy"]
-    assert isinstance(strategy, dict)
-    strategy["strategy_version"] = "v1"
+    payload["strategy_version"] = "v1"
 
     with TestClient(create_app(services=app_services)) as client:
         response = client.post("/v1/strategy-evaluations/open-trade", json=payload)
@@ -301,8 +317,17 @@ def test_open_trade_openapi_publishes_success_and_error_contracts() -> None:
     assert response_ref.endswith("/OpenTradeProjectionResponseModel")
     response_schema = schema["components"]["schemas"]["OpenTradeProjectionResponseModel"]
     receipt_schema = schema["components"]["schemas"]["ExecutedTradeReceiptModel"]
-    live_strategy_schema = schema["components"]["schemas"]["LiveStrategySpecModel"]
-    assert set(live_strategy_schema["properties"]) == {"strategy_id", "raw_spec"}
+    request_schema = schema["components"]["schemas"]["OpenTradeProjectionRequestModel"]
+    assert set(request_schema["properties"]) == {
+        "strategy_id",
+        "raw_spec",
+        "ticker",
+        "base_timeframe",
+        "target_bar_open_time_ms",
+        "executed_trade_receipt",
+    }
+    assert "LiveStrategySpecModel" not in schema["components"]["schemas"]
+    assert "LiveMarketModel" not in schema["components"]["schemas"]
     assert "strategy_version" not in receipt_schema["properties"]
     assert "strategy_version" not in response_schema["properties"]
     for removed_echo in ("strategy_id", "instance_id", "ticker", "base_timeframe"):
@@ -341,9 +366,7 @@ def test_open_trade_real_path_accepts_all_live_management_modes(mode: str | None
         app_services.load_live_feature_frame
     )
     payload = _managed_payload()
-    strategy = payload["strategy"]
-    assert isinstance(strategy, dict)
-    raw_spec = strategy["raw_spec"]
+    raw_spec = payload["raw_spec"]
     assert isinstance(raw_spec, dict)
     trade_management = raw_spec["trade_management"]
     assert isinstance(trade_management, dict)

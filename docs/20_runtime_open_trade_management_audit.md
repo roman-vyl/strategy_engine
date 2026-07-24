@@ -221,14 +221,16 @@ POST /v1/strategy-evaluations/live-entry
 
 ```text
 LiveEntryProjectionRequest
-  strategy
-    strategy_id
-    raw_spec
-  market
-    ticker
-    base_timeframe
+  strategy_id
+  raw_spec
+  ticker
+  base_timeframe
   target_bar_open_time_ms
 ```
+
+Live HTTP contract плоский. Adapter собирает внутренние `LiveStrategySpec` и
+`MarketStream`; прежние `strategy`/`market` wrappers отклоняются strict DTO без
+aliases или compatibility adapter.
 
 Engine строит live FeatureFrame и возвращает только target-bar проекцию:
 
@@ -276,7 +278,7 @@ ExecutedTradeReceipt
 - `planned_entry_price`, initial stop/take и profile копируются из исполнившегося live-entry plan;
 - `executed_entry_price` добавляется из подтверждённого ABI fill;
 - receipt создаётся один раз и не дописывается последующими managed outputs;
-- strategy и market берутся из внешнего request, Runtime instance identity остаётся в Runtime и ничего из этого не дублируется в receipt;
+- strategy и market собираются из top-level полей request, Runtime instance identity остаётся в Runtime и ничего из этого не дублируется в receipt;
 - current ABI stop/take, quantity и order IDs не становятся strategy inputs.
 
 ## 6. Open-trade projection после fill
@@ -291,8 +293,10 @@ POST /v1/strategy-evaluations/open-trade
 
 ```text
 OpenTradeProjectionRequest
-  strategy
-  market
+  strategy_id
+  raw_spec
+  ticker
+  base_timeframe
   target_bar_open_time_ms
   executed_trade_receipt
 ```
