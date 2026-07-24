@@ -269,7 +269,6 @@ class ExecutedTradeReceiptModel(BaseModel):
     initial_stop_price: StrictStr
     initial_take_price: StrictStr
     locked_exit_profile: StrictStr
-    abi_entry_correlation: StrictStr
 
     def to_domain(self) -> ExecutedTradeReceipt:
         return ExecutedTradeReceipt(**self.model_dump())

@@ -24,7 +24,7 @@
 
 ## Slice 3 — Receipt contract and pre-market validation
 
-- [x] Add immutable `ExecutedTradeReceipt` domain and HTTP models with the specified identity, time, price, profile, and ABI-correlation fields.
+- [x] Add immutable `ExecutedTradeReceipt` domain and HTTP models with the specified identity, time, price, and profile fields.
 - [x] Validate IDs, enums, alignment, time ordering, normalized decimal text, and side-relative stop/entry/take geometry.
 - [x] Validate request strategy, instance, and market against the receipt before any MDS call.
 - [x] Add typed `trade_contract_mismatch` and `trade_history_unavailable` application errors and stable HTTP mappings.
@@ -74,6 +74,7 @@
 - [x] Remove the redundant payload-level `contract_version` from both Runtime-facing live projection responses while preserving MDS and Research endpoint version fields.
 - [x] Remove `market_data_hash` from both Runtime-facing live projection results and HTTP schemas while preserving internal MDS/FeatureFrame and Research provenance.
 - [x] Remove `source_config_hash` from both live responses and the open-trade receipt, including its syntax and mismatch validation, while preserving Research `config_hash`.
+- [x] Remove the unused `abi_entry_correlation` echo from the open-trade receipt and reject the retired field at the strict HTTP boundary.
 - [ ] Prove `/range`, `/range-batch`, PotentialEntry vectors, exit-policy vectors, and `/managed-replay` remain unchanged.
 - [ ] Add an opt-in sibling-repository Engine-to-MDS HTTP smoke harness as a temporary bridge; keep it outside normal `make verify`.
 - [ ] Design and create a dedicated multi-repository integration/system-test service, then add Engine-to-MDS integration tests using real bounds and bounded-candle wire DTOs.

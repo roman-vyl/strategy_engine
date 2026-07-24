@@ -25,7 +25,6 @@ def validate_open_trade_request(request: OpenTradeProjectionRequest) -> None:
         "strategy_version",
         "ticker",
         "base_timeframe",
-        "abi_entry_correlation",
     ):
         _require_non_empty(name, getattr(receipt, name))
 

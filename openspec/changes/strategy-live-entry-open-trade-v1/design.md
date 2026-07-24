@@ -242,13 +242,11 @@ ExecutedTradeReceipt
   initial_stop_price
   initial_take_price
   locked_exit_profile
-
-  abi_entry_correlation
 ```
 
 Receipt invariants:
 
-- IDs and correlation are non-empty strings;
+- IDs are non-empty strings;
 - side is `long` or `short`;
 - profile is a supported profile ID;
 - all times are base-timeframe aligned;

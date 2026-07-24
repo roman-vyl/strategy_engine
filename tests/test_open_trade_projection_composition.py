@@ -168,7 +168,6 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
         initial_stop_price="95",
         initial_take_price="120",
         locked_exit_profile="aligned",
-        abi_entry_correlation="abi-1",
     )
     market = MarketStream("BTCUSDT.P", "5m")
     frame = FeatureFrame(

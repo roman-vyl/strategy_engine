@@ -58,7 +58,6 @@ def _payload() -> dict[str, object]:
             "initial_stop_price": "9.5",
             "initial_take_price": "11",
             "locked_exit_profile": "aligned",
-            "abi_entry_correlation": "abi-entry-1",
         },
     }
 
@@ -193,6 +192,22 @@ def test_open_trade_http_rejects_removed_source_config_hash() -> None:
     assert market_data.range_calls == 0
 
 
+def test_open_trade_http_rejects_removed_abi_entry_correlation() -> None:
+    app_services, market_data = _services()
+    payload = _payload()
+    receipt = payload["executed_trade_receipt"]
+    assert isinstance(receipt, dict)
+    receipt["abi_entry_correlation"] = "abi-entry-1"
+
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/open-trade", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_request"
+    assert market_data.bounds_calls == 0
+    assert market_data.range_calls == 0
+
+
 def test_open_trade_http_preserves_typed_application_error() -> None:
     app_services, _ = _services()
 
@@ -237,6 +252,7 @@ def test_open_trade_openapi_publishes_success_and_error_contracts() -> None:
     assert response_ref.endswith("/OpenTradeProjectionResponseModel")
     response_schema = schema["components"]["schemas"]["OpenTradeProjectionResponseModel"]
     receipt_schema = schema["components"]["schemas"]["ExecutedTradeReceiptModel"]
+    assert "abi_entry_correlation" not in receipt_schema["properties"]
     assert "source_config_hash" not in receipt_schema["properties"]
     assert "source_config_hash" not in response_schema["properties"]
     assert "market_data_hash" not in response_schema["properties"]

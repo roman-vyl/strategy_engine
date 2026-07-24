@@ -100,18 +100,22 @@ executed_entry_price
 initial_stop_price
 initial_take_price
 locked_exit_profile
-abi_entry_correlation
 ```
 
-IDs and correlation SHALL be non-empty. Times SHALL be aligned. Prices SHALL be positive normalized decimal text. Side and profile SHALL use supported enums.
+IDs SHALL be non-empty. Times SHALL be aligned. Prices SHALL be positive normalized decimal text. Side and profile SHALL use supported enums.
 
 The receipt SHALL NOT contain `source_config_hash`, another configuration hash,
-calculation origin, warmup, current phase, MFE/MAE, active stop/take, quantity,
-order IDs, or FeatureFrame data.
+`abi_entry_correlation`, calculation origin, warmup, current phase, MFE/MAE,
+active stop/take, quantity, order IDs, or FeatureFrame data.
 
 #### Scenario: Removed configuration hash is supplied
 
 - **WHEN** a receipt contains the removed `source_config_hash` field
+- **THEN** strict HTTP validation SHALL reject the request before MDS access.
+
+#### Scenario: Removed ABI correlation is supplied
+
+- **WHEN** a receipt contains the removed `abi_entry_correlation` field
 - **THEN** strict HTTP validation SHALL reject the request before MDS access.
 
 #### Scenario: Receipt is complete

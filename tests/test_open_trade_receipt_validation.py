@@ -34,7 +34,6 @@ def _receipt(strategy: StrategySpecEnvelope) -> ExecutedTradeReceipt:
         initial_stop_price="99",
         initial_take_price="102",
         locked_exit_profile="aligned",
-        abi_entry_correlation="order-link-1",
     )
 
 

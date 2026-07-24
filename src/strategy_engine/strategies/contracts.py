@@ -134,7 +134,6 @@ class ExecutedTradeReceipt:
     initial_stop_price: str
     initial_take_price: str
     locked_exit_profile: str
-    abi_entry_correlation: str
 
 
 @dataclass(frozen=True, slots=True)
