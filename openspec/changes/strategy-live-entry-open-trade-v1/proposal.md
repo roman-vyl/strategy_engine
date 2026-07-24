@@ -30,7 +30,7 @@ Both calculations must use the same live market-history policy. Runtime must not
   - It returns target-bar `long` and `short` entry plans or explicit `null` values.
   - Each plan contains the planned entry, initial stop, initial take, source-plan bar, and locked exit profile.
 - Add `POST /v1/strategy-evaluations/open-trade`.
-  - It accepts an immutable executed-trade receipt created from the exact filled live-entry plan plus ABI fill facts.
+  - It accepts an immutable executed-trade receipt created from the exact filled live-entry plan plus entry-bar timing.
   - It validates receipt time ordering and price geometry before MDS access, then validates source-plan, entry, and target coverage.
   - It replays management only from the bar after entry through the requested target bar.
   - Runtime may call it only after an ABI operational-state check confirms that the correlated position is still open.
@@ -58,8 +58,8 @@ Both calculations must use the same live market-history policy. Runtime must not
 The two dedicated live contracts follow Runtime's breaking cleanup policy and
 use flat request objects without transport-only strategy or market wrappers.
 They do not accept Runtime-owned strategy-instance identity and do not expose
-request echoes, redundant payload versions, or MDS provenance hashes. Existing
-Research and compatibility endpoints remain unchanged. Existing PotentialEntry
-vectors, exit-policy vectors, managed replay, error envelope shape, strategy
-validation, and Engine-internal MDS-owned `market_data_hash` semantics remain
-authoritative.
+request echoes, actual execution price, redundant payload versions, or MDS
+provenance hashes. Existing Research and compatibility endpoints remain
+unchanged. Existing PotentialEntry vectors, exit-policy vectors, managed replay,
+error envelope shape, strategy validation, and Engine-internal MDS-owned
+`market_data_hash` semantics remain authoritative.

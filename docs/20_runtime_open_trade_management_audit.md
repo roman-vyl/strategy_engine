@@ -267,7 +267,6 @@ ExecutedTradeReceipt
   entry_bar_open_time_ms
 
   planned_entry_price
-  executed_entry_price
   initial_stop_price
   initial_take_price
   locked_exit_profile
@@ -276,7 +275,7 @@ ExecutedTradeReceipt
 Семантика:
 
 - `planned_entry_price`, initial stop/take и profile копируются из исполнившегося live-entry plan;
-- `executed_entry_price` добавляется из подтверждённого ABI fill;
+- actual execution price и partial-fill aggregation остаются в Runtime/ABI и не передаются Engine;
 - receipt создаётся один раз и не дописывается последующими managed outputs;
 - strategy и market собираются из top-level полей request, Runtime instance identity остаётся в Runtime и ничего из этого не дублируется в receipt;
 - current ABI stop/take, quantity и order IDs не становятся strategy inputs.

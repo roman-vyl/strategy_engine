@@ -218,7 +218,9 @@ context.
 
 ## 4. Fill boundary and immutable receipt
 
-At confirmed fill, Runtime creates one immutable receipt from the exact live-entry plan associated with the filled ABI entry plus fill facts.
+At confirmed fill, Runtime creates one immutable receipt from the exact
+live-entry plan associated with the filled ABI entry plus the aligned entry-bar
+time. Actual execution price and partial-fill aggregation stay in Runtime/ABI.
 
 The receipt wire object is:
 
@@ -229,7 +231,6 @@ ExecutedTradeReceipt
   entry_bar_open_time_ms
 
   planned_entry_price
-  executed_entry_price
   initial_stop_price
   initial_take_price
   locked_exit_profile
@@ -287,7 +288,10 @@ After loading the live FeatureFrame, Engine requires source-plan, entry, and tar
 
 The strategic entry basis is `planned_entry_price`.
 
-It is used for MFE/MAE strategy metrics, phase thresholds, break-even stop, lock-profit stop, and other entry-relative managed calculations. `executed_entry_price` is retained as an execution fact and does not alter v1 strategy mathematics.
+It is used for MFE/MAE strategy metrics, phase thresholds, break-even stop,
+lock-profit stop, and other entry-relative managed calculations. Engine does not
+accept actual execution price, so partial fills cannot alter v1 strategy
+mathematics.
 
 Initial stop and take are absolute levels copied from the filled live-entry plan. Managed protection may only tighten the initial stop. Take management may keep the initial take, switch profile, or disable the fixed take.
 

@@ -127,7 +127,6 @@ class ExecutedTradeReceipt:
     source_plan_bar_open_time_ms: int
     entry_bar_open_time_ms: int
     planned_entry_price: str
-    executed_entry_price: str
     initial_stop_price: str
     initial_take_price: str
     locked_exit_profile: str

@@ -196,9 +196,10 @@ MDS bounds
 
 Live-entry возвращает готовый target-bar plan с entry/stop/take и locked exit
 profile. Runtime хранит его как mutable pending snapshot. После ABI fill Runtime
-создаёт immutable executed-trade receipt только из расчётных полей плана и факта
-исполнения: side, source-plan/entry times, planned/executed entry, initial
-stop/take и locked profile. Receipt не дублирует strategy, instance или market
+создаёт immutable executed-trade receipt только из расчётных полей плана и
+entry-bar timing: side, source-plan/entry times, planned entry, initial stop/take
+и locked profile. Фактическая execution price и partial-fill aggregation
+остаются в Runtime/ABI. Receipt не дублирует strategy, instance или market
 identity и не содержит Runtime trade ID, ABI correlation либо hash provenance.
 
 Live responses возвращают только результат расчёта: `plans_by_side` для

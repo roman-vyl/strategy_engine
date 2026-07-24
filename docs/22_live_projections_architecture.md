@@ -242,4 +242,5 @@ existing `trade_id` request/response label through a transport wrapper.
 The executed-trade receipt contains only entry and management calculation
 facts. Strategy identity, ticker, and base timeframe come from top-level request
 fields; Runtime instance identity never enters Engine, and timestamp alignment
-uses the request timeframe.
+uses the request timeframe. Actual execution price and partial-fill aggregation
+remain Runtime/ABI facts and are not accepted by the Engine receipt.

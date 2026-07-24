@@ -192,10 +192,12 @@ Runtime может заменить plan на следующем base bar и п�
 
 ```text
 exact filled LiveEntryPlan
-+ ABI fill facts
++ aligned entry-bar timing
 ```
 
-Engine не принимает partially completed receipt и не разрешает дописывать locked profile после первого open-trade request.
+Engine не принимает partially completed receipt и не разрешает дописывать
+locked profile после первого open-trade request. Actual execution price и
+partial-fill aggregation остаются в Runtime/ABI.
 
 ## 5. ExecutedTradeReceipt contract
 
@@ -206,7 +208,6 @@ ExecutedTradeReceipt
   entry_bar_open_time_ms
 
   planned_entry_price
-  executed_entry_price
   initial_stop_price
   initial_take_price
   locked_exit_profile
@@ -289,7 +290,8 @@ planned_entry_price
 - lock-profit stop;
 - других entry-relative managed calculations.
 
-`executed_entry_price` сохраняется в receipt как execution fact и не меняет strategy mathematics v1.
+Engine не принимает actual execution price. Вся strategy mathematics v1
+заморожена на `planned_entry_price`, независимо от partial fills.
 
 Initial stop/take являются абсолютными уровнями исходного live-entry plan.
 
@@ -464,7 +466,7 @@ V1 полагается на существующие MDS ready/continuity/no-au
 
 - entry bar has no management;
 - first post-entry bar has `bars_in_trade = 2`;
-- planned/executed price differ and managed math uses planned;
+- plan-price basis is used throughout managed math;
 - initial stop preserved until tighter managed stop;
 - take remains, switches or becomes null;
 - locked-profile standard exit;

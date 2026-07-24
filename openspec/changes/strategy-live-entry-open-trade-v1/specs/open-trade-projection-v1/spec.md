@@ -107,7 +107,6 @@ side
 source_plan_bar_open_time_ms
 entry_bar_open_time_ms
 planned_entry_price
-executed_entry_price
 initial_stop_price
 initial_take_price
 locked_exit_profile
@@ -119,6 +118,9 @@ The strict receipt model SHALL contain no fields beyond the schema above. It
 SHALL remain limited to immutable calculation inputs and SHALL NOT duplicate
 the request's top-level strategy or market fields, Runtime lifecycle state, ABI
 state, quantity, order state, or FeatureFrame data.
+
+Actual execution price is owned by Runtime/ABI and SHALL NOT be accepted by
+Engine as a receipt field.
 
 #### Scenario: Receipt is complete
 
@@ -146,8 +148,6 @@ For a short receipt:
 ```text
 initial_take_price < planned_entry_price < initial_stop_price
 ```
-
-`executed_entry_price` SHALL be positive but SHALL NOT be required to lie between the initial stop and take.
 
 #### Scenario: Invalid long geometry
 
@@ -186,13 +186,14 @@ Missing source-plan or entry coverage SHALL return `trade_history_unavailable` a
 
 Open-trade managed calculations SHALL use `planned_entry_price` as the strategic entry basis for MFE/MAE, phase thresholds, break-even stop, lock-profit stop, and other entry-relative rules.
 
-`executed_entry_price` SHALL remain an execution fact and SHALL NOT alter v1 strategy mathematics.
+Actual execution price and partial-fill aggregation SHALL remain outside Engine
+and SHALL NOT alter v1 strategy mathematics.
 
-#### Scenario: Planned and executed prices differ
+#### Scenario: Retired execution price is supplied
 
-- **WHEN** receipt planned and executed entry prices differ
-- **THEN** managed calculations SHALL use planned entry price
-- **AND** the executed price SHALL remain an unchanged calculation input fact.
+- **WHEN** a receipt contains `executed_entry_price`
+- **THEN** strict HTTP validation SHALL reject the request before MDS access
+- **AND** Engine SHALL NOT apply an alias or replacement execution-price field.
 
 ### Requirement: Start management after the entry bar
 

@@ -158,7 +158,6 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
         source_plan_bar_open_time_ms=0,
         entry_bar_open_time_ms=300_000,
         planned_entry_price="100",
-        executed_entry_price="100.5",
         initial_stop_price="95",
         initial_take_price="120",
         locked_exit_profile="aligned",

@@ -24,7 +24,6 @@ def _receipt() -> ExecutedTradeReceipt:
         source_plan_bar_open_time_ms=300_000,
         entry_bar_open_time_ms=600_000,
         planned_entry_price="100",
-        executed_entry_price="100.1",
         initial_stop_price="99",
         initial_take_price="102",
         locked_exit_profile="aligned",

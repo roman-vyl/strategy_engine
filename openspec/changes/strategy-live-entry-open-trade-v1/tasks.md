@@ -36,9 +36,9 @@
 - [x] Keep public `/managed-replay` behavior and fixtures unchanged.
 - [x] Exclude entry-bar OHLC from MFE/MAE and all managed/close rules.
 - [x] Preserve `bars_in_trade = 1` on entry and `bars_in_trade = 2` on the first post-entry bar.
-- [x] Use `planned_entry_price` for all entry-relative managed mathematics while retaining executed price only as an immutable execution fact.
+- [x] Use `planned_entry_price` for all entry-relative managed mathematics.
 - [x] Seed desired stop/take from exact receipt Decimal levels, avoid no-op float round trips, and enforce tighten-only stop composition.
-- [x] Test entry-target, first-post-entry, planned/executed divergence, phase, MFE/MAE, stop, and take semantics.
+- [x] Test entry-target, first-post-entry, plan-price basis, phase, MFE/MAE, stop, and take semantics.
 
 ## Slice 5 — Confirmed-open desired protection and close signal
 
@@ -81,6 +81,7 @@
 - [x] Remove duplicated strategy, instance, and market echoes from the executed-trade receipt; keep strategy and market in the outer request and Runtime instance identity in Runtime.
 - [x] Remove Runtime-owned `instance_id` from both live requests and remove all strategy, instance, market, and target request echoes from both live results and responses.
 - [x] Flatten both live HTTP requests into strict top-level calculation fields and reject the retired nested strategy/market payloads.
+- [x] Remove Runtime/ABI-owned `executed_entry_price` from the live open-trade receipt and reject the retired field at the strict HTTP boundary.
 - [x] Remove stale generated distributions and egg-info, and add source/archive plus live-OpenAPI release regression checks.
 - [x] Prove `/range`, `/range-batch`, PotentialEntry vectors, exit-policy vectors, and `/managed-replay` remain unchanged.
 - [ ] Add an opt-in sibling-repository Engine-to-MDS HTTP smoke harness as a temporary bridge; keep it outside normal `make verify`.

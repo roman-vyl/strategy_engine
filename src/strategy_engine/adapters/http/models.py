@@ -250,7 +250,6 @@ class ExecutedTradeReceiptModel(BaseModel):
     source_plan_bar_open_time_ms: StrictInt
     entry_bar_open_time_ms: StrictInt
     planned_entry_price: StrictStr
-    executed_entry_price: StrictStr
     initial_stop_price: StrictStr
     initial_take_price: StrictStr
     locked_exit_profile: StrictStr

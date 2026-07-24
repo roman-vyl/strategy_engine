@@ -39,7 +39,6 @@ def _payload() -> dict[str, object]:
             "source_plan_bar_open_time_ms": 2_700_000,
             "entry_bar_open_time_ms": 3_000_000,
             "planned_entry_price": "10",
-            "executed_entry_price": "10.1",
             "initial_stop_price": "9.5",
             "initial_take_price": "11",
             "locked_exit_profile": "aligned",
@@ -234,6 +233,22 @@ def test_open_trade_http_rejects_removed_trade_id() -> None:
     assert market_data.range_calls == 0
 
 
+def test_open_trade_http_rejects_removed_executed_entry_price() -> None:
+    app_services, market_data = _services()
+    payload = _payload()
+    receipt = payload["executed_trade_receipt"]
+    assert isinstance(receipt, dict)
+    receipt["executed_entry_price"] = "10.1"
+
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/open-trade", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_request"
+    assert market_data.bounds_calls == 0
+    assert market_data.range_calls == 0
+
+
 def test_open_trade_http_rejects_removed_compatibility_profile() -> None:
     app_services, market_data = _services()
     payload = _payload()
@@ -396,7 +411,6 @@ def test_open_trade_real_path_preserves_high_precision_receipt_protection() -> N
     receipt = payload["executed_trade_receipt"]
     assert isinstance(receipt, dict)
     receipt["planned_entry_price"] = "10.1234567890123456789"
-    receipt["executed_entry_price"] = "10.123456789012345679"
     receipt["initial_stop_price"] = "9.1234567890123456789"
     receipt["initial_take_price"] = "11.1234567890123456789"
 
