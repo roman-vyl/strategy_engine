@@ -158,7 +158,6 @@ For v1, both adapters MAY reuse the existing full strategy FeaturePlan and broad
 {
   "strategy": {
     "strategy_id": "ema_pullback",
-    "strategy_version": "1",
     "instance_id": "btc-ema-live-01",
     "raw_spec": {}
   },
@@ -192,7 +191,6 @@ neutral
 ```json
 {
   "strategy_id": "ema_pullback",
-  "strategy_version": "1",
   "instance_id": "btc-ema-live-01",
   "market": {
     "ticker": "BTCUSDT.P",
@@ -227,7 +225,6 @@ The receipt wire object is:
 ExecutedTradeReceipt
   instance_id
   strategy_id
-  strategy_version
   ticker
   base_timeframe
 
@@ -263,7 +260,6 @@ The receipt deliberately excludes `from_ms`, warmup, previous phase, MFE/MAE, ac
 {
   "strategy": {
     "strategy_id": "ema_pullback",
-    "strategy_version": "1",
     "instance_id": "btc-ema-live-01",
     "raw_spec": {}
   },
@@ -282,7 +278,6 @@ Before any MDS call, `EvaluateOpenTradeProjection` validates:
 
 ```text
 request.strategy_id      == receipt.strategy_id
-request.strategy_version == receipt.strategy_version
 request.instance_id      == receipt.instance_id
 request market           == receipt ticker/timeframe
 source_plan_bar <= entry_bar <= target_bar
@@ -355,7 +350,6 @@ Only the requested target bar determines the returned `close_signal`. A transien
 {
   "instance_id": "btc-ema-live-01",
   "strategy_id": "ema_pullback",
-  "strategy_version": "1",
   "market": {
     "ticker": "BTCUSDT.P",
     "base_timeframe": "5m"

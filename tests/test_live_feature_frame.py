@@ -134,7 +134,6 @@ def request(target: int = 3_300_000) -> LiveFeatureFrameRequest:
     return LiveFeatureFrameRequest(
         strategy=LiveStrategySpec(
             strategy_id="ema_pullback",
-            strategy_version="v1",
             instance_id="fixture-live",
             raw_spec=minimal_spec(),
         ),

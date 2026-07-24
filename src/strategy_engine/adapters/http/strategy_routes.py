@@ -125,7 +125,6 @@ def _serialize_live_entry_projection(result: object) -> dict[str, object]:
         raise TypeError("expected LiveEntryProjectionResult")
     return {
         "strategy_id": result.strategy_id,
-        "strategy_version": result.strategy_version,
         "instance_id": result.instance_id,
         "market": {
             "ticker": result.market.ticker,
@@ -158,7 +157,6 @@ def _serialize_open_trade_projection(result: object) -> OpenTradeProjectionRespo
     return OpenTradeProjectionResponseModel(
         instance_id=result.instance_id,
         strategy_id=result.strategy_id,
-        strategy_version=result.strategy_version,
         market=LiveMarketModel(
             ticker=result.market.ticker,
             base_timeframe=result.market.base_timeframe,

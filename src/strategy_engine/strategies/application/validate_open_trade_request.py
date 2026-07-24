@@ -21,7 +21,6 @@ def validate_open_trade_request(request: OpenTradeProjectionRequest) -> None:
     for name in (
         "instance_id",
         "strategy_id",
-        "strategy_version",
         "ticker",
         "base_timeframe",
     ):
@@ -62,8 +61,6 @@ def validate_open_trade_request(request: OpenTradeProjectionRequest) -> None:
     mismatches: dict[str, object] = {}
     if request.strategy.strategy_id != receipt.strategy_id:
         mismatches["strategy_id"] = receipt.strategy_id
-    if request.strategy.strategy_version != receipt.strategy_version:
-        mismatches["strategy_version"] = receipt.strategy_version
     if request.strategy.instance_id != receipt.instance_id:
         mismatches["instance_id"] = receipt.instance_id
     if request.market.ticker != receipt.ticker:

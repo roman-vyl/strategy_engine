@@ -114,14 +114,12 @@ class LiveStrategySpecModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     strategy_id: StrictStr
-    strategy_version: StrictStr
     instance_id: StrictStr
     raw_spec: dict[str, Any]
 
     def to_domain(self) -> LiveStrategySpec:
         return LiveStrategySpec(
             strategy_id=self.strategy_id,
-            strategy_version=self.strategy_version,
             instance_id=self.instance_id,
             raw_spec=self.raw_spec,
         )
@@ -233,7 +231,6 @@ class LiveEntryProjectionResponseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     strategy_id: StrictStr
-    strategy_version: StrictStr
     instance_id: StrictStr
     market: LiveMarketModel
     target_bar_open_time_ms: StrictInt
@@ -275,7 +272,6 @@ class ExecutedTradeReceiptModel(BaseModel):
 
     instance_id: StrictStr
     strategy_id: StrictStr
-    strategy_version: StrictStr
     ticker: StrictStr
     base_timeframe: StrictStr
     side: StrictStr
@@ -340,7 +336,6 @@ class OpenTradeProjectionResponseModel(BaseModel):
 
     instance_id: StrictStr
     strategy_id: StrictStr
-    strategy_version: StrictStr
     market: LiveMarketModel
     target_bar_open_time_ms: StrictInt
     desired_protection: DesiredProtectionResponseModel

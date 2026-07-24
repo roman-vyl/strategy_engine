@@ -77,6 +77,7 @@
 - [x] Remove the unused `abi_entry_correlation` echo from the open-trade receipt and reject the retired field at the strict HTTP boundary.
 - [x] Remove Runtime-owned `trade_id` from open-trade receipt/result and split the identity-free managed core from the unchanged Research `/managed-replay` attribution wrapper.
 - [x] Introduce a live-specific strategy input and remove the Research-only `compatibility_profile` from both live request schemas without changing Research envelopes.
+- [x] Remove the unused `strategy_version` selector and echo from live requests, receipts, and responses while preserving Research version contracts.
 - [ ] Prove `/range`, `/range-batch`, PotentialEntry vectors, exit-policy vectors, and `/managed-replay` remain unchanged.
 - [ ] Add an opt-in sibling-repository Engine-to-MDS HTTP smoke harness as a temporary bridge; keep it outside normal `make verify`.
 - [ ] Design and create a dedicated multi-repository integration/system-test service, then add Engine-to-MDS integration tests using real bounds and bounded-candle wire DTOs.

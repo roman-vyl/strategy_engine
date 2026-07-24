@@ -22,7 +22,6 @@ def _receipt(strategy: StrategySpecEnvelope) -> ExecutedTradeReceipt:
     return ExecutedTradeReceipt(
         instance_id=strategy.instance_id,
         strategy_id=strategy.strategy_id,
-        strategy_version=strategy.strategy_version,
         ticker="BTCUSDT.P",
         base_timeframe="5m",
         side="long",
@@ -60,7 +59,6 @@ def test_valid_receipt_binds_to_request() -> None:
     ("field", "value"),
     [
         ("strategy_id", "other"),
-        ("strategy_version", "2"),
         ("instance_id", "other"),
         ("ticker", "ETHUSDT.P"),
         ("base_timeframe", "1m"),

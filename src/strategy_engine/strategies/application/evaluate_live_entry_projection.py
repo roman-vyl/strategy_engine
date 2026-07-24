@@ -40,7 +40,6 @@ class EvaluateLiveEntryProjection:
         )
         return LiveEntryProjectionResult(
             strategy_id=request.strategy.strategy_id,
-            strategy_version=request.strategy.strategy_version,
             instance_id=request.strategy.instance_id,
             market=request.market,
             target_bar_open_time_ms=request.target_bar_open_time_ms,

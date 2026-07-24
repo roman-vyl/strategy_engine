@@ -156,7 +156,6 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
     receipt = ExecutedTradeReceipt(
         instance_id="instance-1",
         strategy_id="ema_pullback",
-        strategy_version="1",
         ticker="BTCUSDT.P",
         base_timeframe="5m",
         side="long",

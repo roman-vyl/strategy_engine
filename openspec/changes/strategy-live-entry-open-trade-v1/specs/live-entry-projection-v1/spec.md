@@ -11,8 +11,8 @@ POST /v1/strategy-evaluations/live-entry
 ```
 
 The request SHALL contain a strategy envelope, market identity, and `target_bar_open_time_ms`.
-The live strategy envelope SHALL NOT contain the Research-only
-`compatibility_profile`.
+The live strategy envelope SHALL NOT contain the Research-only selectors
+`strategy_version` or `compatibility_profile`.
 
 The endpoint SHALL be stateless and SHALL NOT accept Runtime lifecycle or ABI order state.
 
@@ -24,6 +24,11 @@ The endpoint SHALL be stateless and SHALL NOT accept Runtime lifecycle or ABI or
 #### Scenario: Removed compatibility profile is supplied
 
 - **WHEN** a live-entry strategy envelope contains `compatibility_profile`
+- **THEN** strict HTTP validation SHALL reject the request before MDS access.
+
+#### Scenario: Removed strategy version is supplied
+
+- **WHEN** a live-entry strategy envelope contains `strategy_version`
 - **THEN** strict HTTP validation SHALL reject the request before MDS access.
 
 ### Requirement: Delegate through a strategy-family live-entry adapter
@@ -54,7 +59,6 @@ A successful response SHALL contain:
 
 ```text
 strategy_id
-strategy_version
 instance_id
 market.ticker
 market.base_timeframe

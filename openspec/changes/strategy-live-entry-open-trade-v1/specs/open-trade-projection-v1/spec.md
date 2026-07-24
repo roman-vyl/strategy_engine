@@ -11,8 +11,8 @@ POST /v1/strategy-evaluations/open-trade
 ```
 
 The request SHALL contain a strategy envelope, market identity, `target_bar_open_time_ms`, and `executed_trade_receipt`.
-The live strategy envelope SHALL NOT contain the Research-only
-`compatibility_profile`.
+The live strategy envelope SHALL NOT contain the Research-only selectors
+`strategy_version` or `compatibility_profile`.
 
 The endpoint SHALL be stateless and SHALL NOT accept previous managed state, actual exchange protection, quantity, or order commands.
 
@@ -26,6 +26,11 @@ Runtime SHALL call the endpoint only after ABI operational state confirms that t
 #### Scenario: Removed compatibility profile is supplied
 
 - **WHEN** an open-trade strategy envelope contains `compatibility_profile`
+- **THEN** strict HTTP validation SHALL reject the request before MDS access.
+
+#### Scenario: Removed strategy version is supplied
+
+- **WHEN** an open-trade strategy envelope contains `strategy_version`
 - **THEN** strict HTTP validation SHALL reject the request before MDS access.
 
 ### Requirement: Publish typed HTTP transport contracts
@@ -95,7 +100,6 @@ The receipt SHALL contain:
 ```text
 instance_id
 strategy_id
-strategy_version
 ticker
 base_timeframe
 side
@@ -170,7 +174,6 @@ Before MDS access, Engine SHALL require:
 
 ```text
 request.strategy.strategy_id      == receipt.strategy_id
-request.strategy.strategy_version == receipt.strategy_version
 request.strategy.instance_id      == receipt.instance_id
 request.market.ticker             == receipt.ticker
 request.market.base_timeframe     == receipt.base_timeframe
@@ -317,7 +320,6 @@ A successful response SHALL contain:
 ```text
 instance_id
 strategy_id
-strategy_version
 market.ticker
 market.base_timeframe
 target_bar_open_time_ms

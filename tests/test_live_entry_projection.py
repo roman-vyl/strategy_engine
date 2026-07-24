@@ -128,7 +128,6 @@ def test_live_entry_returns_stable_side_keys_and_provenance() -> None:
     live, _, strategy = services()
     live_strategy = LiveStrategySpec(
         strategy.strategy_id,
-        strategy.strategy_version,
         strategy.instance_id,
         strategy.raw_spec,
     )
@@ -152,7 +151,6 @@ def test_live_entry_matches_target_index_range_projection() -> None:
     market = MarketStream("BTCUSDT.P", "5m")
     live_strategy = LiveStrategySpec(
         strategy.strategy_id,
-        strategy.strategy_version,
         strategy.instance_id,
         strategy.raw_spec,
     )

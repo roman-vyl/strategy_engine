@@ -35,7 +35,6 @@ class LiveStrategySpec:
     """Runtime-facing strategy input without Research compatibility selectors."""
 
     strategy_id: str
-    strategy_version: str
     instance_id: str
     raw_spec: dict[str, Any]
 
@@ -121,7 +120,6 @@ class LiveEntryPlan:
 @dataclass(frozen=True, slots=True)
 class LiveEntryProjectionResult:
     strategy_id: str
-    strategy_version: str
     instance_id: str
     market: MarketStream
     target_bar_open_time_ms: int
@@ -132,7 +130,6 @@ class LiveEntryProjectionResult:
 class ExecutedTradeReceipt:
     instance_id: str
     strategy_id: str
-    strategy_version: str
     ticker: str
     base_timeframe: str
     side: str
@@ -181,7 +178,6 @@ class OpenTradeDiagnostics:
 class OpenTradeProjectionResult:
     instance_id: str
     strategy_id: str
-    strategy_version: str
     market: MarketStream
     target_bar_open_time_ms: int
     desired_protection: DesiredProtection

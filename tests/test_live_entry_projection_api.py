@@ -112,7 +112,6 @@ def _payload(*, enabled: list[str] | None = None) -> dict[str, object]:
     return {
         "strategy": {
             "strategy_id": "ema_pullback",
-            "strategy_version": "v1",
             "instance_id": "live-1",
             "raw_spec": _spec(enabled=enabled),
         },
@@ -211,6 +210,22 @@ def test_live_entry_http_rejects_removed_compatibility_profile() -> None:
     assert market_data.range_calls == 0
 
 
+def test_live_entry_http_rejects_removed_strategy_version() -> None:
+    app_services, market_data = _services()
+    payload = _payload()
+    strategy = payload["strategy"]
+    assert isinstance(strategy, dict)
+    strategy["strategy_version"] = "v1"
+
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/live-entry", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_request"
+    assert market_data.bounds_calls == 0
+    assert market_data.range_calls == 0
+
+
 def test_live_entry_http_forbids_runtime_owned_history_fields() -> None:
     app_services, market_data = _services()
     request = _payload()
@@ -247,6 +262,8 @@ def test_live_entry_openapi_publishes_request_and_response_contracts() -> None:
     assert response_ref.endswith("/LiveEntryProjectionResponseModel")
     live_strategy_schema = schema["components"]["schemas"]["LiveStrategySpecModel"]
     assert "compatibility_profile" not in live_strategy_schema["properties"]
+    assert "strategy_version" not in live_strategy_schema["properties"]
     response_schema = schema["components"]["schemas"]["LiveEntryProjectionResponseModel"]
+    assert "strategy_version" not in response_schema["properties"]
     assert "source_config_hash" not in response_schema["properties"]
     assert "market_data_hash" not in response_schema["properties"]

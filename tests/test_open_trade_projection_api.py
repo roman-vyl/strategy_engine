@@ -36,7 +36,6 @@ def _payload() -> dict[str, object]:
     return {
         "strategy": {
             "strategy_id": strategy.strategy_id,
-            "strategy_version": strategy.strategy_version,
             "instance_id": strategy.instance_id,
             "raw_spec": strategy.raw_spec,
         },
@@ -45,7 +44,6 @@ def _payload() -> dict[str, object]:
         "executed_trade_receipt": {
             "instance_id": "live-1",
             "strategy_id": "ema_pullback",
-            "strategy_version": "v1",
             "ticker": "BTCUSDT.P",
             "base_timeframe": "5m",
             "side": "long",
@@ -83,7 +81,6 @@ def _result() -> OpenTradeProjectionResult:
     return OpenTradeProjectionResult(
         instance_id="live-1",
         strategy_id="ema_pullback",
-        strategy_version="v1",
         market=MarketStream("BTCUSDT.P", "5m"),
         target_bar_open_time_ms=3_300_000,
         desired_protection=DesiredProtection(stop_price="10.25", take_price=None),
@@ -116,7 +113,6 @@ def test_open_trade_http_returns_typed_desired_state() -> None:
     assert response.json() == {
         "instance_id": "live-1",
         "strategy_id": "ema_pullback",
-        "strategy_version": "v1",
         "market": {"ticker": "BTCUSDT.P", "base_timeframe": "5m"},
         "target_bar_open_time_ms": 3_300_000,
         "desired_protection": {"stop_price": "10.25", "take_price": None},
@@ -236,6 +232,22 @@ def test_open_trade_http_rejects_removed_compatibility_profile() -> None:
     assert market_data.range_calls == 0
 
 
+def test_open_trade_http_rejects_removed_strategy_version() -> None:
+    app_services, market_data = _services()
+    payload = _payload()
+    strategy = payload["strategy"]
+    assert isinstance(strategy, dict)
+    strategy["strategy_version"] = "v1"
+
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/open-trade", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_request"
+    assert market_data.bounds_calls == 0
+    assert market_data.range_calls == 0
+
+
 def test_open_trade_http_preserves_typed_application_error() -> None:
     app_services, _ = _services()
 
@@ -282,6 +294,9 @@ def test_open_trade_openapi_publishes_success_and_error_contracts() -> None:
     receipt_schema = schema["components"]["schemas"]["ExecutedTradeReceiptModel"]
     live_strategy_schema = schema["components"]["schemas"]["LiveStrategySpecModel"]
     assert "compatibility_profile" not in live_strategy_schema["properties"]
+    assert "strategy_version" not in live_strategy_schema["properties"]
+    assert "strategy_version" not in receipt_schema["properties"]
+    assert "strategy_version" not in response_schema["properties"]
     assert "trade_id" not in receipt_schema["properties"]
     assert "trade_id" not in response_schema["properties"]
     assert "abi_entry_correlation" not in receipt_schema["properties"]
