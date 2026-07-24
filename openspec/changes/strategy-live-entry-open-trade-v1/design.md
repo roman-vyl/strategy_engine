@@ -160,8 +160,7 @@ For v1, both adapters MAY reuse the existing full strategy FeaturePlan and broad
     "strategy_id": "ema_pullback",
     "strategy_version": "1",
     "instance_id": "btc-ema-live-01",
-    "raw_spec": {},
-    "compatibility_profile": "bbb_v1"
+    "raw_spec": {}
   },
   "market": {
     "ticker": "BTCUSDT.P",
@@ -266,8 +265,7 @@ The receipt deliberately excludes `from_ms`, warmup, previous phase, MFE/MAE, ac
     "strategy_id": "ema_pullback",
     "strategy_version": "1",
     "instance_id": "btc-ema-live-01",
-    "raw_spec": {},
-    "compatibility_profile": "bbb_v1"
+    "raw_spec": {}
   },
   "market": {
     "ticker": "BTCUSDT.P",

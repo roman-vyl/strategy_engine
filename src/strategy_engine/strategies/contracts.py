@@ -31,6 +31,16 @@ class StrategySpecEnvelope:
 
 
 @dataclass(frozen=True, slots=True)
+class LiveStrategySpec:
+    """Runtime-facing strategy input without Research compatibility selectors."""
+
+    strategy_id: str
+    strategy_version: str
+    instance_id: str
+    raw_spec: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
 class StrategyOutputOptions:
     include_features: bool = True
     include_contexts: bool = True
@@ -93,7 +103,7 @@ class ManagedReplayRequest:
 
 @dataclass(frozen=True, slots=True)
 class LiveEntryProjectionRequest:
-    strategy: StrategySpecEnvelope
+    strategy: LiveStrategySpec
     market: MarketStream
     target_bar_open_time_ms: int
 
@@ -137,7 +147,7 @@ class ExecutedTradeReceipt:
 
 @dataclass(frozen=True, slots=True)
 class OpenTradeProjectionRequest:
-    strategy: StrategySpecEnvelope
+    strategy: LiveStrategySpec
     market: MarketStream
     target_bar_open_time_ms: int
     executed_trade_receipt: ExecutedTradeReceipt

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from strategy_engine.indicators.contracts import FeatureFrame
-from strategy_engine.strategies.contracts import StrategySpecEnvelope
+from strategy_engine.strategies.contracts import LiveStrategySpec, StrategySpecEnvelope
 from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
     build_context_consumption_evidence,
@@ -45,7 +45,7 @@ class EmaPullbackEvaluation:
 
 
 def evaluate_ema_pullback_frame(
-    strategy: StrategySpecEnvelope,
+    strategy: StrategySpecEnvelope | LiveStrategySpec,
     frame: FeatureFrame,
     planned: EmaPullbackFeaturePlan,
 ) -> EmaPullbackEvaluation:

@@ -219,6 +219,10 @@ pipeline and is not part of either Runtime-facing result. These are
 transport-neutral domain results; the HTTP step must serialize them without
 reconstructing strategy internals.
 
+Live requests use a dedicated strategy input model and do not accept the
+Research-only `compatibility_profile`. Research evaluation and authoring
+contracts retain their existing envelope and compatibility validation.
+
 Open-trade carries no Runtime-owned `trade_id`. Its managed calculation is
 identity-free; the separate Research `/managed-replay` endpoint keeps its
 existing `trade_id` request/response label through a transport wrapper.

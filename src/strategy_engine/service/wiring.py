@@ -11,6 +11,9 @@ from strategy_engine.indicators.application.validate_plan import ValidateIndicat
 from strategy_engine.service.registries import IndicatorRegistry, StrategyRegistry
 from strategy_engine.service.settings import Settings
 from strategy_engine.strategies.application.build_feature_plan import BuildStrategyFeaturePlan
+from strategy_engine.strategies.application.build_live_strategy_feature_plan import (
+    BuildLiveStrategyFeaturePlan,
+)
 from strategy_engine.strategies.application.catalog import StrategyCatalog
 from strategy_engine.strategies.application.evaluate_live_entry_projection import (
     EvaluateLiveEntryProjection,
@@ -22,6 +25,9 @@ from strategy_engine.strategies.application.evaluate_open_trade_projection impor
 from strategy_engine.strategies.application.evaluate_range import EvaluateStrategyRange
 from strategy_engine.strategies.application.evaluate_range_batch import EvaluateStrategyRangeBatch
 from strategy_engine.strategies.application.load_live_feature_frame import LoadLiveFeatureFrame
+from strategy_engine.strategies.application.validate_live_strategy_spec import (
+    ValidateLiveStrategySpec,
+)
 from strategy_engine.strategies.application.validate_spec import ValidateStrategySpec
 from strategy_engine.strategies.ema_pullback.evaluator import EmaPullbackRangeEvaluator
 
@@ -75,11 +81,16 @@ def build_services(settings: Settings) -> ApplicationServices:
         strategy_registry,
         validate_strategy_spec,
     )
+    build_live_strategy_feature_plan = BuildLiveStrategyFeaturePlan()
+    validate_live_strategy_spec = ValidateLiveStrategySpec(
+        strategy_registry,
+        build_live_strategy_feature_plan,
+    )
     live_frame_loader = LoadLiveFeatureFrame(
         market_data_client,
-        build_strategy_feature_plan,
+        build_live_strategy_feature_plan,
         evaluate_indicator_range,
-        validate_strategy_spec,
+        validate_live_strategy_spec,
     )
     return ApplicationServices(
         indicator_catalog=IndicatorCatalog(indicator_registry),

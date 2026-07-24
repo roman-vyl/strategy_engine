@@ -16,6 +16,7 @@ from strategy_engine.indicators.contracts import (
 from strategy_engine.strategies.contracts import (
     ExecutedTradeReceipt,
     LiveEntryProjectionRequest,
+    LiveStrategySpec,
     ManagedReplayRequest,
     OpenTradeProjectionRequest,
     StrategyBatchVariant,
@@ -109,6 +110,23 @@ class StrategySpecEnvelopeModel(BaseModel):
         )
 
 
+class LiveStrategySpecModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_id: StrictStr
+    strategy_version: StrictStr
+    instance_id: StrictStr
+    raw_spec: dict[str, Any]
+
+    def to_domain(self) -> LiveStrategySpec:
+        return LiveStrategySpec(
+            strategy_id=self.strategy_id,
+            strategy_version=self.strategy_version,
+            instance_id=self.instance_id,
+            raw_spec=self.raw_spec,
+        )
+
+
 class StrategyOutputOptionsModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -188,7 +206,7 @@ class LiveMarketModel(BaseModel):
 class LiveEntryProjectionRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    strategy: StrategySpecEnvelopeModel
+    strategy: LiveStrategySpecModel
     market: LiveMarketModel
     target_bar_open_time_ms: StrictInt
 
@@ -276,7 +294,7 @@ class ExecutedTradeReceiptModel(BaseModel):
 class OpenTradeProjectionRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    strategy: StrategySpecEnvelopeModel
+    strategy: LiveStrategySpecModel
     market: LiveMarketModel
     target_bar_open_time_ms: StrictInt
     executed_trade_receipt: ExecutedTradeReceiptModel

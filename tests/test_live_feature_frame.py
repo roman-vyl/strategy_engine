@@ -16,12 +16,17 @@ from strategy_engine.indicators.application.evaluate_range import EvaluateIndica
 from strategy_engine.indicators.application.validate_plan import ValidateIndicatorPlan
 from strategy_engine.service.registries import IndicatorRegistry, StrategyRegistry
 from strategy_engine.strategies.application.build_feature_plan import BuildStrategyFeaturePlan
+from strategy_engine.strategies.application.build_live_strategy_feature_plan import (
+    BuildLiveStrategyFeaturePlan,
+)
 from strategy_engine.strategies.application.load_live_feature_frame import (
     LiveFeatureFrameRequest,
     LoadLiveFeatureFrame,
 )
-from strategy_engine.strategies.application.validate_spec import ValidateStrategySpec
-from strategy_engine.strategies.contracts import StrategySpecEnvelope
+from strategy_engine.strategies.application.validate_live_strategy_spec import (
+    ValidateLiveStrategySpec,
+)
+from strategy_engine.strategies.contracts import LiveStrategySpec
 from strategy_engine.strategies.ema_pullback.evaluator import EmaPullbackRangeEvaluator
 
 
@@ -118,13 +123,16 @@ def build_loader(market_data: FakeMarketData) -> LoadLiveFeatureFrame:
     )
     planner = BuildStrategyFeaturePlan()
     strategy_registry = StrategyRegistry(EmaPullbackRangeEvaluator(planner, indicator_evaluator))
-    validator = ValidateStrategySpec(strategy_registry, planner)
-    return LoadLiveFeatureFrame(market_data, planner, indicator_evaluator, validator)
+    live_planner = BuildLiveStrategyFeaturePlan()
+    validator = ValidateLiveStrategySpec(strategy_registry, live_planner)
+    return LoadLiveFeatureFrame(
+        market_data, live_planner, indicator_evaluator, validator
+    )
 
 
 def request(target: int = 3_300_000) -> LiveFeatureFrameRequest:
     return LiveFeatureFrameRequest(
-        strategy=StrategySpecEnvelope(
+        strategy=LiveStrategySpec(
             strategy_id="ema_pullback",
             strategy_version="v1",
             instance_id="fixture-live",

@@ -9,14 +9,21 @@ from strategy_engine.indicators.application.evaluate_range import EvaluateIndica
 from strategy_engine.indicators.application.validate_plan import ValidateIndicatorPlan
 from strategy_engine.service.registries import IndicatorRegistry, StrategyRegistry
 from strategy_engine.strategies.application.build_feature_plan import BuildStrategyFeaturePlan
+from strategy_engine.strategies.application.build_live_strategy_feature_plan import (
+    BuildLiveStrategyFeaturePlan,
+)
 from strategy_engine.strategies.application.evaluate_live_entry_projection import (
     EvaluateLiveEntryProjection,
 )
 from strategy_engine.strategies.application.evaluate_range import EvaluateStrategyRange
 from strategy_engine.strategies.application.load_live_feature_frame import LoadLiveFeatureFrame
+from strategy_engine.strategies.application.validate_live_strategy_spec import (
+    ValidateLiveStrategySpec,
+)
 from strategy_engine.strategies.application.validate_spec import ValidateStrategySpec
 from strategy_engine.strategies.contracts import (
     LiveEntryProjectionRequest,
+    LiveStrategySpec,
     StrategyRangeRequest,
     StrategySpecEnvelope,
 )
@@ -104,7 +111,11 @@ def services() -> tuple[EvaluateLiveEntryProjection, EvaluateStrategyRange, Stra
     evaluator = EmaPullbackRangeEvaluator(planner, indicator_eval)
     registry = StrategyRegistry(evaluator)
     validator = ValidateStrategySpec(registry, planner)
-    loader = LoadLiveFeatureFrame(market_data, planner, indicator_eval, validator)
+    live_planner = BuildLiveStrategyFeaturePlan()
+    live_validator = ValidateLiveStrategySpec(registry, live_planner)
+    loader = LoadLiveFeatureFrame(
+        market_data, live_planner, indicator_eval, live_validator
+    )
     strategy = StrategySpecEnvelope("ema_pullback", "v1", "live-1", spec())
     return (
         EvaluateLiveEntryProjection(loader),
@@ -115,8 +126,16 @@ def services() -> tuple[EvaluateLiveEntryProjection, EvaluateStrategyRange, Stra
 
 def test_live_entry_returns_stable_side_keys_and_provenance() -> None:
     live, _, strategy = services()
+    live_strategy = LiveStrategySpec(
+        strategy.strategy_id,
+        strategy.strategy_version,
+        strategy.instance_id,
+        strategy.raw_spec,
+    )
     result = live.execute(
-        LiveEntryProjectionRequest(strategy, MarketStream("BTCUSDT.P", "5m"), 3_300_000)
+        LiveEntryProjectionRequest(
+            live_strategy, MarketStream("BTCUSDT.P", "5m"), 3_300_000
+        )
     )
     assert set(result.plans_by_side) == {"long", "short"}
     assert result.plans_by_side["short"] is None
@@ -131,7 +150,15 @@ def test_live_entry_returns_stable_side_keys_and_provenance() -> None:
 def test_live_entry_matches_target_index_range_projection() -> None:
     live, range_eval, strategy = services()
     market = MarketStream("BTCUSDT.P", "5m")
-    live_result = live.execute(LiveEntryProjectionRequest(strategy, market, 3_300_000))
+    live_strategy = LiveStrategySpec(
+        strategy.strategy_id,
+        strategy.strategy_version,
+        strategy.instance_id,
+        strategy.raw_spec,
+    )
+    live_result = live.execute(
+        LiveEntryProjectionRequest(live_strategy, market, 3_300_000)
+    )
     range_result = range_eval.execute(
         StrategyRangeRequest(strategy, market, TimeRange(0, 3_600_000))
     )

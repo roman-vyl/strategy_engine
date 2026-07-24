@@ -16,22 +16,26 @@ from strategy_engine.domain.ranges import TimeRange, timeframe_duration_ms
 from strategy_engine.indicators.application.evaluate_range import EvaluateIndicatorRange
 from strategy_engine.indicators.contracts import FeatureFrame, IndicatorRangeRequest
 from strategy_engine.ports.market_data import MarketDataPort
-from strategy_engine.strategies.application.build_feature_plan import BuildStrategyFeaturePlan
-from strategy_engine.strategies.application.validate_spec import ValidateStrategySpec
-from strategy_engine.strategies.contracts import StrategySpecEnvelope
+from strategy_engine.strategies.application.build_live_strategy_feature_plan import (
+    BuildLiveStrategyFeaturePlan,
+)
+from strategy_engine.strategies.application.validate_live_strategy_spec import (
+    ValidateLiveStrategySpec,
+)
+from strategy_engine.strategies.contracts import LiveStrategySpec
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 
 
 @dataclass(frozen=True, slots=True)
 class LiveFeatureFrameRequest:
-    strategy: StrategySpecEnvelope
+    strategy: LiveStrategySpec
     market: MarketStream
     target_bar_open_time_ms: int
 
 
 @dataclass(frozen=True, slots=True)
 class LiveFeatureFrameBundle:
-    strategy: StrategySpecEnvelope
+    strategy: LiveStrategySpec
     market: MarketStream
     target_bar_open_time_ms: int
     target_index: int
@@ -51,9 +55,9 @@ class LoadLiveFeatureFrame:
     def __init__(
         self,
         market_data: MarketDataPort,
-        feature_planner: BuildStrategyFeaturePlan,
+        feature_planner: BuildLiveStrategyFeaturePlan,
         indicator_evaluator: EvaluateIndicatorRange,
-        strategy_validator: ValidateStrategySpec,
+        strategy_validator: ValidateLiveStrategySpec,
     ) -> None:
         self._market_data = market_data
         self._feature_planner = feature_planner

@@ -11,6 +11,8 @@ POST /v1/strategy-evaluations/open-trade
 ```
 
 The request SHALL contain a strategy envelope, market identity, `target_bar_open_time_ms`, and `executed_trade_receipt`.
+The live strategy envelope SHALL NOT contain the Research-only
+`compatibility_profile`.
 
 The endpoint SHALL be stateless and SHALL NOT accept previous managed state, actual exchange protection, quantity, or order commands.
 
@@ -20,6 +22,11 @@ Runtime SHALL call the endpoint only after ABI operational state confirms that t
 
 - **WHEN** ABI has confirmed the correlated position is currently open and a valid immutable receipt and matching strategy request are submitted
 - **THEN** Engine SHALL evaluate desired strategic state through the shared live FeatureFrame path.
+
+#### Scenario: Removed compatibility profile is supplied
+
+- **WHEN** an open-trade strategy envelope contains `compatibility_profile`
+- **THEN** strict HTTP validation SHALL reject the request before MDS access.
 
 ### Requirement: Publish typed HTTP transport contracts
 
