@@ -109,7 +109,7 @@ The resulting FeatureFrame SHALL contain target as its final bar.
 - **THEN** Engine SHALL return `upstream_contract_error`
 - **AND** SHALL NOT build a partial FeatureFrame.
 
-### Requirement: Propagate MDS-owned market data hash
+### Requirement: Keep the MDS-owned market data hash internal
 
 Engine SHALL propagate the `market_data_hash` returned by MDS for the exact loaded range.
 
@@ -118,7 +118,8 @@ Engine SHALL NOT independently calculate, reinterpret, or replace this hash.
 #### Scenario: Live FeatureFrame is built
 
 - **WHEN** MDS returns a valid candle range and hash
-- **THEN** the internal live bundle and final live response SHALL contain that unchanged hash.
+- **THEN** the internal live bundle SHALL contain that unchanged hash
+- **AND** the Runtime-facing live response SHALL NOT expose it.
 
 ### Requirement: Share the history policy across live use cases
 
@@ -128,7 +129,7 @@ Live-entry and open-trade evaluation SHALL invoke the same live FeatureFrame acq
 
 - **WHEN** live-entry and open-trade requests use the same strategy, market, target, and unchanged MDS data
 - **THEN** both SHALL be evaluated on the same requested candle range
-- **AND** SHALL observe the same market-data hash.
+- **AND** Engine's internal live bundles SHALL observe the same market-data hash.
 
 ### Requirement: Handle the two-read race without partial output
 

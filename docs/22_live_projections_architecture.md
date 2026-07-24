@@ -66,7 +66,9 @@ It must not own:
 
 The live-entry adapter receives a complete FeatureFrame and target index and invokes the strategy behavior needed to produce the target-bar potential-entry projection.
 
-Its externally relevant output includes the strategy plan data required by Runtime and ABI, such as planned entry, initial protection, locked exit profile, and strategy provenance.
+Its externally relevant output includes only the strategy plan data required by
+Runtime and ABI: side, source-plan time, planned entry, initial protection, and
+locked exit profile.
 
 It must not invoke open-position management behavior.
 
@@ -110,17 +112,23 @@ The first implementation may register only EMA Pullback, but the extension seam 
 
 Each strategy-specific adapter returns an internal projection result appropriate to that family.
 
-The generic application use case then combines that result with shared identity and provenance:
+The generic application use case then combines that result with the request
+metadata currently required by Runtime:
 
 ```text
 strategy-specific projection result
-    + strategy identity/version
+    + strategy identity
     + market identity
     + target bar
     -> generic application result
 ```
 
 The HTTP layer later performs serialization only. It must not inspect strategy internals or reconstruct the projection from raw evaluator objects.
+
+The response-level strategy, instance, market, and target values are temporary
+compatibility echoes for the current Runtime client. They are not copied into
+the receipt and are not the final identity design. Their removal requires a
+separate coordinated Runtime/Engine contract change.
 
 ## 7. Encapsulation invariant
 
@@ -171,12 +179,12 @@ strategies/application/load_live_feature_frame.py
 
 strategies/application/evaluate_live_entry_projection.py
     -> resolves the live-entry registry
-    -> adds generic identity and provenance
+    -> adds current Runtime-compatible response metadata
 
 strategies/application/evaluate_open_trade_projection.py
     -> validates the receipt before market access
     -> resolves the open-trade registry
-    -> adds generic identity and provenance
+    -> adds current Runtime-compatible response metadata
 
 strategies/live_projections/
     -> neutral protocols, separate registries, default registrations

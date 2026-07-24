@@ -19,15 +19,15 @@
 - [x] Return stable `long` and `short` keys with complete plans or `null`.
 - [x] Enforce normalized decimal serialization, supported profiles, and side-relative price geometry.
 - [x] Add `POST /v1/strategy-evaluations/live-entry` request/response models, route, wiring, and OpenAPI contract.
-- [x] Test long, short, neutral, disabled-side, incomplete-triple, invalid-geometry, and config-hash behavior.
+- [x] Test long, short, neutral, disabled-side, incomplete-triple, and invalid-geometry behavior.
 - [x] Add parity tests proving the live plan matches target-index range evaluation on the same full-ready-history fixture.
 
 ## Slice 3 — Receipt contract and pre-market validation
 
-- [x] Add immutable `ExecutedTradeReceipt` domain and HTTP models with the specified identity, time, price, and profile fields.
-- [x] Validate IDs, enums, alignment, time ordering, normalized decimal text, and side-relative stop/entry/take geometry.
+- [x] Add immutable `ExecutedTradeReceipt` domain and HTTP models with the specified side, time, price, and profile fields.
+- [x] Validate enums, alignment, time ordering, normalized decimal text, and side-relative stop/entry/take geometry.
 - [x] Validate receipt time alignment against the single request market timeframe before any MDS call.
-- [x] Add typed `trade_contract_mismatch` and `trade_history_unavailable` application errors and stable HTTP mappings.
+- [x] Add typed `trade_history_unavailable` application error and stable HTTP mapping.
 - [x] Test that all pre-market validation failures perform zero MDS reads.
 
 ## Slice 4 — Start-after-entry managed projection
@@ -36,7 +36,7 @@
 - [x] Keep public `/managed-replay` behavior and fixtures unchanged.
 - [x] Exclude entry-bar OHLC from MFE/MAE and all managed/close rules.
 - [x] Preserve `bars_in_trade = 1` on entry and `bars_in_trade = 2` on the first post-entry bar.
-- [x] Use `planned_entry_price` for all entry-relative managed mathematics while retaining executed price only as receipt provenance.
+- [x] Use `planned_entry_price` for all entry-relative managed mathematics while retaining executed price only as an immutable execution fact.
 - [x] Seed desired stop/take from exact receipt Decimal levels, avoid no-op float round trips, and enforce tighten-only stop composition.
 - [x] Test entry-target, first-post-entry, planned/executed divergence, phase, MFE/MAE, stop, and take semantics.
 
@@ -45,7 +45,7 @@
 - [x] Add locked-profile standard signal selection for receipt side at target index.
 - [x] Reuse canonical strategy-level composition/attribution only among target-active strategic close rules.
 - [x] Do not run backtest execution-fill arbitration between protective-level hits and strategic close signals in the live open-trade path.
-- [x] Build `OpenTradeProjectionResult` around `desired_protection`, `close_signal`, provenance, and diagnostics.
+- [x] Build `OpenTradeProjectionResult` around `desired_protection`, `close_signal`, current Runtime-compatible response metadata, and diagnostics.
 - [x] Define desired stop/take as post-target-bar levels effective after target processing, not as inferred fills inside target.
 - [x] Confirm that intermediate transient strategic exits are not recovered and document the accepted v1 trading risk in tests.
 - [x] Test multiple simultaneous strategic close rules and preserve existing canonical strategy attribution.
@@ -67,7 +67,7 @@
 - [x] Add `POST /v1/strategy-evaluations/open-trade` request/response models, route, wiring, serialization, and OpenAPI contract.
 - [x] Validate source-plan, entry, and target coverage after live frame acquisition.
 - [x] Return exact typed errors without partial desired state.
-- [x] Test deterministic identical retries over the same market-data hash.
+- [x] Test deterministic identical retries over the same MDS candle response.
 
 ## Slice 7 — Compatibility integration and performance gates
 
@@ -86,7 +86,7 @@
 - [ ] Verify Engine does not import Runtime or ABI packages.
 - [ ] Benchmark maximum configured ready history on 5m and 1h, multiple active instances, latency, memory, and MDS payload size.
 - [ ] Record whether internal caching is needed before production without changing the public v1 contracts.
-- [ ] Update maintained architecture and API documentation.
+- [x] Update maintained architecture and API documentation.
 - [ ] Run the full repository verification suite.
 - [x] Run strict OpenSpec validation for `strategy-live-entry-open-trade-v1`.
 
@@ -98,7 +98,7 @@
 - [ ] Runtime calls open-trade only after ABI reports the correlated position is currently open.
 - [ ] Open-trade accepts an immutable receipt and returns only post-target-bar desired protection plus target-active strategic close signal.
 - [ ] Management starts after the entry bar and uses planned-price basis.
-- [ ] Receipt config binding is validated before MDS access.
+- [ ] Receipt intrinsic time, enum, decimal, and price-geometry validation runs before MDS access.
 - [ ] Source-plan and entry coverage failures are explicit errors.
 - [ ] Missed transient exits remain an explicitly tested accepted trading risk v1.
 - [ ] Protective-order fills are ABI/exchange facts and are never inferred by the live open-trade path from OHLC.

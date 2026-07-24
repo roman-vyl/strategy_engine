@@ -190,7 +190,16 @@ MDS bounds
 
 Новый MDS endpoint не требуется. На один live calculation допускаются один bounds read и один candle-range read. Research `/range`, `/range-batch` и compatibility `/managed-replay` остаются неизменными.
 
-Live-entry возвращает готовый target-bar plan с entry/stop/take, locked exit profile и source config hash. Runtime хранит его как mutable pending snapshot. После ABI fill Runtime создаёт immutable executed-trade receipt; `source_config_hash` находится внутри receipt.
+Live-entry возвращает готовый target-bar plan с entry/stop/take и locked exit
+profile. Runtime хранит его как mutable pending snapshot. После ABI fill Runtime
+создаёт immutable executed-trade receipt только из расчётных полей плана и факта
+исполнения: side, source-plan/entry times, planned/executed entry, initial
+stop/take и locked profile. Receipt не дублирует strategy, instance или market
+identity и не содержит Runtime trade ID, ABI correlation либо hash provenance.
+
+Текущие live responses временно сохраняют `strategy_id`, `instance_id`, market и
+target как эхо-поля совместимости существующего Runtime-клиента. Их удаление
+является отдельным согласованным изменением обеих сторон контракта.
 
 Перед open-trade Runtime обязан запросить ABI operational state. Если stop/take или другое exchange event уже закрыло позицию на завершившемся баре, ABI сообщает `not open`, и Runtime не вызывает Engine. Receipt сам по себе не доказывает существование позиции.
 
@@ -512,7 +521,8 @@ Strategy Engine owns:
 - stateless post-entry management replay;
 - locked-profile standard exit selection;
 - post-target desired stop/take and target-active strategic close-signal projection;
-- strategy config and market-data provenance.
+- internal strategy validation and MDS provenance handling without exposing hashes
+  in Runtime-facing live responses.
 
 No Engine-hosted Runtime state, incremental session or per-component RPC is part of the target design.
 

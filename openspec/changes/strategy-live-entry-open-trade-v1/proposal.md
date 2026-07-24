@@ -31,7 +31,7 @@ Both calculations must use the same live market-history policy. Runtime must not
   - Each plan contains the planned entry, initial stop, initial take, source-plan bar, and locked exit profile.
 - Add `POST /v1/strategy-evaluations/open-trade`.
   - It accepts an immutable executed-trade receipt created from the exact filled live-entry plan plus ABI fill facts.
-  - It validates strategy, instance, market, time ordering, price geometry, and coverage before calculation.
+  - It validates receipt time ordering and price geometry before MDS access, then validates source-plan, entry, and target coverage.
   - It replays management only from the bar after entry through the requested target bar.
   - Runtime may call it only after an ABI operational-state check confirms that the correlated position is still open.
   - It returns post-target-bar desired protection and strategic close-signal state, not exchange commands or simulated fills.

@@ -10,9 +10,11 @@ Strategy Engine SHALL expose:
 POST /v1/strategy-evaluations/open-trade
 ```
 
-The request SHALL contain a strategy envelope, market identity, `target_bar_open_time_ms`, and `executed_trade_receipt`.
-The live strategy envelope SHALL NOT contain the Research-only selectors
-`strategy_version` or `compatibility_profile`.
+The request SHALL contain exactly a live strategy envelope
+(`strategy_id`, temporarily retained `instance_id`, and `raw_spec`), market
+identity (`ticker` and `base_timeframe`), `target_bar_open_time_ms`, and
+`executed_trade_receipt`. Unknown fields SHALL be rejected by the strict HTTP
+model.
 
 The endpoint SHALL be stateless and SHALL NOT accept previous managed state, actual exchange protection, quantity, or order commands.
 
@@ -22,16 +24,6 @@ Runtime SHALL call the endpoint only after ABI operational state confirms that t
 
 - **WHEN** ABI has confirmed the correlated position is currently open and a valid immutable receipt and matching strategy request are submitted
 - **THEN** Engine SHALL evaluate desired strategic state through the shared live FeatureFrame path.
-
-#### Scenario: Removed compatibility profile is supplied
-
-- **WHEN** an open-trade strategy envelope contains `compatibility_profile`
-- **THEN** strict HTTP validation SHALL reject the request before MDS access.
-
-#### Scenario: Removed strategy version is supplied
-
-- **WHEN** an open-trade strategy envelope contains `strategy_version`
-- **THEN** strict HTTP validation SHALL reject the request before MDS access.
 
 ### Requirement: Publish typed HTTP transport contracts
 
@@ -79,7 +71,9 @@ The generic use case SHALL NOT contain strategy-family-specific calculation bran
 
 The adapter SHALL receive explicit validated inputs, the complete live FeatureFrame, target index, and immutable receipt. It MAY reuse the existing broad strategy evaluator and full strategy FeaturePlan in v1. It SHALL return an internal strategy-specific projection containing desired protection, target-active strategic close signal, and diagnostics.
 
-The generic application layer SHALL add shared trade, strategy, market, target, config-hash, and market-data-hash provenance to produce `OpenTradeProjectionResult`.
+The generic application layer SHALL add the request metadata currently required
+by Runtime to produce `OpenTradeProjectionResult`. It SHALL NOT add receipt
+identity, configuration-hash, or MDS-hash provenance.
 
 #### Scenario: EMA Pullback open-trade projection
 
@@ -110,31 +104,10 @@ locked_exit_profile
 
 Times SHALL be aligned. Prices SHALL be positive normalized decimal text. Side and profile SHALL use supported enums.
 
-The receipt SHALL NOT duplicate request identity or market fields
-(`strategy_id`, `instance_id`, `ticker`, `base_timeframe`). It also SHALL NOT
-contain `trade_id`, `source_config_hash`, another configuration hash,
-`abi_entry_correlation`, calculation origin, warmup, current phase, MFE/MAE,
-active stop/take, quantity, order IDs, or FeatureFrame data.
-
-#### Scenario: Removed receipt echo is supplied
-
-- **WHEN** a receipt contains a duplicated strategy or market field
-- **THEN** strict HTTP validation SHALL reject the request before MDS access.
-
-#### Scenario: Removed Runtime trade identity is supplied
-
-- **WHEN** a receipt contains the removed `trade_id` field
-- **THEN** strict HTTP validation SHALL reject the request before MDS access.
-
-#### Scenario: Removed configuration hash is supplied
-
-- **WHEN** a receipt contains the removed `source_config_hash` field
-- **THEN** strict HTTP validation SHALL reject the request before MDS access.
-
-#### Scenario: Removed ABI correlation is supplied
-
-- **WHEN** a receipt contains the removed `abi_entry_correlation` field
-- **THEN** strict HTTP validation SHALL reject the request before MDS access.
+The strict receipt model SHALL contain no fields beyond the schema above. It
+SHALL remain limited to immutable calculation inputs and SHALL NOT duplicate
+outer request metadata, Runtime lifecycle state, ABI state, quantity, order
+state, or FeatureFrame data.
 
 #### Scenario: Receipt is complete
 
@@ -208,7 +181,7 @@ Open-trade managed calculations SHALL use `planned_entry_price` as the strategic
 
 - **WHEN** receipt planned and executed entry prices differ
 - **THEN** managed calculations SHALL use planned entry price
-- **AND** response identity SHALL still preserve the receipt-bound trade.
+- **AND** the executed price SHALL remain an unchanged calculation input fact.
 
 ### Requirement: Start management after the entry bar
 
@@ -322,14 +295,15 @@ diagnostics.mae_pct
 diagnostics.managed_events[]
 ```
 
-The response SHALL NOT contain a payload-level `contract_version`; the endpoint
-and its published HTTP schema define the contract.
-The response SHALL NOT contain `source_config_hash` or another configuration hash.
-The response SHALL NOT contain `trade_id` or a replacement Runtime trade-cycle ID.
-
 Prices and percentages SHALL serialize as normalized decimal text or `null` where allowed.
 
 The response SHALL NOT contain exchange commands, quantity, exchange order IDs, fill price, exit time, realized PnL, or Bybit-specific parameters.
+The strict response model SHALL contain no fields beyond the schema above.
+
+The response-level strategy, instance, market, and target fields SHALL be treated
+as temporary compatibility echoes for the current Runtime consumer. They SHALL
+NOT be interpreted as receipt identity. Removing them requires a separate
+coordinated Runtime/Engine contract change.
 
 #### Scenario: No strategic close is required
 

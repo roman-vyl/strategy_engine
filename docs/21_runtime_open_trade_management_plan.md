@@ -28,7 +28,7 @@ POST /v1/strategy-evaluations/open-trade
 3. `EvaluateLiveEntryProjection`.
 4. `EvaluateOpenTradeProjection`.
 5. HTTP request/response DTOs и routes для двух use case.
-6. Live pending-plan projection с locked profile и config hash.
+6. Live pending-plan projection с locked profile.
 7. Immutable executed-trade receipt input.
 8. Start-after-entry managed replay variant.
 9. Locked-profile standard exit composition.
@@ -102,7 +102,7 @@ to_ms   = target_bar_open_time_ms + timeframe_duration
 
 ```text
 LiveFeatureBundle
-  validated strategy/config_hash
+  validated strategy
   market
   target index
   MarketFrame / market_data_hash
@@ -130,10 +130,8 @@ Bounds и candles являются двумя HTTP reads. Если stream тер
 LiveEntryProjectionRequest
   strategy
     strategy_id
-    strategy_version
     instance_id
     raw_spec
-    compatibility_profile
   market
     ticker
     base_timeframe
@@ -142,8 +140,8 @@ LiveEntryProjectionRequest
 
 Validation:
 
-- identity fields непустые;
-- supported strategy/version/profile;
+- обязательные request fields непустые;
+- strategy поддерживается live registry;
 - target aligned to base timeframe;
 - market совпадает с Runtime-configured base stream на уровне Runtime contract, а Engine проверяет внутреннюю request consistency.
 
@@ -161,12 +159,9 @@ Validation:
 ```text
 LiveEntryProjectionResult
   strategy_id
-  strategy_version
   instance_id
-  source_config_hash
   market
   target_bar_open_time_ms
-  market_data_hash
   plans_by_side
     long: LiveEntryPlan | null
     short: LiveEntryPlan | null
@@ -186,7 +181,8 @@ Rules:
 - profile берётся на том же target index;
 - Runtime не извлекает profile из отдельного vector response;
 - neutral result является успешным response с null plans;
-- source config hash вычисляется Engine из request strategy envelope.
+- strategy/instance/market/target пока возвращаются как временные эхо-поля
+  совместимости текущего Runtime и удаляются только отдельным двусторонним change.
 
 ## 4. Pending plan и fill boundary
 
@@ -198,8 +194,6 @@ Runtime может заменить plan на следующем base bar и п�
 
 ```text
 exact filled LiveEntryPlan
-+ source strategy identity/config hash
-+ market identity
 + ABI fill facts
 ```
 
@@ -209,14 +203,6 @@ Engine не принимает partially completed receipt и не разреш�
 
 ```text
 ExecutedTradeReceipt
-  trade_id
-  instance_id
-  strategy_id
-  strategy_version
-  source_config_hash
-  ticker
-  base_timeframe
-
   side
   source_plan_bar_open_time_ms
   entry_bar_open_time_ms
@@ -226,20 +212,16 @@ ExecutedTradeReceipt
   initial_stop_price
   initial_take_price
   locked_exit_profile
-
-  abi_entry_correlation
 ```
 
 Invariants:
 
-- IDs непустые;
 - side — `long` или `short`;
 - prices finite и positive;
 - stop/take геометрически соответствуют side;
 - locked profile — один из поддерживаемых profile IDs;
 - source-plan и entry bars aligned;
 - `source_plan_bar_open_time_ms <= entry_bar_open_time_ms`;
-- source config hash непустой и canonical.
 
 Receipt не содержит:
 
@@ -269,15 +251,15 @@ OpenTradeProjectionRequest
 До MDS calls:
 
 ```text
-request strategy_id == receipt.strategy_id
-request strategy_version == receipt.strategy_version
-request instance_id == receipt.instance_id
-request market ticker/timeframe == receipt market
-request.strategy.config_hash == receipt.source_config_hash
 source_plan_bar <= entry_bar <= target_bar
+receipt side/profile поддерживаются
+receipt prices positive и normalized
+stop/planned-entry/take geometry соответствует side
 ```
 
-Mismatch является contract error. Engine не пытается управлять старой сделкой новой конфигурацией.
+Receipt не дублирует request identity или market. Поэтому до MDS выполняется
+только intrinsic receipt validation; outer strategy/instance/market остаются
+единственным источником этих значений.
 
 ### 6.3 Coverage validation
 
@@ -360,14 +342,10 @@ Intermediate transient strategic close signals не становятся termina
 
 ```text
 OpenTradeProjectionResult
-  trade_id
   instance_id
   strategy_id
-  strategy_version
-  source_config_hash
   market
   target_bar_open_time_ms
-  market_data_hash
 
   desired_protection.stop_price
   desired_protection.take_price | null
@@ -385,6 +363,10 @@ OpenTradeProjectionResult
 ```
 
 Desired protection — состояние после обработки target bar, предназначенное для последующего realtime движения. Оно не утверждает, что уровни были активны или исполнены внутри уже завершившегося target bar.
+
+`instance_id`, `strategy_id`, market и target пока сохраняются в response только
+для совместимости с текущим Runtime. Они не являются receipt identity; их
+удаление отложено в отдельный согласованный Runtime/Engine change.
 
 Engine не возвращает:
 
@@ -473,14 +455,11 @@ V1 полагается на существующие MDS ready/continuity/no-au
 - neutral/no plan;
 - incomplete entry/stop/take yields null plan;
 - locked profile from same target index;
-- source config hash correctness;
 - full-ready-history parity with range evaluator fixture.
 
 ### Receipt validation
 
-- config mismatch rejected before MDS read;
-- instance/strategy/market mismatch rejected;
-- empty IDs rejected;
+- unknown receipt fields rejected before MDS read;
 - invalid side/profile rejected;
 - invalid time ordering rejected;
 - invalid stop/take geometry rejected.
@@ -563,12 +542,12 @@ LoadLiveFeatureFrame
 
 HTTP success response должен быть точной сериализацией `OpenTradeProjectionResult`:
 
-- identity и provenance;
+- current Runtime-compatible response metadata;
 - `desired_protection`;
 - `close_signal`;
 - `diagnostics`.
 
 OpenAPI должен публиковать именованные request/response models и единый typed error
-envelope для validation, contract mismatch, readiness, target commitment, history
+envelope для validation, readiness, target commitment, history
 coverage, unsupported capability и upstream failures. При ошибке частичный desired
 state не возвращается.

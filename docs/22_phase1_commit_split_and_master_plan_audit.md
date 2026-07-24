@@ -120,7 +120,8 @@ Phase 1 conforms to the master plan in the following areas:
 4. **Research contracts remain unchanged.** `load_range()`, `/range`, `/range-batch`, and `/managed-replay` are not modified.
 5. **One bounds read plus one bounded candle read.** The two-read architecture and its race semantics are preserved.
 6. **Target need not be absolute latest.** A committed older target is accepted and the frame ends exactly at that target.
-7. **MDS provenance remains authoritative.** `market_data_hash` is propagated without recalculation.
+7. **MDS provenance remains authoritative inside Engine.** `market_data_hash` is
+   propagated internally without recalculation and is not exposed to Runtime.
 8. **Existing calculation code is reused.** Phase 1 does not introduce a second indicator or HTF implementation.
 9. **Application boundaries remain direct.** Strategy application calls Indicator application in-process and does not use loopback HTTP.
 10. **OpenSpec Slice 1 acceptance is covered by tests.** Ready, non-ready, empty, out-of-range, malformed, mismatched, incomplete, and race cases are exercised.
@@ -214,7 +215,7 @@ Responsibility:
 
 - evaluate the existing EMA Pullback strategy over the Phase 1 FeatureFrame;
 - project one atomic target-bar plan or `null` per side;
-- preserve Engine-owned config and market-data provenance.
+- keep configuration and MDS hashes out of the Runtime-facing live result.
 
 ### Commit 7 — Expose live-entry HTTP contract
 
@@ -270,6 +271,7 @@ The live-entry HTTP increment introduces no architecture divergence from the mas
 - it does not create ABI commands or Runtime state;
 - the existing Phase 1 `bounds + candles` path remains the sole live history acquisition path;
 - the existing range endpoints and managed-replay endpoint remain unchanged;
-- Engine-owned `source_config_hash` and MDS-owned `market_data_hash` remain authoritative.
+- Engine retains internal validation and MDS hash ownership without exposing
+  either hash in the Runtime-facing live contract.
 
 No intentional Phase 2 divergence requires a master-plan correction.

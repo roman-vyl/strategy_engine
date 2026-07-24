@@ -10,9 +10,10 @@ Strategy Engine SHALL expose:
 POST /v1/strategy-evaluations/live-entry
 ```
 
-The request SHALL contain a strategy envelope, market identity, and `target_bar_open_time_ms`.
-The live strategy envelope SHALL NOT contain the Research-only selectors
-`strategy_version` or `compatibility_profile`.
+The request SHALL contain exactly a live strategy envelope
+(`strategy_id`, temporarily retained `instance_id`, and `raw_spec`), market
+identity (`ticker` and `base_timeframe`), and `target_bar_open_time_ms`.
+Unknown fields SHALL be rejected by the strict HTTP model.
 
 The endpoint SHALL be stateless and SHALL NOT accept Runtime lifecycle or ABI order state.
 
@@ -20,16 +21,6 @@ The endpoint SHALL be stateless and SHALL NOT accept Runtime lifecycle or ABI or
 
 - **WHEN** a valid request is submitted for a supported strategy and market
 - **THEN** Engine SHALL evaluate the requested target through the shared live FeatureFrame path.
-
-#### Scenario: Removed compatibility profile is supplied
-
-- **WHEN** a live-entry strategy envelope contains `compatibility_profile`
-- **THEN** strict HTTP validation SHALL reject the request before MDS access.
-
-#### Scenario: Removed strategy version is supplied
-
-- **WHEN** a live-entry strategy envelope contains `strategy_version`
-- **THEN** strict HTTP validation SHALL reject the request before MDS access.
 
 ### Requirement: Delegate through a strategy-family live-entry adapter
 
@@ -39,7 +30,8 @@ The generic use case SHALL NOT contain strategy-family-specific calculation bran
 
 The adapter SHALL receive explicit validated inputs and a complete live FeatureFrame, MAY reuse the existing broad strategy evaluator in v1, and SHALL return an internal strategy-specific live-entry projection.
 
-The generic application layer SHALL add shared identity and provenance and SHALL produce the public `LiveEntryProjectionResult`.
+The generic application layer SHALL add the request metadata currently required
+by Runtime and SHALL produce the public `LiveEntryProjectionResult`.
 
 #### Scenario: EMA Pullback live-entry projection
 
@@ -53,7 +45,7 @@ The generic application layer SHALL add shared identity and provenance and SHALL
 - **THEN** Engine SHALL return a typed unsupported-strategy error
 - **AND** SHALL NOT fall back to a strategy-specific conditional branch.
 
-### Requirement: Return a stable live-entry response identity
+### Requirement: Return the current Runtime-compatible live-entry response
 
 A successful response SHALL contain:
 
@@ -67,11 +59,13 @@ plans_by_side.long
 plans_by_side.short
 ```
 
-The response SHALL NOT contain a payload-level `contract_version`; the endpoint
-and its published HTTP schema define the contract.
-The response SHALL NOT contain `source_config_hash` or another configuration hash.
-
 Both side keys SHALL always be present and SHALL contain either a complete plan object or `null`.
+The strict response model SHALL contain no fields beyond the schema above.
+
+The response-level strategy, instance, market, and target fields SHALL be treated
+as temporary compatibility echoes for the current Runtime consumer. They SHALL
+NOT be copied into the executed-trade receipt. Removing them requires a separate
+coordinated Runtime/Engine contract change.
 
 #### Scenario: No plan on either side
 

@@ -2,9 +2,12 @@
 
 ## Статус
 
-Документ фиксирует фактическую текущую точку Strategy Engine и согласованную целевую границу для live-интеграции со Strategy Runtime.
+Документ начинался как аудит исходной точки, а теперь синхронизирован с
+реализованной live-границей Strategy Engine. Исторические варианты контракта с
+дублирующими ID и hash-полями удалены; нормативные детали находятся в активном
+OpenSpec change `strategy-live-entry-open-trade-v1`.
 
-В актуальном Engine существуют только:
+Research-поверхность Engine сохраняет:
 
 ```http
 POST /v1/strategy-evaluations/range
@@ -14,7 +17,7 @@ POST /v1/strategy-evaluations/managed-replay
 
 Endpoint `current-point` отсутствует и не является частью целевой архитектуры.
 
-Согласованная live-граница добавляет два отдельных Runtime-facing use case:
+Реализованная live-граница содержит два отдельных Runtime-facing use case:
 
 ```http
 POST /v1/strategy-evaluations/live-entry
@@ -103,7 +106,6 @@ Runtime не должен получать полный исторический
 ```text
 PotentialEntry[target_index]
 exit_policy.profile_{side}[target_index]
-config_hash
 source bar identity
 ```
 
@@ -221,10 +223,8 @@ POST /v1/strategy-evaluations/live-entry
 LiveEntryProjectionRequest
   strategy
     strategy_id
-    strategy_version
     instance_id
     raw_spec
-    compatibility_profile
   market
     ticker
     base_timeframe
@@ -236,12 +236,9 @@ Engine строит live FeatureFrame и возвращает только targe
 ```text
 LiveEntryProjectionResult
   strategy_id
-  strategy_version
   instance_id
-  source_config_hash
   market
   target_bar_open_time_ms
-  market_data_hash
   plans_by_side
     long | short
       side
@@ -258,20 +255,17 @@ LiveEntryProjectionResult
 
 Runtime может bar-to-bar заменять mutable pending-entry snapshot. Это Runtime lifecycle, а не Engine state.
 
+Поля `strategy_id`, `instance_id`, `market` и target в response пока остаются
+эхо-полями совместимости для текущего Runtime-клиента. Они не переносятся в
+receipt. Их удаление требует отдельного согласованного изменения обеих сторон
+контракта.
+
 ## 5. Executed-trade receipt после fill
 
 Когда ABI подтверждает fill конкретного pending plan, Runtime создаёт immutable receipt:
 
 ```text
 ExecutedTradeReceipt
-  trade_id
-  instance_id
-  strategy_id
-  strategy_version
-  source_config_hash
-  ticker
-  base_timeframe
-
   side
   source_plan_bar_open_time_ms
   entry_bar_open_time_ms
@@ -281,16 +275,14 @@ ExecutedTradeReceipt
   initial_stop_price
   initial_take_price
   locked_exit_profile
-
-  abi_entry_correlation
 ```
 
 Семантика:
 
-- `source_config_hash` находится внутри receipt;
 - `planned_entry_price`, initial stop/take и profile копируются из исполнившегося live-entry plan;
 - `executed_entry_price` добавляется из подтверждённого ABI fill;
 - receipt создаётся один раз и не дописывается последующими managed outputs;
+- strategy, instance и market берутся только из внешнего request и не дублируются в receipt;
 - current ABI stop/take, quantity и order IDs не становятся strategy inputs.
 
 ## 6. Open-trade projection после fill
@@ -314,13 +306,11 @@ OpenTradeProjectionRequest
 До MDS read Engine проверяет:
 
 ```text
-request strategy_id/version/instance_id == receipt identity
-request market == receipt ticker/timeframe
-recomputed request.strategy.config_hash == receipt.source_config_hash
-trade_id и instance_id непустые
 side ∈ {long, short}
 locked_exit_profile входит в разрешённый contract
 source_plan_bar <= entry_bar <= target_bar
+все receipt prices являются positive normalized decimal text
+stop/planned-entry/take geometry соответствует side
 ```
 
 После построения FeatureFrame Engine проверяет:
@@ -343,22 +333,21 @@ target_bar является последним bar загруженного fram
 
 ```text
 OpenTradeProjectionResult
-  trade_id
   instance_id
+  strategy_id
+  market
   target_bar_open_time_ms
-  desired_stop_price
-  desired_take_price | null
-  close_position
-  close_reasons
-  phase
-  bars_in_trade
-  mfe
-  mae
-  managed_events
-  market_data_hash
+  desired_protection.stop_price
+  desired_protection.take_price | null
+  close_signal
+  diagnostics
 ```
 
 `break_even_stop` является plan-basis стратегическим уровнем, а не гарантией фактического PnL `0.00` после slippage, commissions и funding.
+
+Response identity/market/target остаются временными эхо-полями совместимости
+текущего Runtime. Receipt-bound trade ID, ABI correlation и hash provenance в
+live-контракт не возвращаются.
 
 ## 7. Пропущенные transient exits
 

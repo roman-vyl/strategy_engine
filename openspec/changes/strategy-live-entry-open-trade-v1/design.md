@@ -146,7 +146,13 @@ Each strategy-family adapter SHALL:
 - return an internal strategy-specific projection result;
 - avoid HTTP, Runtime lifecycle, ABI state, exchange commands, MDS transport, and persisted mutable session state.
 
-The generic application use case SHALL combine the internal projection result with shared identity and provenance to produce the public transport-neutral result. The future HTTP layer SHALL serialize that result only.
+The generic application use case SHALL combine the internal projection result with
+the request metadata currently required by Runtime to produce the public
+transport-neutral result. The HTTP layer SHALL serialize that result only.
+`strategy_id`, `instance_id`, market, and target echoes in the live responses are
+temporary Runtime-compatibility fields, not receipt provenance or a permanent
+identity design. Removing those response echoes requires a coordinated follow-up
+change on both sides of the Runtime/Engine boundary.
 
 For v1, both adapters MAY reuse the existing full strategy FeaturePlan and broad strategy evaluator. The change SHALL NOT require an entry-only or exit-only FeaturePlan, nor a duplicated live-only strategy formula pipeline. Narrow feature or evaluator specialization is deferred until performance evidence requires it.
 
@@ -214,6 +220,11 @@ neutral
 Both `long` and `short` keys are always present. Decimal prices use normalized decimal text. A neutral response with both sides `null` is successful.
 
 Engine does not persist this result. Runtime may replace its mutable pending snapshot on a later bar. ABI correlation determines which exact pending snapshot was filled.
+
+The response-level strategy, instance, market, and target fields shown above are
+retained only for compatibility with the current Runtime consumer. The receipt
+does not duplicate them. Their later removal is a separate coordinated contract
+change.
 
 ## 4. Fill boundary and immutable receipt
 
@@ -331,7 +342,10 @@ For a confirmed-open position, `EvaluateOpenTradeProjection` resolves the strate
 
 The live open-trade path MUST NOT run the backtest execution simulator's same-bar arbitration between protective-price hits and strategic close signals. That arbitration existed because backtest had to invent a single fill from OHLC data when no real orders or exchange events existed. In live operation, protective fills are real exchange facts resolved before Engine invocation by the ABI gate.
 
-The open-trade adapter SHALL return a strategy-specific internal projection containing only the calculated protection, strategic close signal, and strategy diagnostics. The generic application use case SHALL add strategy identity, market identity, and target bar to form `OpenTradeProjectionResult`.
+The open-trade adapter SHALL return a strategy-specific internal projection
+containing only the calculated protection, strategic close signal, and strategy
+diagnostics. The generic application use case SHALL add the response metadata
+currently required by Runtime to form `OpenTradeProjectionResult`.
 
 The managed calculation core carries no Runtime trade identity. Public
 `/managed-replay` preserves its existing Research-facing `trade_id` through a
@@ -377,6 +391,11 @@ Only the requested target bar determines the returned `close_signal`. A transien
 
 `diagnostics` are optional for execution and exist for audit and parity. Runtime/ABI must not treat phase, MFE/MAE, or managed events as exchange commands.
 
+The response-level strategy, instance, market, and target fields are temporary
+compatibility echoes for the current Runtime client. They are not part of the
+executed-trade receipt and are not the intended final cross-module identity
+surface. Removing them is deferred to a coordinated Runtime/Engine change.
+
 For live open-trade projection, `exit_management.mode` is not a capability gate. Missing `mode`, `diagnostic_only`, and `managed` all use the same post-entry projection path and evaluate the configured management rules. The historical public `/managed-replay` contract retains its existing managed-mode requirement.
 
 Receipt and public protection prices remain canonical decimal text at service boundaries. Receipt-seeded values are preserved as `Decimal` and are not round-tripped through float when unchanged. Exchange tick-size, lot-step, and order-aware quantization are explicitly owned by ABI, not Strategy Engine.
@@ -401,7 +420,6 @@ The new use cases define these typed outcomes:
 | Code | HTTP | Meaning |
 |---|---:|---|
 | `invalid_request` | 422 | schema, alignment, enum, decimal, time-order, or price-geometry failure |
-| `trade_contract_mismatch` | 409 | request strategy/instance/market/config does not match receipt |
 | `market_stream_not_found` | 404 | MDS bounds reports unknown stream |
 | `market_stream_not_ready` | 409 | stream exists but state is not `ready`, or bounds are empty |
 | `target_bar_not_committed` | 409 | target lies outside committed bounds |
