@@ -28,8 +28,9 @@ def main() -> None:
             continue
         actual = sha256(destination)
         if actual != record["sha256"]:
+            expected = record["sha256"]
             failures.append(
-                f"hash mismatch: {record['destination']} expected={record['sha256']} actual={actual}"
+                f"hash mismatch: {record['destination']} expected={expected} actual={actual}"
             )
     if failures:
         raise SystemExit("\n".join(failures))

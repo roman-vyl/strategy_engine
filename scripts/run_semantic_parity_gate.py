@@ -8,7 +8,7 @@ import hashlib
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -85,7 +85,7 @@ def main() -> int:
     )
     report = {
         "report_version": 1,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "strategy_id": manifest["strategy_id"],
         "compatibility_profile": manifest["compatibility_profile"],
         "manifest_sha256": sha256(args.manifest),

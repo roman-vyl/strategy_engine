@@ -79,30 +79,31 @@
 - [x] Introduce a live-specific strategy input and remove the Research-only `compatibility_profile` from both live request schemas without changing Research envelopes.
 - [x] Remove the unused `strategy_version` selector and echo from live requests, receipts, and responses while preserving Research version contracts.
 - [x] Remove duplicated strategy, instance, and market echoes from the executed-trade receipt and use the outer request as their single source.
-- [ ] Prove `/range`, `/range-batch`, PotentialEntry vectors, exit-policy vectors, and `/managed-replay` remain unchanged.
+- [x] Remove stale generated distributions and egg-info, and add source/archive plus live-OpenAPI release regression checks.
+- [x] Prove `/range`, `/range-batch`, PotentialEntry vectors, exit-policy vectors, and `/managed-replay` remain unchanged.
 - [ ] Add an opt-in sibling-repository Engine-to-MDS HTTP smoke harness as a temporary bridge; keep it outside normal `make verify`.
 - [ ] Design and create a dedicated multi-repository integration/system-test service, then add Engine-to-MDS integration tests using real bounds and bounded-candle wire DTOs.
 - [ ] Add end-to-end Engine HTTP tests for live-entry and open-trade.
-- [ ] Verify Engine does not import Runtime or ABI packages.
+- [x] Verify Engine does not import Runtime or ABI packages.
 - [ ] Benchmark maximum configured ready history on 5m and 1h, multiple active instances, latency, memory, and MDS payload size.
 - [ ] Record whether internal caching is needed before production without changing the public v1 contracts.
 - [x] Update maintained architecture and API documentation.
-- [ ] Run the full repository verification suite.
+- [x] Run the full repository verification suite.
 - [x] Run strict OpenSpec validation for `strategy-live-entry-open-trade-v1`.
 
 ## Acceptance
 
-- [ ] Both new endpoints use one shared earliest-ready-to-target history policy.
-- [ ] Runtime supplies no history boundary, warmup, FeaturePlan, or candle array.
-- [ ] Live-entry returns a complete target-bar plan or `null` per side.
+- [x] Both new endpoints use one shared earliest-ready-to-target history policy.
+- [x] Runtime supplies no history boundary, warmup, FeaturePlan, or candle array.
+- [x] Live-entry returns a complete target-bar plan or `null` per side.
 - [ ] Runtime calls open-trade only after ABI reports the correlated position is currently open.
-- [ ] Open-trade accepts an immutable receipt and returns only post-target-bar desired protection plus target-active strategic close signal.
-- [ ] Management starts after the entry bar and uses planned-price basis.
-- [ ] Receipt intrinsic time, enum, decimal, and price-geometry validation runs before MDS access.
-- [ ] Source-plan and entry coverage failures are explicit errors.
-- [ ] Missed transient exits remain an explicitly tested accepted trading risk v1.
-- [ ] Protective-order fills are ABI/exchange facts and are never inferred by the live open-trade path from OHLC.
-- [ ] Generic live application use cases resolve strategy-family adapters through separate live-entry and open-trade registries.
-- [ ] Strategy-specific evaluator parsing is encapsulated inside the corresponding Live Projections adapter.
-- [ ] V1 continues to use the shared full-history FeatureFrame and may reuse the broad evaluator without introducing specialized FeaturePlans.
-- [ ] Existing public evaluation endpoints remain compatible.
+- [x] Open-trade accepts an immutable receipt and returns only post-target-bar desired protection plus target-active strategic close signal.
+- [x] Management starts after the entry bar and uses planned-price basis.
+- [x] Receipt intrinsic time, enum, decimal, and price-geometry validation runs before MDS access.
+- [x] Source-plan and entry coverage failures are explicit errors.
+- [x] Missed transient exits remain an explicitly tested accepted trading risk v1.
+- [x] Protective-order fills are ABI/exchange facts and are never inferred by the live open-trade path from OHLC.
+- [x] Generic live application use cases resolve strategy-family adapters through separate live-entry and open-trade registries.
+- [x] Strategy-specific evaluator parsing is encapsulated inside the corresponding Live Projections adapter.
+- [x] V1 continues to use the shared full-history FeatureFrame and may reuse the broad evaluator without introducing specialized FeaturePlans.
+- [x] Existing public evaluation endpoints remain compatible.
