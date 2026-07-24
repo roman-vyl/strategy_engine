@@ -6,7 +6,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from strategy_engine.adapters.http.app import create_app
-from strategy_engine.domain.errors import TradeContractMismatchError
 from strategy_engine.domain.market import MarketStream
 from strategy_engine.strategies.application.evaluate_open_trade_projection import (
     EvaluateOpenTradeProjection,
@@ -269,22 +268,6 @@ def test_open_trade_http_rejects_removed_receipt_echo(
     assert response.json()["error"] == "invalid_request"
     assert market_data.bounds_calls == 0
     assert market_data.range_calls == 0
-
-
-def test_open_trade_http_preserves_typed_application_error() -> None:
-    app_services, _ = _services()
-
-    def fail(_request: object) -> object:
-        raise TradeContractMismatchError(mismatches={"instance_id": "other"})
-
-    app_services.evaluate_open_trade_projection = SimpleNamespace(execute=fail)
-    with TestClient(create_app(services=app_services)) as client:
-        response = client.post("/v1/strategy-evaluations/open-trade", json=_payload())
-
-    assert response.status_code == 409
-    assert response.json()["error"] == "trade_contract_mismatch"
-    assert response.json()["details"] == {"mismatches": {"instance_id": "other"}}
-    assert isinstance(response.json()["request_id"], str)
 
 
 def test_open_trade_http_identical_retry_is_deterministic() -> None:

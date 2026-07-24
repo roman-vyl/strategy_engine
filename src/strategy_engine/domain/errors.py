@@ -64,13 +64,6 @@ class TargetBarNotCommittedError(StrategyEngineError):
         super().__init__("target_bar_not_committed", message, details, 409)
 
 
-class TradeContractMismatchError(StrategyEngineError):
-    def __init__(
-        self, message: str = "Trade contract does not match request", **details: Any
-    ) -> None:
-        super().__init__("trade_contract_mismatch", message, details, 409)
-
-
 class TradeHistoryUnavailableError(StrategyEngineError):
     def __init__(self, message: str = "Trade history is unavailable", **details: Any) -> None:
         super().__init__("trade_history_unavailable", message, details, 409)

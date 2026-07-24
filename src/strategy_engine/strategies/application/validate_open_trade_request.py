@@ -10,6 +10,7 @@ from strategy_engine.strategies.contracts import OpenTradeProjectionRequest
 _SUPPORTED_SIDES = frozenset({"long", "short"})
 _SUPPORTED_PROFILES = frozenset({"always_on", "aligned", "countertrend", "neutral"})
 
+
 def validate_open_trade_request(request: OpenTradeProjectionRequest) -> None:
     receipt = request.executed_trade_receipt
     if receipt.side not in _SUPPORTED_SIDES:
