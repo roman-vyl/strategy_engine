@@ -147,14 +147,13 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
         open_trade as adapter_module,
     )
     from strategy_engine.strategies.ema_pullback.managed import (
-        ManagedReplayResult,
+        ManagedCalculationResult,
         ManagedTradeState,
         StartAfterEntryManagedProjection,
     )
 
     strategy = StrategySpecEnvelope("ema_pullback", "1", "instance-1", _spec())
     receipt = ExecutedTradeReceipt(
-        trade_id="trade-1",
         instance_id="instance-1",
         strategy_id="ema_pullback",
         strategy_version="1",
@@ -215,7 +214,6 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
     )
     evaluation = _evaluation(always=(False, False, False), aligned=(False, False, True))
     state = ManagedTradeState.initial(
-        trade_id="trade-1",
         side="long",
         entry_index=1,
         entry_time_ms=300_000,
@@ -227,7 +225,7 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
     state.mfe_pct = 0.05
     state.mae_pct = 0.01
     managed = StartAfterEntryManagedProjection(
-        replay=ManagedReplayResult("trade-1", "long", 300_000, (), (), state),
+        replay=ManagedCalculationResult("long", 300_000, (), (), state),
         desired_stop_price=100.0,
         desired_take_price=None,
     )

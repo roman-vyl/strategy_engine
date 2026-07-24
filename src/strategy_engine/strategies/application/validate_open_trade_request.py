@@ -19,7 +19,6 @@ def _require_non_empty(name: str, value: str) -> None:
 def validate_open_trade_request(request: OpenTradeProjectionRequest) -> None:
     receipt = request.executed_trade_receipt
     for name in (
-        "trade_id",
         "instance_id",
         "strategy_id",
         "strategy_version",

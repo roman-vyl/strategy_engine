@@ -120,7 +120,6 @@ class LiveEntryProjectionResult:
 
 @dataclass(frozen=True, slots=True)
 class ExecutedTradeReceipt:
-    trade_id: str
     instance_id: str
     strategy_id: str
     strategy_version: str
@@ -170,7 +169,6 @@ class OpenTradeDiagnostics:
 
 @dataclass(frozen=True, slots=True)
 class OpenTradeProjectionResult:
-    trade_id: str
     instance_id: str
     strategy_id: str
     strategy_version: str

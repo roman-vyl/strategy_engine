@@ -155,7 +155,6 @@ class EmaPullbackOpenTradeProjectionAdapter:
             request.strategy.raw_spec,
             bundle.frame,
             bundle.planned_features,
-            trade_id=receipt.trade_id,
             side=receipt.side,  # type: ignore[arg-type]
             entry_time_ms=receipt.entry_bar_open_time_ms,
             planned_entry_price=parse_decimal_text(receipt.planned_entry_price),

@@ -226,7 +226,6 @@ The receipt wire object is:
 
 ```text
 ExecutedTradeReceipt
-  trade_id
   instance_id
   strategy_id
   strategy_version
@@ -344,7 +343,11 @@ For a confirmed-open position, `EvaluateOpenTradeProjection` resolves the strate
 
 The live open-trade path MUST NOT run the backtest execution simulator's same-bar arbitration between protective-price hits and strategic close signals. That arbitration existed because backtest had to invent a single fill from OHLC data when no real orders or exchange events existed. In live operation, protective fills are real exchange facts resolved before Engine invocation by the ABI gate.
 
-The open-trade adapter SHALL return a strategy-specific internal projection containing only the calculated protection, strategic close signal, and strategy diagnostics. The generic application use case SHALL add trade identity, strategy identity, market identity, and target bar to form `OpenTradeProjectionResult`.
+The open-trade adapter SHALL return a strategy-specific internal projection containing only the calculated protection, strategic close signal, and strategy diagnostics. The generic application use case SHALL add strategy identity, market identity, and target bar to form `OpenTradeProjectionResult`.
+
+The managed calculation core carries no Runtime trade identity. Public
+`/managed-replay` preserves its existing Research-facing `trade_id` through a
+thin wrapper around the identity-free calculation result.
 
 Only the requested target bar determines the returned `close_signal`. A transient strategic close signal on a skipped earlier bar is not recovered in v1. This is an accepted trading risk; no catch-up, terminal scan, durable cursor, or retry queue is added.
 
@@ -352,7 +355,6 @@ Only the requested target bar determines the returned `close_signal`. A transien
 
 ```json
 {
-  "trade_id": "trade-123",
   "instance_id": "btc-ema-live-01",
   "strategy_id": "ema_pullback",
   "strategy_version": "1",

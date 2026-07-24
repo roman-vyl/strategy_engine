@@ -130,7 +130,6 @@ def _project(
         raw,
         frame,
         plan,
-        trade_id="T1",
         side="long",
         entry_time_ms=0,
         planned_entry_price=planned_entry_price,

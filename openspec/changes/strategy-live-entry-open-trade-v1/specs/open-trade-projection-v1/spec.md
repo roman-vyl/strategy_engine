@@ -86,7 +86,6 @@ The generic application layer SHALL add shared trade, strategy, market, target, 
 The receipt SHALL contain:
 
 ```text
-trade_id
 instance_id
 strategy_id
 strategy_version
@@ -104,9 +103,15 @@ locked_exit_profile
 
 IDs SHALL be non-empty. Times SHALL be aligned. Prices SHALL be positive normalized decimal text. Side and profile SHALL use supported enums.
 
-The receipt SHALL NOT contain `source_config_hash`, another configuration hash,
-`abi_entry_correlation`, calculation origin, warmup, current phase, MFE/MAE,
-active stop/take, quantity, order IDs, or FeatureFrame data.
+The receipt SHALL NOT contain `trade_id`, `source_config_hash`, another
+configuration hash, `abi_entry_correlation`, calculation origin, warmup,
+current phase, MFE/MAE, active stop/take, quantity, order IDs, or FeatureFrame
+data.
+
+#### Scenario: Removed Runtime trade identity is supplied
+
+- **WHEN** a receipt contains the removed `trade_id` field
+- **THEN** strict HTTP validation SHALL reject the request before MDS access.
 
 #### Scenario: Removed configuration hash is supplied
 
@@ -303,7 +308,6 @@ A transient strategic close signal present only on an earlier skipped bar SHALL 
 A successful response SHALL contain:
 
 ```text
-trade_id
 instance_id
 strategy_id
 strategy_version
@@ -327,6 +331,7 @@ diagnostics.managed_events[]
 The response SHALL NOT contain a payload-level `contract_version`; the endpoint
 and its published HTTP schema define the contract.
 The response SHALL NOT contain `source_config_hash` or another configuration hash.
+The response SHALL NOT contain `trade_id` or a replacement Runtime trade-cycle ID.
 
 Prices and percentages SHALL serialize as normalized decimal text or `null` where allowed.
 
@@ -358,6 +363,9 @@ Engine SHALL NOT persist an open-trade session or mutate the receipt.
 ### Requirement: Preserve public managed replay compatibility
 
 The start-after-entry helper added for open-trade SHALL NOT alter the existing `/managed-replay` request, response, entry-bar behavior, events, or fixtures.
+The internal managed calculation used by open-trade SHALL be independent of
+`trade_id`, while `/managed-replay` SHALL retain its Research-facing `trade_id`
+request and response attribution.
 
 #### Scenario: Existing managed replay fixture
 

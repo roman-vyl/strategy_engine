@@ -19,7 +19,6 @@ Side = Literal["long", "short"]
 
 @dataclass(slots=True)
 class ManagedTradeState:
-    trade_id: str
     side: Side
     entry_index: int
     entry_time_ms: int
@@ -45,14 +44,12 @@ class ManagedTradeState:
     def initial(
         cls,
         *,
-        trade_id: str,
         side: Side,
         entry_index: int,
         entry_time_ms: int,
         entry_price: float,
     ) -> ManagedTradeState:
         return cls(
-            trade_id=trade_id,
             side=side,
             entry_index=entry_index,
             entry_time_ms=entry_time_ms,
@@ -119,13 +116,40 @@ class ManagedBarDecision:
 
 
 @dataclass(frozen=True, slots=True)
-class ManagedReplayResult:
-    trade_id: str
+class ManagedCalculationResult:
     side: Side
     entry_time_ms: int
     events: tuple[ManagedPolicyEvent, ...]
     bars: tuple[ManagedBarDecision, ...]
     final_state: ManagedTradeState
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedReplayResult:
+    """Research-facing wrapper preserving managed replay attribution."""
+
+    trade_id: str
+    calculation: ManagedCalculationResult
+
+    @property
+    def side(self) -> Side:
+        return self.calculation.side
+
+    @property
+    def entry_time_ms(self) -> int:
+        return self.calculation.entry_time_ms
+
+    @property
+    def events(self) -> tuple[ManagedPolicyEvent, ...]:
+        return self.calculation.events
+
+    @property
+    def bars(self) -> tuple[ManagedBarDecision, ...]:
+        return self.calculation.bars
+
+    @property
+    def final_state(self) -> ManagedTradeState:
+        return self.calculation.final_state
 
     def to_wire(self) -> dict[str, object]:
         state = self.final_state
@@ -158,7 +182,7 @@ class ManagedReplayResult:
 class StartAfterEntryManagedProjection:
     """Internal open-trade projection with exact receipt-seeded protection."""
 
-    replay: ManagedReplayResult
+    replay: ManagedCalculationResult
     desired_stop_price: Decimal
     desired_take_price: Decimal | None
 
@@ -366,7 +390,6 @@ def _evaluate_managed_replay_core(
     frame: FeatureFrame,
     plan: EmaPullbackFeaturePlan,
     *,
-    trade_id: str,
     side: Side,
     entry_time_ms: int,
     entry_price: float,
@@ -374,7 +397,7 @@ def _evaluate_managed_replay_core(
     initial_stop_price: float | None = None,
     target_index: int | None = None,
     require_managed_mode: bool = True,
-) -> ManagedReplayResult:
+) -> ManagedCalculationResult:
     management = _mapping(raw_spec.get("trade_management", {}), "trade_management")
     config = _mapping(management.get("exit_management", {}), "exit_management")
     if require_managed_mode and config.get("mode") != "managed":
@@ -390,7 +413,6 @@ def _evaluate_managed_replay_core(
     take_rules = _items(config.get("take_management", ()), "take_management")
     runtime_rules = _items(config.get("runtime_exits", ()), "runtime_exits")
     state = ManagedTradeState.initial(
-        trade_id=trade_id,
         side=side,
         entry_index=entry_index,
         entry_time_ms=entry_time_ms,
@@ -582,7 +604,7 @@ def _evaluate_managed_replay_core(
                 (frame.time_ms[index + 1] if index + 1 < len(frame.time_ms) else None),
             )
         )
-    return ManagedReplayResult(trade_id, side, entry_time_ms, tuple(events), tuple(bars), state)
+    return ManagedCalculationResult(side, entry_time_ms, tuple(events), tuple(bars), state)
 
 
 def evaluate_managed_replay(
@@ -597,16 +619,18 @@ def evaluate_managed_replay(
 ) -> ManagedReplayResult:
     """Preserve the public managed-replay entry-bar semantics."""
 
-    return _evaluate_managed_replay_core(
-        raw_spec,
-        frame,
-        plan,
+    return ManagedReplayResult(
         trade_id=trade_id,
-        side=side,
-        entry_time_ms=entry_time_ms,
-        entry_price=entry_price,
-        evaluation_start_offset=0,
-        require_managed_mode=True,
+        calculation=_evaluate_managed_replay_core(
+            raw_spec,
+            frame,
+            plan,
+            side=side,
+            entry_time_ms=entry_time_ms,
+            entry_price=entry_price,
+            evaluation_start_offset=0,
+            require_managed_mode=True,
+        ),
     )
 
 
@@ -615,7 +639,6 @@ def evaluate_start_after_entry_managed_projection(
     frame: FeatureFrame,
     plan: EmaPullbackFeaturePlan,
     *,
-    trade_id: str,
     side: Side,
     entry_time_ms: int,
     planned_entry_price: Decimal | float,
@@ -650,7 +673,6 @@ def evaluate_start_after_entry_managed_projection(
         raw_spec,
         frame,
         plan,
-        trade_id=trade_id,
         side=side,
         entry_time_ms=entry_time_ms,
         entry_price=float(planned_entry_decimal),

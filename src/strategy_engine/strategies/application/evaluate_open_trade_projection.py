@@ -45,9 +45,7 @@ class EvaluateOpenTradeProjection:
         projection = self._adapters.resolve(request.strategy.strategy_id).evaluate(
             request, bundle
         )
-        receipt = request.executed_trade_receipt
         return OpenTradeProjectionResult(
-            trade_id=receipt.trade_id,
             instance_id=request.strategy.instance_id,
             strategy_id=request.strategy.strategy_id,
             strategy_version=request.strategy.strategy_version,

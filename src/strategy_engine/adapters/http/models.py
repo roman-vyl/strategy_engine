@@ -255,7 +255,6 @@ class StrategyAuthoringValidationRequestModel(BaseModel):
 class ExecutedTradeReceiptModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    trade_id: StrictStr
     instance_id: StrictStr
     strategy_id: StrictStr
     strategy_version: StrictStr
@@ -321,7 +320,6 @@ class OpenTradeDiagnosticsResponseModel(BaseModel):
 class OpenTradeProjectionResponseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    trade_id: StrictStr
     instance_id: StrictStr
     strategy_id: StrictStr
     strategy_version: StrictStr

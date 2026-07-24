@@ -156,7 +156,6 @@ def _serialize_open_trade_projection(result: object) -> OpenTradeProjectionRespo
     if not isinstance(result, OpenTradeProjectionResult):
         raise TypeError("expected OpenTradeProjectionResult")
     return OpenTradeProjectionResponseModel(
-        trade_id=result.trade_id,
         instance_id=result.instance_id,
         strategy_id=result.strategy_id,
         strategy_version=result.strategy_version,

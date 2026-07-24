@@ -20,7 +20,6 @@ def _strategy() -> StrategySpecEnvelope:
 
 def _receipt(strategy: StrategySpecEnvelope) -> ExecutedTradeReceipt:
     return ExecutedTradeReceipt(
-        trade_id="trade-1",
         instance_id=strategy.instance_id,
         strategy_id=strategy.strategy_id,
         strategy_version=strategy.strategy_version,
@@ -50,7 +49,7 @@ def _request(receipt: ExecutedTradeReceipt | None = None) -> OpenTradeProjection
 def test_receipt_is_immutable() -> None:
     receipt = _receipt(_strategy())
     with pytest.raises(FrozenInstanceError):
-        receipt.trade_id = "changed"  # type: ignore[misc]
+        receipt.side = "short"  # type: ignore[misc]
 
 
 def test_valid_receipt_binds_to_request() -> None:
@@ -78,7 +77,6 @@ def test_binding_mismatch_is_typed(field: str, value: str) -> None:
 @pytest.mark.parametrize(
     "receipt",
     [
-        replace(_receipt(_strategy()), trade_id=""),
         replace(_receipt(_strategy()), side="flat"),
         replace(_receipt(_strategy()), locked_exit_profile="unknown"),
         replace(_receipt(_strategy()), entry_bar_open_time_ms=600_001),

@@ -44,7 +44,6 @@ def _payload() -> dict[str, object]:
         "market": {"ticker": "BTCUSDT.P", "base_timeframe": "5m"},
         "target_bar_open_time_ms": 3_300_000,
         "executed_trade_receipt": {
-            "trade_id": "trade-1",
             "instance_id": "live-1",
             "strategy_id": "ema_pullback",
             "strategy_version": "v1",
@@ -83,7 +82,6 @@ def _managed_payload() -> dict[str, object]:
 
 def _result() -> OpenTradeProjectionResult:
     return OpenTradeProjectionResult(
-        trade_id="trade-1",
         instance_id="live-1",
         strategy_id="ema_pullback",
         strategy_version="v1",
@@ -117,7 +115,6 @@ def test_open_trade_http_returns_typed_desired_state() -> None:
 
     assert response.status_code == 200
     assert response.json() == {
-        "trade_id": "trade-1",
         "instance_id": "live-1",
         "strategy_id": "ema_pullback",
         "strategy_version": "v1",
@@ -153,7 +150,7 @@ def test_open_trade_http_wires_real_application_use_case() -> None:
     assert response.status_code == 200
     body = response.json()
     assert "contract_version" not in body
-    assert body["trade_id"] == "trade-1"
+    assert "trade_id" not in body
     assert "market_data_hash" not in body
     assert body["desired_protection"]["stop_price"] == "9.5"
     assert market_data.bounds_calls == 1
@@ -208,6 +205,22 @@ def test_open_trade_http_rejects_removed_abi_entry_correlation() -> None:
     assert market_data.range_calls == 0
 
 
+def test_open_trade_http_rejects_removed_trade_id() -> None:
+    app_services, market_data = _services()
+    payload = _payload()
+    receipt = payload["executed_trade_receipt"]
+    assert isinstance(receipt, dict)
+    receipt["trade_id"] = "trade-1"
+
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/open-trade", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_request"
+    assert market_data.bounds_calls == 0
+    assert market_data.range_calls == 0
+
+
 def test_open_trade_http_preserves_typed_application_error() -> None:
     app_services, _ = _services()
 
@@ -252,6 +265,8 @@ def test_open_trade_openapi_publishes_success_and_error_contracts() -> None:
     assert response_ref.endswith("/OpenTradeProjectionResponseModel")
     response_schema = schema["components"]["schemas"]["OpenTradeProjectionResponseModel"]
     receipt_schema = schema["components"]["schemas"]["ExecutedTradeReceiptModel"]
+    assert "trade_id" not in receipt_schema["properties"]
+    assert "trade_id" not in response_schema["properties"]
     assert "abi_entry_correlation" not in receipt_schema["properties"]
     assert "source_config_hash" not in receipt_schema["properties"]
     assert "source_config_hash" not in response_schema["properties"]
