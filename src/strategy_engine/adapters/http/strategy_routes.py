@@ -127,7 +127,6 @@ def _serialize_live_entry_projection(result: object) -> dict[str, object]:
         "strategy_id": result.strategy_id,
         "strategy_version": result.strategy_version,
         "instance_id": result.instance_id,
-        "source_config_hash": result.source_config_hash,
         "market": {
             "ticker": result.market.ticker,
             "base_timeframe": result.market.base_timeframe,
@@ -161,7 +160,6 @@ def _serialize_open_trade_projection(result: object) -> OpenTradeProjectionRespo
         instance_id=result.instance_id,
         strategy_id=result.strategy_id,
         strategy_version=result.strategy_version,
-        source_config_hash=result.source_config_hash,
         market=LiveMarketModel(
             ticker=result.market.ticker,
             base_timeframe=result.market.base_timeframe,

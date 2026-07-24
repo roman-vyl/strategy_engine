@@ -24,7 +24,6 @@ def _receipt(strategy: StrategySpecEnvelope) -> ExecutedTradeReceipt:
         instance_id=strategy.instance_id,
         strategy_id=strategy.strategy_id,
         strategy_version=strategy.strategy_version,
-        source_config_hash=strategy.config_hash,
         ticker="BTCUSDT.P",
         base_timeframe="5m",
         side="long",
@@ -67,7 +66,6 @@ def test_valid_receipt_binds_to_request() -> None:
         ("instance_id", "other"),
         ("ticker", "ETHUSDT.P"),
         ("base_timeframe", "1m"),
-        ("source_config_hash", "0" * 64),
     ],
 )
 def test_binding_mismatch_is_typed(field: str, value: str) -> None:
@@ -82,7 +80,6 @@ def test_binding_mismatch_is_typed(field: str, value: str) -> None:
     "receipt",
     [
         replace(_receipt(_strategy()), trade_id=""),
-        replace(_receipt(_strategy()), source_config_hash="ABC"),
         replace(_receipt(_strategy()), side="flat"),
         replace(_receipt(_strategy()), locked_exit_profile="unknown"),
         replace(_receipt(_strategy()), entry_bar_open_time_ms=600_001),

@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import re
-
 from strategy_engine.domain.errors import InvalidRequestError, TradeContractMismatchError
 from strategy_engine.domain.ranges import timeframe_duration_ms
 from strategy_engine.domain.values import parse_normalized_decimal_text
 from strategy_engine.strategies.contracts import OpenTradeProjectionRequest
 
-_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 _SUPPORTED_SIDES = frozenset({"long", "short"})
 _SUPPORTED_PROFILES = frozenset({"always_on", "aligned", "countertrend", "neutral"})
 
@@ -32,8 +29,6 @@ def validate_open_trade_request(request: OpenTradeProjectionRequest) -> None:
     ):
         _require_non_empty(name, getattr(receipt, name))
 
-    if not _HASH_RE.fullmatch(receipt.source_config_hash):
-        raise InvalidRequestError("source_config_hash must be lowercase SHA-256")
     if receipt.side not in _SUPPORTED_SIDES:
         raise InvalidRequestError("side must be long or short", side=receipt.side)
     if receipt.locked_exit_profile not in _SUPPORTED_PROFILES:
@@ -77,7 +72,5 @@ def validate_open_trade_request(request: OpenTradeProjectionRequest) -> None:
         mismatches["ticker"] = receipt.ticker
     if request.market.base_timeframe != receipt.base_timeframe:
         mismatches["base_timeframe"] = receipt.base_timeframe
-    if request.strategy.config_hash != receipt.source_config_hash:
-        mismatches["source_config_hash"] = receipt.source_config_hash
     if mismatches:
         raise TradeContractMismatchError(mismatches=mismatches)

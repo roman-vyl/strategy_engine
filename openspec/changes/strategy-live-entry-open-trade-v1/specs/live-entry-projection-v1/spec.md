@@ -49,7 +49,6 @@ A successful response SHALL contain:
 strategy_id
 strategy_version
 instance_id
-source_config_hash
 market.ticker
 market.base_timeframe
 target_bar_open_time_ms
@@ -59,6 +58,7 @@ plans_by_side.short
 
 The response SHALL NOT contain a payload-level `contract_version`; the endpoint
 and its published HTTP schema define the contract.
+The response SHALL NOT contain `source_config_hash` or another configuration hash.
 
 Both side keys SHALL always be present and SHALL contain either a complete plan object or `null`.
 
@@ -128,8 +128,6 @@ Runtime SHALL NOT derive, fill, or replace the profile after the plan is returne
 - **AND** a newly returned plan MAY contain the later profile.
 
 ### Requirement: Keep MDS provenance inside Engine
-
-`source_config_hash` SHALL be computed by Engine from the request strategy envelope.
 
 The MDS-owned `market_data_hash` SHALL remain available to Engine's internal
 live-frame acquisition, but SHALL NOT be exposed in the Runtime-facing response.

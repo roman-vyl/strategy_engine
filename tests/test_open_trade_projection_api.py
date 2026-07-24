@@ -48,7 +48,6 @@ def _payload() -> dict[str, object]:
             "instance_id": "live-1",
             "strategy_id": "ema_pullback",
             "strategy_version": "v1",
-            "source_config_hash": strategy.config_hash,
             "ticker": "BTCUSDT.P",
             "base_timeframe": "5m",
             "side": "long",
@@ -80,27 +79,15 @@ def _managed_payload() -> dict[str, object]:
         "runtime_exits": [],
     }
     strategy["raw_spec"] = raw_spec
-    strategy_domain = StrategySpecEnvelope(
-        strategy_id=strategy["strategy_id"],
-        strategy_version=strategy["strategy_version"],
-        instance_id=strategy["instance_id"],
-        raw_spec=raw_spec,
-        compatibility_profile=strategy["compatibility_profile"],
-    )
-    receipt = payload["executed_trade_receipt"]
-    assert isinstance(receipt, dict)
-    receipt["source_config_hash"] = strategy_domain.config_hash
     return payload
 
 
 def _result() -> OpenTradeProjectionResult:
-    strategy = _strategy()
     return OpenTradeProjectionResult(
         trade_id="trade-1",
         instance_id="live-1",
         strategy_id="ema_pullback",
         strategy_version="v1",
-        source_config_hash=strategy.config_hash,
         market=MarketStream("BTCUSDT.P", "5m"),
         target_bar_open_time_ms=3_300_000,
         desired_protection=DesiredProtection(stop_price="10.25", take_price=None),
@@ -135,7 +122,6 @@ def test_open_trade_http_returns_typed_desired_state() -> None:
         "instance_id": "live-1",
         "strategy_id": "ema_pullback",
         "strategy_version": "v1",
-        "source_config_hash": _strategy().config_hash,
         "market": {"ticker": "BTCUSDT.P", "base_timeframe": "5m"},
         "target_bar_open_time_ms": 3_300_000,
         "desired_protection": {"stop_price": "10.25", "take_price": None},
@@ -191,6 +177,22 @@ def test_open_trade_http_rejects_runtime_owned_state_fields() -> None:
     assert market_data.range_calls == 0
 
 
+def test_open_trade_http_rejects_removed_source_config_hash() -> None:
+    app_services, market_data = _services()
+    payload = _payload()
+    receipt = payload["executed_trade_receipt"]
+    assert isinstance(receipt, dict)
+    receipt["source_config_hash"] = "0" * 64
+
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/open-trade", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_request"
+    assert market_data.bounds_calls == 0
+    assert market_data.range_calls == 0
+
+
 def test_open_trade_http_preserves_typed_application_error() -> None:
     app_services, _ = _services()
 
@@ -234,6 +236,9 @@ def test_open_trade_openapi_publishes_success_and_error_contracts() -> None:
     assert request_ref.endswith("/OpenTradeProjectionRequestModel")
     assert response_ref.endswith("/OpenTradeProjectionResponseModel")
     response_schema = schema["components"]["schemas"]["OpenTradeProjectionResponseModel"]
+    receipt_schema = schema["components"]["schemas"]["ExecutedTradeReceiptModel"]
+    assert "source_config_hash" not in receipt_schema["properties"]
+    assert "source_config_hash" not in response_schema["properties"]
     assert "market_data_hash" not in response_schema["properties"]
     for status in ("404", "409", "422", "501", "502", "503", "500"):
         error_ref = operation["responses"][status]["content"]["application/json"]["schema"]["$ref"]
@@ -270,17 +275,6 @@ def test_open_trade_real_path_accepts_all_live_management_modes(mode: str | None
         exit_management.pop("mode", None)
     else:
         exit_management["mode"] = mode
-    strategy_domain = StrategySpecEnvelope(
-        strategy_id=strategy["strategy_id"],
-        strategy_version=strategy["strategy_version"],
-        instance_id=strategy["instance_id"],
-        raw_spec=raw_spec,
-        compatibility_profile=strategy["compatibility_profile"],
-    )
-    receipt = payload["executed_trade_receipt"]
-    assert isinstance(receipt, dict)
-    receipt["source_config_hash"] = strategy_domain.config_hash
-
     with TestClient(create_app(services=app_services)) as client:
         response = client.post("/v1/strategy-evaluations/open-trade", json=payload)
 

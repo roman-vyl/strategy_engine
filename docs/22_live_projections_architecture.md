@@ -115,7 +115,6 @@ The generic application use case then combines that result with shared identity 
 ```text
 strategy-specific projection result
     + strategy identity/version
-    + config hash
     + market identity
     + target bar
     -> generic application result
@@ -209,6 +208,8 @@ When more than one candidate exists in the same layer, selection is deterministi
 The live application results and HTTP responses do not carry a redundant
 payload-level `contract_version`. Their contracts are identified by the
 dedicated endpoint and its published HTTP schema.
+They also do not carry `source_config_hash`; Engine keeps specification hashing
+inside Research and validation workflows rather than exposing it to Runtime.
 
 Live-entry always returns stable `long` and `short` keys, each containing a
 complete plan or `null`. Open-trade always returns a non-null desired stop, an

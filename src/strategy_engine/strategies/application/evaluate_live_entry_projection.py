@@ -42,7 +42,6 @@ class EvaluateLiveEntryProjection:
             strategy_id=request.strategy.strategy_id,
             strategy_version=request.strategy.strategy_version,
             instance_id=request.strategy.instance_id,
-            source_config_hash=request.strategy.config_hash,
             market=request.market,
             target_bar_open_time_ms=request.target_bar_open_time_ms,
             plans_by_side=projection.plans_by_side,

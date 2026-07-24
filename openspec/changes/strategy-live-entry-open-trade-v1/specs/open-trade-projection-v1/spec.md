@@ -90,7 +90,6 @@ trade_id
 instance_id
 strategy_id
 strategy_version
-source_config_hash
 ticker
 base_timeframe
 side
@@ -104,9 +103,16 @@ locked_exit_profile
 abi_entry_correlation
 ```
 
-IDs and correlation SHALL be non-empty. Hash SHALL be lowercase SHA-256 text. Times SHALL be aligned. Prices SHALL be positive normalized decimal text. Side and profile SHALL use supported enums.
+IDs and correlation SHALL be non-empty. Times SHALL be aligned. Prices SHALL be positive normalized decimal text. Side and profile SHALL use supported enums.
 
-The receipt SHALL NOT contain calculation origin, warmup, current phase, MFE/MAE, active stop/take, quantity, order IDs, or FeatureFrame data.
+The receipt SHALL NOT contain `source_config_hash`, another configuration hash,
+calculation origin, warmup, current phase, MFE/MAE, active stop/take, quantity,
+order IDs, or FeatureFrame data.
+
+#### Scenario: Removed configuration hash is supplied
+
+- **WHEN** a receipt contains the removed `source_config_hash` field
+- **THEN** strict HTTP validation SHALL reject the request before MDS access.
 
 #### Scenario: Receipt is complete
 
@@ -142,7 +148,7 @@ initial_take_price < planned_entry_price < initial_stop_price
 - **WHEN** a long receipt has stop at or above planned entry or take at or below planned entry
 - **THEN** Engine SHALL return `invalid_request` before MDS access.
 
-### Requirement: Bind the receipt to strategy instance and config
+### Requirement: Bind the receipt to strategy instance and market
 
 Before MDS access, Engine SHALL require:
 
@@ -152,14 +158,7 @@ request.strategy.strategy_version == receipt.strategy_version
 request.strategy.instance_id      == receipt.instance_id
 request.market.ticker             == receipt.ticker
 request.market.base_timeframe     == receipt.base_timeframe
-request.strategy.config_hash      == receipt.source_config_hash
 ```
-
-#### Scenario: Config hash mismatch
-
-- **WHEN** request strategy config hash differs from receipt source config hash
-- **THEN** Engine SHALL return `trade_contract_mismatch`
-- **AND** SHALL NOT calculate the trade under the new config.
 
 #### Scenario: Instance or market mismatch
 
@@ -304,7 +303,6 @@ trade_id
 instance_id
 strategy_id
 strategy_version
-source_config_hash
 market.ticker
 market.base_timeframe
 target_bar_open_time_ms
@@ -324,6 +322,7 @@ diagnostics.managed_events[]
 
 The response SHALL NOT contain a payload-level `contract_version`; the endpoint
 and its published HTTP schema define the contract.
+The response SHALL NOT contain `source_config_hash` or another configuration hash.
 
 Prices and percentages SHALL serialize as normalized decimal text or `null` where allowed.
 

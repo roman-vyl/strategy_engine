@@ -118,7 +118,6 @@ def test_live_entry_returns_stable_side_keys_and_provenance() -> None:
     result = live.execute(
         LiveEntryProjectionRequest(strategy, MarketStream("BTCUSDT.P", "5m"), 3_300_000)
     )
-    assert result.source_config_hash == strategy.config_hash
     assert set(result.plans_by_side) == {"long", "short"}
     assert result.plans_by_side["short"] is None
     plan = result.plans_by_side["long"]

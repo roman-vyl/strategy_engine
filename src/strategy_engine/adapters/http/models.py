@@ -217,7 +217,6 @@ class LiveEntryProjectionResponseModel(BaseModel):
     strategy_id: StrictStr
     strategy_version: StrictStr
     instance_id: StrictStr
-    source_config_hash: StrictStr
     market: LiveMarketModel
     target_bar_open_time_ms: StrictInt
     plans_by_side: dict[StrictStr, LiveEntryPlanResponseModel | None]
@@ -260,7 +259,6 @@ class ExecutedTradeReceiptModel(BaseModel):
     instance_id: StrictStr
     strategy_id: StrictStr
     strategy_version: StrictStr
-    source_config_hash: StrictStr
     ticker: StrictStr
     base_timeframe: StrictStr
     side: StrictStr
@@ -328,7 +326,6 @@ class OpenTradeProjectionResponseModel(BaseModel):
     instance_id: StrictStr
     strategy_id: StrictStr
     strategy_version: StrictStr
-    source_config_hash: StrictStr
     market: LiveMarketModel
     target_bar_open_time_ms: StrictInt
     desired_protection: DesiredProtectionResponseModel

@@ -195,7 +195,6 @@ neutral
   "strategy_id": "ema_pullback",
   "strategy_version": "1",
   "instance_id": "btc-ema-live-01",
-  "source_config_hash": "<sha256>",
   "market": {
     "ticker": "BTCUSDT.P",
     "base_timeframe": "5m"
@@ -231,7 +230,6 @@ ExecutedTradeReceipt
   instance_id
   strategy_id
   strategy_version
-  source_config_hash
   ticker
   base_timeframe
 
@@ -258,7 +256,6 @@ Receipt invariants:
 - all prices are positive normalized decimal text;
 - for long, `initial_stop_price < planned_entry_price < initial_take_price`;
 - for short, `initial_take_price < planned_entry_price < initial_stop_price`;
-- `source_config_hash` is a non-empty lowercase SHA-256 value.
 
 The receipt deliberately excludes `from_ms`, warmup, previous phase, MFE/MAE, active stop/take, quantity, exchange order IDs, historical features, and actual current market state.
 
@@ -293,7 +290,6 @@ request.strategy_id      == receipt.strategy_id
 request.strategy_version == receipt.strategy_version
 request.instance_id      == receipt.instance_id
 request market           == receipt ticker/timeframe
-request strategy config_hash == receipt.source_config_hash
 source_plan_bar <= entry_bar <= target_bar
 ```
 
@@ -350,7 +346,7 @@ For a confirmed-open position, `EvaluateOpenTradeProjection` resolves the strate
 
 The live open-trade path MUST NOT run the backtest execution simulator's same-bar arbitration between protective-price hits and strategic close signals. That arbitration existed because backtest had to invent a single fill from OHLC data when no real orders or exchange events existed. In live operation, protective fills are real exchange facts resolved before Engine invocation by the ABI gate.
 
-The open-trade adapter SHALL return a strategy-specific internal projection containing only the calculated protection, strategic close signal, and strategy diagnostics. The generic application use case SHALL add trade identity, strategy identity, config hash, market identity, and target bar to form `OpenTradeProjectionResult`.
+The open-trade adapter SHALL return a strategy-specific internal projection containing only the calculated protection, strategic close signal, and strategy diagnostics. The generic application use case SHALL add trade identity, strategy identity, market identity, and target bar to form `OpenTradeProjectionResult`.
 
 Only the requested target bar determines the returned `close_signal`. A transient strategic close signal on a skipped earlier bar is not recovered in v1. This is an accepted trading risk; no catch-up, terminal scan, durable cursor, or retry queue is added.
 
@@ -362,7 +358,6 @@ Only the requested target bar determines the returned `close_signal`. A transien
   "instance_id": "btc-ema-live-01",
   "strategy_id": "ema_pullback",
   "strategy_version": "1",
-  "source_config_hash": "<sha256>",
   "market": {
     "ticker": "BTCUSDT.P",
     "base_timeframe": "5m"

@@ -158,7 +158,6 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
         instance_id="instance-1",
         strategy_id="ema_pullback",
         strategy_version="1",
-        source_config_hash=strategy.config_hash,
         ticker="BTCUSDT.P",
         base_timeframe="5m",
         side="long",

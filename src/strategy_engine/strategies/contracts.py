@@ -113,7 +113,6 @@ class LiveEntryProjectionResult:
     strategy_id: str
     strategy_version: str
     instance_id: str
-    source_config_hash: str
     market: MarketStream
     target_bar_open_time_ms: int
     plans_by_side: dict[str, LiveEntryPlan | None]
@@ -125,7 +124,6 @@ class ExecutedTradeReceipt:
     instance_id: str
     strategy_id: str
     strategy_version: str
-    source_config_hash: str
     ticker: str
     base_timeframe: str
     side: str
@@ -177,7 +175,6 @@ class OpenTradeProjectionResult:
     instance_id: str
     strategy_id: str
     strategy_version: str
-    source_config_hash: str
     market: MarketStream
     target_bar_open_time_ms: int
     desired_protection: DesiredProtection
