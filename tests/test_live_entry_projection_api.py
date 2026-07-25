@@ -28,7 +28,12 @@ from strategy_engine.strategies.application.validate_live_strategy_spec import (
     ValidateLiveStrategySpec,
 )
 from strategy_engine.strategies.application.validate_spec import ValidateStrategySpec
+from strategy_engine.strategies.contracts import LiveEntryPlan
 from strategy_engine.strategies.ema_pullback.evaluator import EmaPullbackRangeEvaluator
+from strategy_engine.strategies.ema_pullback.live_projections.contracts import (
+    EmaPullbackLiveEntryProjection,
+)
+from strategy_engine.strategies.live_projections.registry import LiveEntryProjectionRegistry
 
 
 class FakeMarketData:
@@ -118,7 +123,34 @@ def _payload(*, enabled: list[str] | None = None) -> dict[str, object]:
     }
 
 
-def _services(*, state: str = "ready") -> tuple[ApplicationServices, FakeMarketData]:
+class FakeLiveEntryAdapter:
+    strategy_id = "ema_pullback"
+
+    def __init__(self, plans_by_side: dict[str, LiveEntryPlan | None]) -> None:
+        self._plans_by_side = plans_by_side
+
+    def evaluate(self, request: object, bundle: object) -> EmaPullbackLiveEntryProjection:
+        del request, bundle
+        return EmaPullbackLiveEntryProjection(plans_by_side=self._plans_by_side)
+
+
+def _entry_plan(side: str) -> LiveEntryPlan:
+    stop, take = ("11.75", "12.5") if side == "long" else ("12.5", "11.75")
+    return LiveEntryPlan(
+        side=side,
+        source_plan_bar_open_time_ms=3_300_000,
+        planned_entry_price="12",
+        initial_stop_price=stop,
+        initial_take_price=take,
+        locked_exit_profile="aligned",
+    )
+
+
+def _services(
+    *,
+    state: str = "ready",
+    plans_by_side: dict[str, LiveEntryPlan | None] | None = None,
+) -> tuple[ApplicationServices, FakeMarketData]:
     market_data = FakeMarketData(state=state)
     indicators = IndicatorRegistry()
     validate_plan = ValidateIndicatorPlan(indicators)
@@ -136,6 +168,11 @@ def _services(*, state: str = "ready") -> tuple[ApplicationServices, FakeMarketD
         indicator_eval,
         validate_live_strategy,
     )
+    adapters = (
+        LiveEntryProjectionRegistry(FakeLiveEntryAdapter(plans_by_side))
+        if plans_by_side is not None
+        else None
+    )
     return (
         ApplicationServices(
             indicator_catalog=IndicatorCatalog(indicators),
@@ -148,7 +185,7 @@ def _services(*, state: str = "ready") -> tuple[ApplicationServices, FakeMarketD
             market_data_client=market_data,  # type: ignore[arg-type]
             build_strategy_feature_plan=planner,
             load_live_feature_frame=loader,
-            evaluate_live_entry_projection=EvaluateLiveEntryProjection(loader),
+            evaluate_live_entry_projection=EvaluateLiveEntryProjection(loader, adapters),
         ),
         market_data,
     )
@@ -161,11 +198,10 @@ def test_live_entry_http_returns_only_atomic_plan_result() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"plans_by_side"}
-    assert set(body["plans_by_side"]) == {"long", "short"}
-    assert body["plans_by_side"]["short"] is None
-    plan = body["plans_by_side"]["long"]
+    assert set(body) == {"desired_entry"}
+    plan = body["desired_entry"]
     assert plan is not None
+    assert plan["side"] == "long"
     assert plan["source_plan_bar_open_time_ms"] == 3_300_000
     assert isinstance(plan["planned_entry_price"], str)
     assert Decimal(plan["initial_stop_price"]) < Decimal(plan["planned_entry_price"])
@@ -212,18 +248,38 @@ def test_live_entry_http_rejects_old_nested_payload() -> None:
     assert market_data.range_calls == 0
 
 
-def test_live_entry_http_keeps_stable_null_side_keys() -> None:
-    app_services, _ = _services()
+def test_live_entry_http_returns_null_when_no_side_plan_exists() -> None:
+    app_services, _ = _services(plans_by_side={"long": None, "short": None})
     with TestClient(create_app(services=app_services)) as client:
-        response = client.post(
-            "/v1/strategy-evaluations/live-entry",
-            json=_payload(enabled=["short"]),
-        )
+        response = client.post("/v1/strategy-evaluations/live-entry", json=_payload())
 
     assert response.status_code == 200
-    plans = response.json()["plans_by_side"]
-    assert set(plans) == {"long", "short"}
-    assert plans["long"] is None
+    assert response.json() == {"desired_entry": None}
+
+
+def test_live_entry_http_returns_the_single_short_plan() -> None:
+    app_services, _ = _services(
+        plans_by_side={"long": None, "short": _entry_plan("short")}
+    )
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/live-entry", json=_payload())
+
+    assert response.status_code == 200
+    assert response.json()["desired_entry"]["side"] == "short"
+
+
+def test_live_entry_http_fails_closed_for_conflicting_side_plans() -> None:
+    app_services, _ = _services(
+        plans_by_side={"long": _entry_plan("long"), "short": _entry_plan("short")}
+    )
+    with TestClient(create_app(services=app_services), raise_server_exceptions=False) as client:
+        response = client.post("/v1/strategy-evaluations/live-entry", json=_payload())
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["error"] == "evaluation_invariant_broken"
+    assert body["details"] == {"sides": ["long", "short"]}
+    assert "desired_entry" not in body
 
 
 def test_live_entry_http_rejects_removed_compatibility_profile() -> None:
@@ -299,4 +355,6 @@ def test_live_entry_openapi_publishes_request_and_response_contracts() -> None:
     assert "LiveStrategySpecModel" not in schema["components"]["schemas"]
     assert "LiveMarketModel" not in schema["components"]["schemas"]
     response_schema = schema["components"]["schemas"]["LiveEntryProjectionResponseModel"]
-    assert set(response_schema["properties"]) == {"plans_by_side"}
+    assert set(response_schema["properties"]) == {"desired_entry"}
+    desired_entry = response_schema["properties"]["desired_entry"]
+    assert desired_entry["anyOf"][0]["$ref"].endswith("/DesiredEntryResponseModel")

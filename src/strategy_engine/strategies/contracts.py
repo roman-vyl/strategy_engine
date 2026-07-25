@@ -117,8 +117,18 @@ class LiveEntryPlan:
 
 
 @dataclass(frozen=True, slots=True)
+class DesiredEntry:
+    side: str
+    source_plan_bar_open_time_ms: int
+    planned_entry_price: str
+    initial_stop_price: str
+    initial_take_price: str
+    locked_exit_profile: str
+
+
+@dataclass(frozen=True, slots=True)
 class LiveEntryProjectionResult:
-    plans_by_side: dict[str, LiveEntryPlan | None]
+    desired_entry: DesiredEntry | None
 
 
 @dataclass(frozen=True, slots=True)

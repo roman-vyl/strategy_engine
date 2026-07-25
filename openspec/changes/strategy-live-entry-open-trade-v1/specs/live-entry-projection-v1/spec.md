@@ -41,8 +41,9 @@ The generic use case SHALL NOT contain strategy-family-specific calculation bran
 
 The adapter SHALL receive explicit validated inputs and a complete live FeatureFrame, MAY reuse the existing broad strategy evaluator in v1, and SHALL return an internal strategy-specific live-entry projection.
 
-The generic application layer SHALL expose the calculated plans as the public
-`LiveEntryProjectionResult` without adding request metadata.
+The generic application layer SHALL normalize the internal side-wise adapter
+result into the public `LiveEntryProjectionResult.desired_entry` without adding
+request metadata.
 
 #### Scenario: EMA Pullback live-entry projection
 
@@ -61,12 +62,11 @@ The generic application layer SHALL expose the calculated plans as the public
 A successful response SHALL contain:
 
 ```text
-plans_by_side.long
-plans_by_side.short
+desired_entry: DesiredEntry | null
 ```
 
-Both side keys SHALL always be present and SHALL contain either a complete plan object or `null`.
 The strict response model SHALL contain no fields beyond the schema above.
+It SHALL NOT expose the adapter's internal side-wise representation.
 
 The response SHALL NOT echo `strategy_id`, Runtime-owned `instance_id`, market
 identity, base timeframe, or `target_bar_open_time_ms`. Runtime SHALL associate
@@ -76,11 +76,25 @@ the synchronous result with its originating request and strategy instance.
 
 - **WHEN** neither side has a complete valid target-bar plan
 - **THEN** the endpoint SHALL return HTTP success
-- **AND** both `plans_by_side.long` and `plans_by_side.short` SHALL be `null`.
+- **AND** `desired_entry` SHALL be `null`.
+
+#### Scenario: One side has a plan
+
+- **WHEN** exactly one internal side plan is non-null
+- **THEN** Engine SHALL return that plan as `desired_entry`.
+
+#### Scenario: Both sides have plans
+
+- **WHEN** both internal side plans are non-null
+- **THEN** Engine SHALL fail closed with typed `evaluation_invariant_broken`
+- **AND** SHALL NOT arbitrate between plans or choose a side
+- **AND** SHALL NOT return a partial `desired_entry`.
 
 ### Requirement: Project target-bar entry plans from existing strategy results
 
-For each side, Engine SHALL read the existing PotentialEntry entry, stop, and take values at the target index and the exit-policy profile for the same side and target index.
+For each side internally, Engine SHALL read the existing PotentialEntry entry,
+stop, and take values at the target index and the exit-policy profile for the
+same side and target index.
 
 Engine SHALL NOT recalculate entry, risk distances, or profile selection in the HTTP adapter.
 
@@ -88,17 +102,18 @@ Engine SHALL NOT recalculate entry, risk distances, or profile selection in the 
 
 - **WHEN** target-index long entry, stop, and take are all present and valid
 - **AND** a supported long exit profile is present at the same index
-- **THEN** Engine SHALL return a complete long plan.
+- **AND** the short internal plan is null
+- **THEN** Engine SHALL return a complete long `desired_entry`.
 
 #### Scenario: Incomplete target-bar triple
 
 - **WHEN** any of entry, stop, or take is absent or invalid for a side
-- **THEN** the plan for that side SHALL be `null`
-- **AND** Engine SHALL NOT return a partial plan.
+- **THEN** the internal plan for that side SHALL be `null`
+- **AND** Engine SHALL NOT return a partial `DesiredEntry`.
 
-### Requirement: Define the live entry plan contract
+### Requirement: Define the desired entry contract
 
-A non-null side plan SHALL contain:
+A non-null `DesiredEntry` SHALL contain:
 
 ```text
 side
@@ -115,27 +130,28 @@ Wire prices SHALL be positive normalized decimal text.
 
 `locked_exit_profile` SHALL be one of `always_on`, `aligned`, `countertrend`, or `neutral`.
 
-#### Scenario: Long price geometry
+#### Scenario: Long desired-entry price geometry
 
-- **WHEN** a long plan is returned
+- **WHEN** a long `desired_entry` is returned
 - **THEN** `initial_stop_price < planned_entry_price < initial_take_price` SHALL hold.
 
-#### Scenario: Short price geometry
+#### Scenario: Short desired-entry price geometry
 
-- **WHEN** a short plan is returned
+- **WHEN** a short `desired_entry` is returned
 - **THEN** `initial_take_price < planned_entry_price < initial_stop_price` SHALL hold.
 
 ### Requirement: Lock profile on the source-plan bar
 
-The plan's `locked_exit_profile` SHALL be the profile selected for that side on the same target bar that produced the PotentialEntry triple.
+The desired entry's `locked_exit_profile` SHALL be the profile selected for that
+side on the same target bar that produced the PotentialEntry triple.
 
 Runtime SHALL NOT derive, fill, or replace the profile after the plan is returned.
 
 #### Scenario: Profile changes on a later bar
 
 - **WHEN** a later evaluation selects a different profile
-- **THEN** an earlier returned plan SHALL retain its original locked profile
-- **AND** a newly returned plan MAY contain the later profile.
+- **THEN** an earlier returned desired entry SHALL retain its original locked profile
+- **AND** a newly returned desired entry MAY contain the later profile.
 
 ### Requirement: Keep MDS provenance inside Engine
 

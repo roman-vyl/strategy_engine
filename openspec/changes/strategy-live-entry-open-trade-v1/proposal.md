@@ -27,8 +27,10 @@ Both calculations must use the same live market-history policy. Runtime must not
   - validates the strategy, builds the existing strategy FeaturePlan, and runs the indicator/HTF feature pipeline once to produce a shared FeatureFrame;
   - leaves strategy-family evaluation and projection assembly to the selected Live Projections adapter.
 - Add `POST /v1/strategy-evaluations/live-entry`.
-  - It returns target-bar `long` and `short` entry plans or explicit `null` values.
-  - Each plan contains the planned entry, initial stop, initial take, source-plan bar, and locked exit profile.
+  - It returns one target-bar `desired_entry` for the strategy instance, or `null`.
+  - The desired entry contains the side, planned entry, initial stop, initial take, source-plan bar, and locked exit profile.
+  - It normalizes the adapter's internal side-wise projection and fails closed with
+    a typed invariant error if both sides unexpectedly produce plans.
 - Add `POST /v1/strategy-evaluations/open-trade`.
   - It accepts an immutable executed-trade receipt created from the exact filled live-entry plan plus entry-bar timing.
   - It validates receipt time ordering and price geometry before MDS access, then validates source-plan, entry, and target coverage.

@@ -196,7 +196,7 @@ class LiveEntryProjectionRequestModel(BaseModel):
         )
 
 
-class LiveEntryPlanResponseModel(BaseModel):
+class DesiredEntryResponseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     side: StrictStr
@@ -210,7 +210,7 @@ class LiveEntryPlanResponseModel(BaseModel):
 class LiveEntryProjectionResponseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    plans_by_side: dict[StrictStr, LiveEntryPlanResponseModel | None]
+    desired_entry: DesiredEntryResponseModel | None
 
 
 class ManagedReplayRequestModel(BaseModel):

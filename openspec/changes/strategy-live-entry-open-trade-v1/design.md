@@ -179,7 +179,13 @@ accepted through aliases or a compatibility schema.
 
 `EvaluateLiveEntryProjection` obtains a `LiveFeatureBundle`, resolves the strategy-family live-entry projection adapter through the live-entry registry, and delegates target projection to that adapter. For EMA Pullback, the adapter reads the existing `PotentialEntry` result at the target index and `exit_policy.profile_{side}` at the same target index.
 
-A side plan is emitted only when entry, stop, and take are all present, finite, positive, and geometrically valid for the side. A missing or invalid triple yields `null` for that side. Runtime does not combine separate historical vectors.
+A side plan is emitted internally only when entry, stop, and take are all
+present, finite, positive, and geometrically valid for the side. A missing or
+invalid triple yields `null` for that side. The generic application layer then
+normalizes the internal adapter result: zero plans becomes `desired_entry =
+null`, one plan becomes `desired_entry`, and two plans fail closed with typed
+`evaluation_invariant_broken`. No side arbitration or selection is performed.
+Runtime does not combine separate historical vectors.
 
 The source-plan bar is the target bar. The locked profile is one of:
 
@@ -194,21 +200,20 @@ neutral
 
 ```json
 {
-  "plans_by_side": {
-    "long": null,
-    "short": {
-      "side": "short",
-      "source_plan_bar_open_time_ms": 1710000000000,
-      "planned_entry_price": "65000",
-      "initial_stop_price": "65500",
-      "initial_take_price": "64000",
-      "locked_exit_profile": "aligned"
-    }
+  "desired_entry": {
+    "side": "short",
+    "source_plan_bar_open_time_ms": 1710000000000,
+    "planned_entry_price": "65000",
+    "initial_stop_price": "65500",
+    "initial_take_price": "64000",
+    "locked_exit_profile": "aligned"
   }
 }
 ```
 
-Both `long` and `short` keys are always present. Decimal prices use normalized decimal text. A neutral response with both sides `null` is successful.
+Decimal prices use normalized decimal text. A neutral response is
+`{"desired_entry": null}`. The side-wise adapter result is not part of the HTTP
+contract.
 
 Engine does not persist this result. Runtime may replace its mutable pending snapshot on a later bar. ABI correlation determines which exact pending snapshot was filled.
 

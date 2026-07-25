@@ -175,7 +175,8 @@ strategies/application/load_live_feature_frame.py
 
 strategies/application/evaluate_live_entry_projection.py
     -> resolves the live-entry registry
-    -> returns only plans_by_side
+    -> normalizes the internal side plans
+    -> returns only desired_entry
 
 strategies/application/evaluate_open_trade_projection.py
     -> validates the receipt before market access
@@ -215,9 +216,11 @@ dedicated endpoint and its published HTTP schema.
 They also do not carry `source_config_hash`; Engine keeps specification hashing
 inside Research and validation workflows rather than exposing it to Runtime.
 
-Live-entry always returns stable `long` and `short` keys, each containing a
-complete plan or `null`. Open-trade always returns a non-null desired stop, an
-optional desired take, one strategic close-signal structure, and diagnostics.
+Live-entry always returns one complete `desired_entry` or `null`. The application
+boundary maps zero internal side plans to `null`, one to `DesiredEntry`, and two
+to a typed invariant error without arbitration. Open-trade always returns a
+non-null desired stop, an optional desired take, one strategic close-signal
+structure, and diagnostics.
 The MDS-owned `market_data_hash` stays inside Engine's live-frame acquisition
 pipeline and is not part of either Runtime-facing result. These are
 transport-neutral domain results; the HTTP step must serialize them without

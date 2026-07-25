@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
+
+from strategy_engine.domain.errors import EvaluationInvariantError
 from strategy_engine.domain.market import MarketBar, MarketFrame, MarketStream
 from strategy_engine.domain.market_data import StreamBounds
 from strategy_engine.domain.ranges import TimeRange
@@ -14,6 +17,7 @@ from strategy_engine.strategies.application.build_live_strategy_feature_plan imp
 )
 from strategy_engine.strategies.application.evaluate_live_entry_projection import (
     EvaluateLiveEntryProjection,
+    _normalize_desired_entry,
 )
 from strategy_engine.strategies.application.evaluate_range import EvaluateStrategyRange
 from strategy_engine.strategies.application.load_live_feature_frame import LoadLiveFeatureFrame
@@ -22,6 +26,7 @@ from strategy_engine.strategies.application.validate_live_strategy_spec import (
 )
 from strategy_engine.strategies.application.validate_spec import ValidateStrategySpec
 from strategy_engine.strategies.contracts import (
+    LiveEntryPlan,
     LiveEntryProjectionRequest,
     LiveStrategySpec,
     StrategyRangeRequest,
@@ -124,7 +129,7 @@ def services() -> tuple[EvaluateLiveEntryProjection, EvaluateStrategyRange, Stra
     )
 
 
-def test_live_entry_returns_only_stable_side_plan_result() -> None:
+def test_live_entry_returns_one_desired_entry() -> None:
     from dataclasses import fields
 
     from strategy_engine.strategies.contracts import LiveEntryProjectionResult
@@ -139,15 +144,14 @@ def test_live_entry_returns_only_stable_side_plan_result() -> None:
             live_strategy, MarketStream("BTCUSDT.P", "5m"), 3_300_000
         )
     )
-    assert set(result.plans_by_side) == {"long", "short"}
-    assert result.plans_by_side["short"] is None
-    plan = result.plans_by_side["long"]
+    plan = result.desired_entry
     assert plan is not None
+    assert plan.side == "long"
     assert plan.source_plan_bar_open_time_ms == 3_300_000
     assert Decimal(plan.initial_stop_price) < Decimal(plan.planned_entry_price)
     assert Decimal(plan.planned_entry_price) < Decimal(plan.initial_take_price)
     assert plan.locked_exit_profile in {"aligned", "countertrend", "neutral"}
-    assert {item.name for item in fields(LiveEntryProjectionResult)} == {"plans_by_side"}
+    assert {item.name for item in fields(LiveEntryProjectionResult)} == {"desired_entry"}
 
 
 def test_live_entry_matches_target_index_range_projection() -> None:
@@ -165,12 +169,57 @@ def test_live_entry_matches_target_index_range_projection() -> None:
     )
     target = -1
     projected = range_result.potential_entries["long"]
-    plan = live_result.plans_by_side["long"]
+    plan = live_result.desired_entry
     assert plan is not None
     assert plan.planned_entry_price == projected["entry_price"][target]
     assert plan.initial_stop_price == projected["stop_price"][target]
     assert plan.initial_take_price == projected["take_price"][target]
     assert plan.locked_exit_profile == range_result.exit_policy["profile_long"][target]
+
+
+def _adapter_plan(side: str) -> LiveEntryPlan:
+    if side == "long":
+        stop, take = "99", "101"
+    else:
+        stop, take = "101", "99"
+    return LiveEntryPlan(
+        side=side,
+        source_plan_bar_open_time_ms=123,
+        planned_entry_price="100",
+        initial_stop_price=stop,
+        initial_take_price=take,
+        locked_exit_profile="aligned",
+    )
+
+
+def test_live_entry_normalization_returns_null_for_zero_side_plans() -> None:
+    assert _normalize_desired_entry({"long": None, "short": None}) is None
+
+
+@pytest.mark.parametrize("side", ["long", "short"])
+def test_live_entry_normalization_returns_the_single_side_plan(side: str) -> None:
+    plan = _adapter_plan(side)
+    result = _normalize_desired_entry(
+        {"long": plan if side == "long" else None, "short": plan if side == "short" else None}
+    )
+    assert result is not None
+    assert result.side == side
+    assert result.source_plan_bar_open_time_ms == plan.source_plan_bar_open_time_ms
+    assert result.planned_entry_price == plan.planned_entry_price
+    assert result.initial_stop_price == plan.initial_stop_price
+    assert result.initial_take_price == plan.initial_take_price
+    assert result.locked_exit_profile == plan.locked_exit_profile
+
+
+def test_live_entry_normalization_fails_closed_for_conflicting_side_plans() -> None:
+    with pytest.raises(EvaluationInvariantError) as error:
+        _normalize_desired_entry(
+            {"long": _adapter_plan("long"), "short": _adapter_plan("short")}
+        )
+
+    assert error.value.code == "evaluation_invariant_broken"
+    assert error.value.status_code == 500
+    assert error.value.details == {"sides": ("long", "short")}
 
 
 def test_live_entry_plan_projection_rejects_incomplete_and_invalid_geometry() -> None:

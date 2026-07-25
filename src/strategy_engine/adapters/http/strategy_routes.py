@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 
 from strategy_engine.adapters.http.dependencies import services
 from strategy_engine.adapters.http.models import (
+    DesiredEntryResponseModel,
     DesiredProtectionResponseModel,
     ErrorResponseModel,
     LiveEntryProjectionRequestModel,
@@ -123,21 +124,20 @@ def _serialize_live_entry_projection(result: object) -> dict[str, object]:
     if not isinstance(result, LiveEntryProjectionResult):
         raise TypeError("expected LiveEntryProjectionResult")
     return {
-        "plans_by_side": {
-            side: (
-                {
-                    "side": plan.side,
-                    "source_plan_bar_open_time_ms": plan.source_plan_bar_open_time_ms,
-                    "planned_entry_price": plan.planned_entry_price,
-                    "initial_stop_price": plan.initial_stop_price,
-                    "initial_take_price": plan.initial_take_price,
-                    "locked_exit_profile": plan.locked_exit_profile,
-                }
-                if plan is not None
-                else None
-            )
-            for side, plan in result.plans_by_side.items()
-        },
+        "desired_entry": (
+            DesiredEntryResponseModel(
+                side=result.desired_entry.side,
+                source_plan_bar_open_time_ms=(
+                    result.desired_entry.source_plan_bar_open_time_ms
+                ),
+                planned_entry_price=result.desired_entry.planned_entry_price,
+                initial_stop_price=result.desired_entry.initial_stop_price,
+                initial_take_price=result.desired_entry.initial_take_price,
+                locked_exit_profile=result.desired_entry.locked_exit_profile,
+            ).model_dump()
+            if result.desired_entry is not None
+            else None
+        ),
     }
 
 

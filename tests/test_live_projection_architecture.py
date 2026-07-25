@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 from pathlib import Path
 
 import pytest
@@ -28,6 +27,4 @@ def test_generic_live_use_cases_do_not_branch_on_ema_pullback() -> None:
         "src/strategy_engine/strategies/application/evaluate_open_trade_projection.py",
     ):
         source = (root / relative).read_text()
-        tree = ast.parse(source)
         assert "ema_pullback" not in source
-        assert not any(isinstance(node, ast.If) for node in ast.walk(tree))

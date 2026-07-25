@@ -159,11 +159,9 @@ Validation:
 
 ```text
 LiveEntryProjectionResult
-  plans_by_side
-    long: LiveEntryPlan | null
-    short: LiveEntryPlan | null
+  desired_entry: DesiredEntry | null
 
-LiveEntryPlan
+DesiredEntry
   side
   source_plan_bar_open_time_ms
   planned_entry_price
@@ -177,7 +175,9 @@ Rules:
 - `source_plan_bar_open_time_ms == target_bar_open_time_ms`;
 - profile берётся на том же target index;
 - Runtime не извлекает profile из отдельного vector response;
-- neutral result является успешным response с null plans;
+- neutral result является успешным response с `desired_entry = null`;
+- два non-null внутренних side plans приводят к typed invariant error без
+  arbitration или выбора стороны;
 - Runtime-owned `instance_id` не входит в request;
 - response не содержит strategy/instance/market/target echoes и связывается с
   исходным Runtime context синхронным вызовом.
@@ -191,7 +191,7 @@ Runtime может заменить plan на следующем base bar и п�
 При fill Runtime создаёт receipt из:
 
 ```text
-exact filled LiveEntryPlan
+exact filled DesiredEntry
 + aligned entry-bar timing
 ```
 

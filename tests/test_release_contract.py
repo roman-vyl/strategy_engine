@@ -65,7 +65,7 @@ def test_live_openapi_is_clean_and_research_routes_remain_published() -> None:
     assert not _REMOVED_LIVE_FIELDS & receipt
     assert not _REMOVED_LIVE_FIELDS & live_entry_response
     assert not _REMOVED_LIVE_FIELDS & open_trade_response
-    assert live_entry_response == {"plans_by_side"}
+    assert live_entry_response == {"desired_entry"}
     assert open_trade_response == {
         "desired_protection",
         "close_signal",

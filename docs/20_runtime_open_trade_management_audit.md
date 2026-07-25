@@ -109,7 +109,9 @@ exit_policy.profile_{side}[target_index]
 source bar identity
 ```
 
-Эта target-bar сборка относится к Strategy Engine. Новый live-entry use case должен возвращать готовый side-keyed план входа, пригодный для сохранения Runtime и передачи ABI.
+Эта target-bar сборка относится к Strategy Engine. Live-entry use case должен
+возвращать один готовый желаемый план входа, пригодный для сохранения Runtime и
+передачи ABI.
 
 ### 2.2 Open trade требует immutable receipt
 
@@ -236,24 +238,28 @@ Engine строит live FeatureFrame и возвращает только targe
 
 ```text
 LiveEntryProjectionResult
-  plans_by_side
-    long | short
-      side
-      source_plan_bar_open_time_ms
-      planned_entry_price
-      initial_stop_price
-      initial_take_price
-      locked_exit_profile
+  desired_entry: DesiredEntry | null
+
+DesiredEntry
+  side
+  source_plan_bar_open_time_ms
+  planned_entry_price
+  initial_stop_price
+  initial_take_price
+  locked_exit_profile
 ```
 
-Для стороны без полного entry/stop/take plan возвращается явное отсутствие плана. Runtime не достраивает plan из отдельных vectors.
+Ноль внутренних side plans нормализуется в `desired_entry = null`, один plan —
+в `DesiredEntry`. Два non-null plans являются typed invariant failure: Engine
+не выполняет arbitration и не выбирает сторону. Runtime не достраивает plan из
+отдельных vectors.
 
 `locked_exit_profile` фиксируется на source-plan bar и берётся из того же FeatureFrame и target index, что и PotentialEntry. Разрешённые profile IDs соответствуют Engine exit-policy contract (`always_on`, `aligned`, `countertrend`, `neutral`).
 
 Runtime может bar-to-bar заменять mutable pending-entry snapshot. Это Runtime lifecycle, а не Engine state.
 
 Runtime-owned `instance_id` не передаётся Engine. Response содержит только
-`plans_by_side`; синхронный Runtime call связывает результат с исходными
+`desired_entry`; синхронный Runtime call связывает результат с исходными
 strategy instance, market и target.
 
 ## 5. Executed-trade receipt после fill

@@ -13,13 +13,13 @@
 
 ## Slice 2 — Live-entry projection
 
-- [x] Add transport-neutral `LiveEntryProjectionRequest`, `LiveEntryPlan`, and `LiveEntryProjectionResult` contracts.
+- [x] Add transport-neutral `LiveEntryProjectionRequest`, `DesiredEntry`, and `LiveEntryProjectionResult` contracts.
 - [x] Implement `EvaluateLiveEntryProjection` over `LoadLiveFeatureFrame`.
 - [x] Read PotentialEntry and locked profile from the same target index.
-- [x] Return stable `long` and `short` keys with complete plans or `null`.
+- [x] Normalize zero or one internal side plan into one public `desired_entry`, and fail closed on conflicting side plans.
 - [x] Enforce normalized decimal serialization, supported profiles, and side-relative price geometry.
 - [x] Add `POST /v1/strategy-evaluations/live-entry` request/response models, route, wiring, and OpenAPI contract.
-- [x] Test long, short, neutral, disabled-side, incomplete-triple, and invalid-geometry behavior.
+- [x] Test long, short, neutral, conflicting-side, disabled-side, incomplete-triple, and invalid-geometry behavior.
 - [x] Add parity tests proving the live plan matches target-index range evaluation on the same full-ready-history fixture.
 
 ## Slice 3 — Receipt contract and pre-market validation
@@ -98,7 +98,7 @@
 
 - [x] Both new endpoints use one shared earliest-ready-to-target history policy.
 - [x] Runtime supplies no history boundary, warmup, FeaturePlan, or candle array.
-- [x] Live-entry returns a complete target-bar plan or `null` per side.
+- [x] Live-entry returns one complete target-bar `desired_entry` or `null`.
 - [ ] Runtime calls open-trade only after ABI reports the correlated position is currently open.
 - [x] Open-trade accepts an immutable receipt and returns only post-target-bar desired protection plus target-active strategic close signal.
 - [x] Management starts after the entry bar and uses planned-price basis.

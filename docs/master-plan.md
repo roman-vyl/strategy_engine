@@ -202,8 +202,9 @@ entry-bar timing: side, source-plan/entry times, planned entry, initial stop/tak
 остаются в Runtime/ABI. Receipt не дублирует strategy, instance или market
 identity и не содержит Runtime trade ID, ABI correlation либо hash provenance.
 
-Live responses возвращают только результат расчёта: `plans_by_side` для
-live-entry и `desired_protection`, `close_signal`, `diagnostics` для open-trade.
+Live responses возвращают только результат расчёта: один `desired_entry` или
+`null` для live-entry и `desired_protection`, `close_signal`, `diagnostics` для
+open-trade.
 Они не дублируют strategy identity, Runtime instance identity, market или target;
 синхронный вызов связывает результат с исходным Runtime context.
 

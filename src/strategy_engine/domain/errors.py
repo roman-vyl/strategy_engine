@@ -37,6 +37,11 @@ class UnsupportedCapabilityError(StrategyEngineError):
         )
 
 
+class EvaluationInvariantError(StrategyEngineError):
+    def __init__(self, message: str, **details: Any) -> None:
+        super().__init__("evaluation_invariant_broken", message, details, 500)
+
+
 class MarketStreamNotFoundError(StrategyEngineError):
     def __init__(
         self, message: str = "Market Data Service stream is unknown", **details: Any
