@@ -4,7 +4,6 @@ Independent Indicator Engine and Strategy Engine extracted semantically from BBB
 
 Current state:
 
-- immutable BBB source slice under `legacy_source/` with SHA-256 provenance;
 - detailed BBB call-contract and FastAPI replacement audit;
 - implemented `strategy-engine-foundation-v1` FastAPI service;
 - canonical market/range/decimal/hash contracts;
@@ -56,12 +55,6 @@ docs/11_ema_indicator_vertical_slice_v1.md
 docs/12_atr_indicator_vertical_slice_v1.md
 docs/13_rsi_indicator_vertical_slice_v1.md
 docs/14_adx_dmi_indicator_vertical_slice_v1.md
-```
-
-Verify the immutable BBB source slice:
-
-```bash
-python scripts/verify_legacy_source.py
 ```
 
 ## EMA range example
@@ -215,25 +208,9 @@ The range evaluator now resolves the BBB `risk` component and returns final side
 
 Managed EMA Pullback policy is available through `POST /v1/strategy-evaluations/managed-replay`. The endpoint returns phase, stop, take-profile and runtime-exit decisions for an already-open logical trade. It does not perform OHLC fill arbitration or create exchange orders.
 
-## Semantic parity gate
-
-Before accepting Strategy Engine semantics for use by a new consumer service, run the complete copied-BBB semantic acceptance gate:
-
-```bash
-python scripts/run_semantic_parity_gate.py
-```
-
-The command verifies all 84 immutable legacy-source hashes, runs every mandatory indicator/strategy/API parity test, and writes `artifacts/ema_pullback_semantic_parity_report.json`. A green report proves strategy-owned semantic parity only; execution fills, fees/PnL, BBB presentation translation and live runtime checkpointing remain separate later gates.
-
 ## Composer catalog
 
 The authoritative EMA Pullback Workbench catalog is available at `GET /v1/strategies/ema_pullback/composer-catalog`.
-
-## Legacy reference source
-
-`legacy_source/bbb/` is an immutable, disconnected mirror of selected BBB files. It exists only so maintainers and parity tests can inspect how behavior was implemented in the original repository. Production modules under `src/` do not import it, runtime wiring does not load it, and no API request executes code from it.
-
-
 
 ## Normative cross-service seam
 
