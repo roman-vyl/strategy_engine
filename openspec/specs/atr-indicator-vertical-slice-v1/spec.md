@@ -3,9 +3,7 @@
 ## Purpose
 
 Define the public catalog, validation, computation, warmup, higher-timeframe, shared-read, and parity behavior for the ATR indicator vertical slice.
-
 ## Requirements
-
 ### Requirement: ATR catalog capability
 
 The Indicator Engine SHALL advertise `atr` through `/v1/indicators` and SHALL expose a schema through `/v1/indicators/atr/schema`.
@@ -73,12 +71,3 @@ One indicator plan containing EMA and ATR SHALL load the requested market range 
 - **WHEN** one indicator plan requests EMA and ATR for the same market range
 - **THEN** the engine SHALL load the range once
 - **AND** SHALL calculate both features from the same immutable MarketFrame.
-
-### Requirement: Golden parity
-
-Automated tests SHALL execute the copied BBB `features/calculations.py` and compare base and HTF ATR output position by position, including null/warmup positions.
-
-#### Scenario: Run the ATR parity suite
-
-- **WHEN** representative base and higher-timeframe ATR fixtures are evaluated
-- **THEN** every output and null position SHALL match the copied BBB calculation implementation.

@@ -3,18 +3,15 @@
 ## Purpose
 
 Define the coupled calculation, validation, warmup, higher-timeframe visibility, and compatibility guarantees for the ADX/DMI indicator vertical slice.
-
 ## Requirements
-
 ### Requirement: Coupled calculation
 
-ADX, DI+, and DI- SHALL use one shared calculation for each timeframe/period pair and SHALL match the copied BBB implementation bar for bar.
+ADX, DI+, and DI- SHALL use one shared calculation for each timeframe/period pair.
 
 #### Scenario: Evaluate a coupled ADX/DMI group
 
 - **WHEN** one plan requests ADX, DI+, and DI- for the same timeframe and period
-- **THEN** the engine SHALL calculate the shared group once
-- **AND** each output SHALL match the copied BBB implementation bar for bar.
+- **THEN** the engine SHALL calculate the shared group once.
 
 ### Requirement: Validation
 

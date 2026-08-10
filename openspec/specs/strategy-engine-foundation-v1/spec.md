@@ -3,9 +3,7 @@
 ## Purpose
 
 Define the architectural, contract, and service boundaries for the independent Strategy Engine foundation before indicator and strategy semantics are ported.
-
 ## Requirements
-
 ### Requirement: Independent service foundation
 
 The repository SHALL provide an installable `strategy_engine` Python package and runnable FastAPI service with clean domain, application, port, adapter, and wiring boundaries.
@@ -175,14 +173,3 @@ Automated tests SHALL prove:
 
 - **WHEN** the repository architecture tests execute
 - **THEN** they SHALL enforce the declared domain, application, adapter, wiring, and legacy-import boundaries.
-
-### Requirement: No semantic overclaim
-
-This change SHALL NOT implement or claim parity for EMA, RSI, ATR, ADX/DMI, HTF enrichment, contexts, entries, exits, managed policy, BBB cutover, or runtime bar-to-bar execution.
-
-The first semantic follow-up SHALL be an EMA Indicator Engine vertical slice with golden parity against BBB.
-
-#### Scenario: Inspect foundation capabilities
-
-- **WHEN** only the foundation change is considered
-- **THEN** it SHALL NOT claim parity for any deferred indicator or strategy semantics.

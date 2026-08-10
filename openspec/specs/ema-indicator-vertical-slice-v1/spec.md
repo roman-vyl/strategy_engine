@@ -3,9 +3,7 @@
 ## Purpose
 
 Define the supported EMA indicator range-evaluation slice, including BBB-compatible calculation, completed higher-timeframe alignment, stable outputs, and parity acceptance.
-
 ## Requirements
-
 ### Requirement: EMA catalog capability
 
 The indicator catalog SHALL expose `ema` with a stable schema describing source, timeframe, positive integer period, one value output, batch support, and incremental support as false.
@@ -63,12 +61,3 @@ Only EMA range evaluation becomes supported. Other indicator kinds and strategy 
 - **WHEN** a capability outside the EMA vertical slice is requested before its own porting change
 - **THEN** the service SHALL return `unsupported_capability`
 - **AND** SHALL NOT fabricate a successful result.
-
-### Requirement: Golden parity
-
-Acceptance SHALL execute the copied BBB EMA calculation implementation against representative base and HTF fixtures and compare every output position with the new engine.
-
-#### Scenario: Run the EMA parity suite
-
-- **WHEN** representative base and higher-timeframe EMA fixtures are evaluated
-- **THEN** every output and null position SHALL match the copied BBB calculation implementation.

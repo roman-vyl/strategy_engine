@@ -15,7 +15,7 @@
 
 ## 4. Archive
 
-- [ ] 4.1 When archiving this change, confirm `openspec/specs/ema-pullback-semantic-parity-gate-v1/` no longer exists afterward. If the archive step leaves an empty spec file for that capability, delete the directory as part of the archive commit.
+- [x] 4.1 When archiving this change, confirm `openspec/specs/ema-pullback-semantic-parity-gate-v1/` no longer exists afterward. If the archive step leaves an empty spec file for that capability, delete the directory as part of the archive commit.
 
 ## 5. Verify
 

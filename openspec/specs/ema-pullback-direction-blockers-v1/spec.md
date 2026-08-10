@@ -3,9 +3,7 @@
 ## Purpose
 
 Define side-aware direction, BBB-compatible blockers, context composition, downstream intermediate artifacts, market-read reuse, and parity for EMA Pullback.
-
 ## Requirements
-
 ### Requirement: Side-aware direction
 
 The engine SHALL evaluate `ema_anchor_stack_trend` as `fast > anchor > slow` for long and `fast < anchor < slow` for short. Missing feature values SHALL evaluate to false.
@@ -73,12 +71,3 @@ Direction and blocker evaluation SHALL reuse the market and feature artifact fro
 - **WHEN** direction and blockers consume an existing FeatureFrame
 - **THEN** they SHALL reuse its features and market bars
 - **AND** SHALL NOT request market data again.
-
-### Requirement: BBB parity
-
-Golden tests SHALL compare the new masks and stateful blocker reason trace directly with the copied BBB implementations.
-
-#### Scenario: Run direction and blocker parity
-
-- **WHEN** representative direction and blocker fixtures are evaluated
-- **THEN** masks and stateful blocker reason traces SHALL match copied BBB implementations.

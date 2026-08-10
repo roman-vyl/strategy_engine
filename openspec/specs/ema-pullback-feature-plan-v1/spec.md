@@ -3,9 +3,7 @@
 ## Purpose
 
 Define Strategy Engine-owned feature planning, canonical BBB compatibility, exact feature discovery, honest capability metadata, and production dependency boundaries for EMA Pullback.
-
 ## Requirements
-
 ### Requirement: Caller supplies strategy semantics, not indicator plans
 
 The public strategy boundary SHALL accept a strategy envelope. Feature discovery SHALL occur inside Strategy Engine. A BBB caller SHALL NOT need to construct or submit an IndicatorPlan for strategy evaluation.
@@ -47,10 +45,9 @@ The strategy catalog SHALL advertise `supports_feature_planning=true`. Range-eva
 
 ### Requirement: No legacy production imports
 
-Production code SHALL NOT import from `legacy_source` or BBB packages. Golden tests MAY load copied BBB code only as the parity oracle.
+Production code SHALL NOT import from `legacy_source` or BBB packages.
 
 #### Scenario: Enforce the production dependency boundary
 
 - **WHEN** architecture checks inspect production imports
-- **THEN** no production module SHALL import `legacy_source` or BBB packages
-- **AND** copied BBB code MAY be loaded only by parity tests.
+- **THEN** no production module SHALL import `legacy_source` or BBB packages.
