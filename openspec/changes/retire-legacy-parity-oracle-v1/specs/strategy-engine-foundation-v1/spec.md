@@ -1,10 +1,5 @@
-## MODIFIED Requirements
+## REMOVED Requirements
 
 ### Requirement: No semantic overclaim
-
-This change SHALL NOT implement or claim parity for EMA, RSI, ATR, ADX/DMI, HTF enrichment, contexts, entries, exits, managed policy, BBB cutover, or runtime bar-to-bar execution.
-
-#### Scenario: Inspect foundation capabilities
-
-- **WHEN** only the foundation change is considered
-- **THEN** it SHALL NOT claim parity for any deferred indicator or strategy semantics.
+**Reason**: This requirement documented the scope boundary and forward-looking commitment of the original foundation/migration-stage change (no semantic parity claimed yet, "golden parity against BBB" promised as the next step). It is a historical migration-stage guard, not durable production semantics, and its forward reference to a future BBB golden-parity follow-up no longer applies now that the parity oracle is retired.
+**Migration**: None — the durable architectural guarantee that production code does not depend on BBB/legacy runtime is preserved by other canonical requirements (e.g. "No legacy production imports", "No legacy runtime").

@@ -1,6 +1,11 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: Legacy setup parity`
+- TO: `### Requirement: Supported setup determinism`
+
 ## MODIFIED Requirements
 
-### Requirement: Legacy setup parity
+### Requirement: Supported setup determinism
 
 The engine SHALL implement `untouched_anchor_setup`, `ema_bounce_counter_setup`, and `anchor_stack_width_setup` with deterministic, bar-aligned outputs for identical market bars, features, parameters, and side.
 
