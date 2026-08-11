@@ -92,6 +92,12 @@ def test_invalid_multiplier_is_rejected(multiplier: object) -> None:
         ValidateIndicatorPlan(IndicatorRegistry()).execute(plan(multiplier))
 
 
+@pytest.mark.parametrize("multiplier", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_multiplier_is_rejected(multiplier: float) -> None:
+    with pytest.raises(InvalidRequestError):
+        ValidateIndicatorPlan(IndicatorRegistry()).execute(plan(multiplier))
+
+
 def test_dependency_must_be_earlier_atr_with_matching_timeframe() -> None:
     validator = ValidateIndicatorPlan(IndicatorRegistry())
     derived = PlannedFeature(

@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-import pandas as pd
 import pytest
 
 from strategy_engine.domain.errors import InvalidRequestError
@@ -48,33 +45,3 @@ def test_object_shaped_risk_component_is_supported() -> None:
 def test_unknown_risk_component_is_rejected() -> None:
     with pytest.raises(InvalidRequestError, match="unsupported risk component"):
         evaluate_risk_and_entries({"components": {"risk": "future_risk_filter"}}, trigger_inputs())
-
-
-def test_direct_legacy_no_risk_and_final_composition_parity() -> None:
-    root = Path(__file__).parents[1] / "legacy_source/bbb/research/strategies/ema_pullback"
-    risk_path = root / "components/risk.py"
-    signals_path = root / "execution/signals.py"
-
-    # Load just the legacy risk function; its only package dependency is a type alias.
-    text = risk_path.read_text().replace(
-        "from research.strategies.ema_pullback.spec import TradeSide",
-        "from typing import Literal\nTradeSide = Literal['long', 'short']",
-    )
-    namespace: dict[str, object] = {}
-    exec(compile(text, str(risk_path), "exec"), namespace)
-    legacy_no_risk = namespace["no_risk_filter"]
-
-    index = pd.RangeIndex(3)
-    frame = pd.DataFrame(index=index)
-    legacy_risk = tuple(bool(x) for x in legacy_no_risk(frame, side="long"))
-    new = evaluate_risk_and_entries(
-        {"components": {"risk": "no_risk_filter"}}, trigger_inputs()[:1]
-    )[0]
-    assert new.risk.allowed == legacy_risk
-
-    # Validate the legacy final formula explicitly from the copied source contract.
-    assert (
-        "direction_allowed & blockers_ok & setup_ok & trigger_ok & risk_ok"
-        in signals_path.read_text()
-    )
-    assert new.entry_allowed == (True, False, True)

@@ -2,10 +2,8 @@
 
 ## Purpose
 
-Define the supported EMA indicator range-evaluation slice, including BBB-compatible calculation, completed higher-timeframe alignment, stable outputs, and parity acceptance.
-
+Define the supported EMA indicator range-evaluation slice, including BBB-compatible calculation, completed higher-timeframe alignment, and stable outputs.
 ## Requirements
-
 ### Requirement: EMA catalog capability
 
 The indicator catalog SHALL expose `ema` with a stable schema describing source, timeframe, positive integer period, one value output, batch support, and incremental support as false.
@@ -36,7 +34,7 @@ For a feature timeframe above the base timeframe, the engine SHALL resample left
 
 ### Requirement: Exact range input semantics
 
-The evaluator SHALL calculate from the MarketFrame supplied for the exact requested range. It SHALL NOT silently request earlier warmup bars in this change.
+The evaluator SHALL calculate from the MarketFrame supplied for the exact requested range. It SHALL NOT silently request earlier warmup bars.
 
 #### Scenario: Evaluate a bounded market frame
 
@@ -56,19 +54,10 @@ The response SHALL preserve the requested base-time axis, caller-provided output
 
 ### Requirement: Honest capability boundaries
 
-Only EMA range evaluation becomes supported. Other indicator kinds and strategy evaluations SHALL continue to return `unsupported_capability` rather than fake success.
+Any indicator kind or strategy evaluation with no registered implementation SHALL return `unsupported_capability` rather than fake success.
 
 #### Scenario: Request an unported capability at this slice boundary
 
-- **WHEN** a capability outside the EMA vertical slice is requested before its own porting change
+- **WHEN** a capability with no registered implementation is requested
 - **THEN** the service SHALL return `unsupported_capability`
 - **AND** SHALL NOT fabricate a successful result.
-
-### Requirement: Golden parity
-
-Acceptance SHALL execute the copied BBB EMA calculation implementation against representative base and HTF fixtures and compare every output position with the new engine.
-
-#### Scenario: Run the EMA parity suite
-
-- **WHEN** representative base and higher-timeframe EMA fixtures are evaluated
-- **THEN** every output and null position SHALL match the copied BBB calculation implementation.

@@ -3,17 +3,16 @@
 ## Purpose
 
 Define the shared service seam between Strategy Engine and Research Service, including complementary managed ownership and the production legacy-runtime boundary.
-
 ## Requirements
-
 ### Requirement: Single physical seam
 
-Strategy Engine and Research Service SHALL describe the same cut through the same legacy callers and callees.
+Strategy Engine and Research Service SHALL describe the same seam: one consistent, non-overlapping ownership boundary for every shared responsibility.
 
-#### Scenario: Map a legacy mixed responsibility
+#### Scenario: Coordinate a shared responsibility
 
-- **WHEN** a legacy strategy/research call path is assigned to the new services
-- **THEN** both sides SHALL use the same normative seam matrix and complementary ownership.
+- **WHEN** a responsibility spans both services
+- **THEN** both sides SHALL agree on the same seam matrix and complementary ownership
+- **AND** neither service SHALL claim ownership the other side also claims.
 
 ### Requirement: Managed ownership
 

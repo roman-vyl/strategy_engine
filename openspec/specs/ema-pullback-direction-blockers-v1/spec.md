@@ -2,10 +2,8 @@
 
 ## Purpose
 
-Define side-aware direction, BBB-compatible blockers, context composition, downstream intermediate artifacts, market-read reuse, and parity for EMA Pullback.
-
+Define side-aware direction, supported blockers, context composition, downstream intermediate artifacts, and market-read reuse for EMA Pullback.
 ## Requirements
-
 ### Requirement: Side-aware direction
 
 The engine SHALL evaluate `ema_anchor_stack_trend` as `fast > anchor > slow` for long and `fast < anchor < slow` for short. Missing feature values SHALL evaluate to false.
@@ -15,15 +13,6 @@ The engine SHALL evaluate `ema_anchor_stack_trend` as `fast > anchor > slow` for
 - **WHEN** anchor-stack direction is evaluated for a trade side
 - **THEN** strict EMA order SHALL be applied in the side-appropriate direction
 - **AND** missing feature values SHALL produce false.
-
-### Requirement: Blocker parity
-
-The engine SHALL support `no_blockers`, `counter_candle_blocker`, `rsi_lookback_extreme_blocker`, and `trend_strength_episode_blocker` with BBB-compatible semantics.
-
-#### Scenario: Evaluate a supported blocker
-
-- **WHEN** a strategy configures any supported blocker component ID
-- **THEN** the engine SHALL return its BBB-compatible intrinsic allow mask and evidence.
 
 ### Requirement: RSI memory semantics
 
@@ -74,11 +63,16 @@ Direction and blocker evaluation SHALL reuse the market and feature artifact fro
 - **THEN** they SHALL reuse its features and market bars
 - **AND** SHALL NOT request market data again.
 
-### Requirement: BBB parity
+### Requirement: Supported blockers
 
-Golden tests SHALL compare the new masks and stateful blocker reason trace directly with the copied BBB implementations.
+The engine SHALL support `no_blockers`, `counter_candle_blocker`, `rsi_lookback_extreme_blocker`, and `trend_strength_episode_blocker`. `no_blockers` SHALL allow every bar. `counter_candle_blocker` SHALL allow a bar only when its close is on the side-favorable side of its open (`close >= open` for long, `close <= open` for short). `rsi_lookback_extreme_blocker` and `trend_strength_episode_blocker` SHALL follow the "RSI memory semantics" and "Trend-strength episode semantics" requirements respectively.
 
-#### Scenario: Run direction and blocker parity
+#### Scenario: Evaluate a supported blocker
 
-- **WHEN** representative direction and blocker fixtures are evaluated
-- **THEN** masks and stateful blocker reason traces SHALL match copied BBB implementations.
+- **WHEN** a strategy configures any supported blocker component ID
+- **THEN** the engine SHALL return its intrinsic allow mask and evidence per that component's defined semantics.
+
+#### Scenario: Evaluate the counter-candle blocker
+
+- **WHEN** the counter-candle blocker evaluates a bar
+- **THEN** it SHALL allow that bar only when the close is on the side-favorable side of the open.

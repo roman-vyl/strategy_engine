@@ -338,11 +338,11 @@ def _select_bool(
     return output
 
 
-def _ready(sl: pd.Series, tp: pd.Series) -> pd.Series:
+def _ready(sl: pd.Series, tp: pd.Series, sl_configured: bool, tp_configured: bool) -> pd.Series:
     output = pd.Series(True, index=sl.index, dtype=bool)
-    if sl.notna().any():
+    if sl_configured:
         output = output & sl.notna()
-    if tp.notna().any():
+    if tp_configured:
         output = output & tp.notna()
     return output
 
@@ -426,12 +426,20 @@ def evaluate_exit_policy(
     tp_by_profile: dict[str, pd.Series] = {}
     sl_distance_by_profile: dict[str, pd.Series] = {}
     tp_distance_by_profile: dict[str, pd.Series] = {}
+    sl_configured_by_profile: dict[str, bool] = {}
+    tp_configured_by_profile: dict[str, bool] = {}
     always = groups["always_on"]
     for profile in _PROFILE_ORDER:
         selected = always + groups[profile]
         signal_rules = [
             rule for rule in selected if str(rule.get("exit_kind", "signal")) == "signal"
         ]
+        sl_configured_by_profile[profile] = any(
+            str(rule.get("exit_kind")) == "stop_loss" for rule in selected
+        )
+        tp_configured_by_profile[profile] = any(
+            str(rule.get("exit_kind")) == "take_profit" for rule in selected
+        )
         signals_long[profile] = _or(
             [signal_long_by_instance[str(rule.get("instance_id"))] for rule in signal_rules],
             df.index,
@@ -484,7 +492,12 @@ def evaluate_exit_policy(
     tp_distance_long = _select(profile_long, tp_distance_by_profile, df.index)
     tp_distance_short = _select(profile_short, tp_distance_by_profile, df.index)
     ready_by_profile = {
-        profile: _ready(sl_by_profile[profile], tp_by_profile[profile])
+        profile: _ready(
+            sl_by_profile[profile],
+            tp_by_profile[profile],
+            sl_configured_by_profile[profile],
+            tp_configured_by_profile[profile],
+        )
         for profile in _PROFILE_ORDER
     }
     ready_long = _select_bool(profile_long, ready_by_profile, df.index)

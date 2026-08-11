@@ -2,10 +2,8 @@
 
 ## Purpose
 
-Define Strategy Engine-owned context construction, BBB-compatible context semantics, bundle reuse, stable API output, module boundaries, and golden parity for EMA Pullback.
-
+Define Strategy Engine-owned context construction, BBB-compatible context semantics, bundle reuse, stable API output, and module boundaries for EMA Pullback.
 ## Requirements
-
 ### Requirement: Strategy-owned context construction
 
 Strategy Engine SHALL construct declared `ema_pullback` context providers internally after Indicator Engine feature evaluation. External callers SHALL NOT provide precomputed context masks or state series.
@@ -55,12 +53,3 @@ Context construction SHALL remain transport-neutral and SHALL NOT itself evaluat
 - **WHEN** the context module builds a ContextBundle
 - **THEN** it SHALL only derive provider outputs from the FeatureFrame
 - **AND** SHALL leave downstream policy and decision evaluation to separate layers.
-
-### Requirement: Golden parity
-
-Acceptance SHALL include direct execution of copied BBB context code and exact comparison of state and mask outputs, including warmup and neutral fallback cases.
-
-#### Scenario: Run context golden parity
-
-- **WHEN** representative context fixtures are evaluated by both implementations
-- **THEN** state and mask outputs SHALL match exactly, including warmup and neutral fallback positions.

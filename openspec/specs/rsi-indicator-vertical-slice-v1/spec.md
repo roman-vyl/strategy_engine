@@ -2,10 +2,8 @@
 
 ## Purpose
 
-Define the calculation, validation, higher-timeframe visibility, public API, and parity guarantees for the RSI indicator vertical slice.
-
+Define the calculation, validation, higher-timeframe visibility, and public API for the RSI indicator vertical slice.
 ## Requirements
-
 ### Requirement: BBB-compatible RSI
 
 The Indicator Engine SHALL calculate RSI using simple rolling means of gains and losses with `window=period` and `min_periods=period`. It SHALL NOT substitute Wilder RMA or exponential smoothing.
@@ -43,12 +41,3 @@ The catalog and schema APIs SHALL advertise `rsi`. The range evaluation API SHAL
 - **WHEN** a valid RSI range evaluation is requested
 - **THEN** the catalog and schema APIs SHALL advertise `rsi`
 - **AND** the response SHALL contain normalized decimal text or `null` with deterministic validity metadata.
-
-### Requirement: Golden parity
-
-Tests SHALL execute the copied BBB calculations module and compare base and HTF RSI value-by-value, including exact missing-value placement.
-
-#### Scenario: Run the RSI parity suite
-
-- **WHEN** representative base and higher-timeframe RSI fixtures are evaluated
-- **THEN** every value and missing-value position SHALL match the copied BBB calculation implementation.

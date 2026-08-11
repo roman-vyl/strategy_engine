@@ -287,3 +287,125 @@ def test_profile_distance_selection_preserves_the_same_minimum_raw_distance() ->
             assert result.stop_loss_ratio_long[index] == pytest.approx(
                 raw_distance / float(feature_frame.market_bars[index].close)
             )
+
+
+def _protection_spec(exits: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "anchor_stack": {
+            "fast": {"source": "close", "timeframe": "base", "period": 2},
+            "anchor": {"source": "close", "timeframe": "base", "period": 3},
+            "slow": {"source": "close", "timeframe": "base", "period": 5},
+        },
+        "trade_sides": {"enabled": ["long", "short"]},
+        "components": {"blockers": [], "trigger": {"component_id": "touch_anchor"}},
+        "setups": [],
+        "contexts": {},
+        "trade_management": {
+            "exit_policy": {
+                "always_on": {"exits": exits},
+                "profiles": {
+                    "aligned": {"exits": []},
+                    "countertrend": {"exits": []},
+                    "neutral": {"exits": []},
+                },
+            },
+            "exit_management": {},
+        },
+    }
+
+
+def _protection_frame(
+    spec: dict[str, object], distances: dict[str, tuple[str | None, ...]]
+) -> tuple[FeatureFrame, object]:
+    plan = build_feature_plan_from_canonical_spec(spec)
+    times = tuple(i * 300_000 for i in range(4))
+    bars = tuple(
+        MarketBar(
+            times[i],
+            Decimal(str(100 + i)),
+            Decimal(str(102 + i)),
+            Decimal(str(99 + i)),
+            Decimal(str(100 + i)),
+            Decimal("1"),
+        )
+        for i in range(4)
+    )
+    series: dict[str, tuple[str | None, ...]] = {
+        plan.anchor_columns["fast"]: ("101", "102", "103", "104"),
+        plan.anchor_columns["anchor"]: ("100", "101", "102", "103"),
+        plan.anchor_columns["slow"]: ("99", "100", "101", "102"),
+    }
+    for instance_id, values in distances.items():
+        series[plan.exit_distance_columns[instance_id]] = values
+    return (
+        FeatureFrame(
+            MarketStream("BTCUSDT.P", "5m"),
+            TimeRange(0, 1_200_000),
+            times,
+            series,
+            {},
+            "plan",
+            "market",
+            bars,
+        ),
+        plan,
+    )
+
+
+def test_configured_stop_series_entirely_null_is_not_ready() -> None:
+    spec = _protection_spec(
+        [
+            {
+                "instance_id": "sl",
+                "component_id": "atr_stop_loss",
+                "exit_kind": "stop_loss",
+                "distance": {"timeframe": "base", "period": 2, "multiplier": 1.5},
+            }
+        ]
+    )
+    feature_frame, plan = _protection_frame(spec, {"sl": (None, None, None, None)})
+    result = evaluate_exit_policy(spec, feature_frame, plan, ())
+    assert result.stop_ready_long == (False, False, False, False)
+    assert result.stop_ready_short == (False, False, False, False)
+
+
+def test_configured_take_series_entirely_null_is_not_ready() -> None:
+    spec = _protection_spec(
+        [
+            {
+                "instance_id": "tp",
+                "component_id": "atr_take_profit",
+                "exit_kind": "take_profit",
+                "distance": {"timeframe": "base", "period": 2, "multiplier": 1.0},
+            }
+        ]
+    )
+    feature_frame, plan = _protection_frame(spec, {"tp": (None, None, None, None)})
+    result = evaluate_exit_policy(spec, feature_frame, plan, ())
+    assert result.stop_ready_long == (False, False, False, False)
+    assert result.stop_ready_short == (False, False, False, False)
+
+
+def test_absent_protection_kind_does_not_block_readiness() -> None:
+    spec = _protection_spec(
+        [
+            {
+                "instance_id": "sl",
+                "component_id": "constant_usd_stop_loss",
+                "exit_kind": "stop_loss",
+                "usd_distance": 1.0,
+            }
+        ]
+    )
+    feature_frame, plan = _protection_frame(spec, {})
+    result = evaluate_exit_policy(spec, feature_frame, plan, ())
+    assert result.stop_ready_long == (True, True, True, True)
+    assert result.stop_ready_short == (True, True, True, True)
+
+
+def test_partially_valid_configured_series_preserves_per_bar_readiness() -> None:
+    spec = raw_spec()
+    feature_frame, plan = frame(spec)
+    result = evaluate_exit_policy(spec, feature_frame, plan, ())
+    assert result.stop_ready_long == (False, True, True, True)
+    assert result.stop_ready_short == (False, True, True, True)

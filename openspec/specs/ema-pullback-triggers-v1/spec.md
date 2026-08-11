@@ -2,10 +2,8 @@
 
 ## Purpose
 
-Define Strategy Engine-owned EMA Pullback trigger semantics, prior-window behavior, side symmetry, composition, accumulated-stage capability metadata, and golden parity.
-
+Define Strategy Engine-owned EMA Pullback trigger semantics, prior-window behavior, side symmetry, composition, and accumulated-stage capability metadata.
 ## Requirements
-
 ### Requirement: Trigger ownership
 
 The independent Strategy Engine SHALL own the semantic implementations of `reclaim_anchor`, `strong_reclaim_anchor`, and `touch_anchor`.
@@ -26,12 +24,12 @@ Reclaim triggers SHALL inspect only the configured number of bars strictly befor
 
 ### Requirement: Side symmetry
 
-Long and short trigger inequalities SHALL mirror the copied BBB semantics exactly.
+Long and short trigger inequalities SHALL mirror each other exactly.
 
 #### Scenario: Mirror trigger evaluation by side
 
 - **WHEN** equivalent long and short market configurations are evaluated
-- **THEN** their probe, reclaim, touch, and close inequalities SHALL mirror BBB exactly.
+- **THEN** their probe, reclaim, touch, and close inequalities SHALL mirror between sides exactly.
 
 ### Requirement: Composition
 
@@ -51,12 +49,3 @@ The range API SHALL expose trigger evidence and SHALL report trigger readiness t
 - **WHEN** a strategy range response includes trigger results
 - **THEN** it SHALL expose trigger masks and traces
 - **AND** readiness metadata SHALL accurately describe the accumulated production stage.
-
-### Requirement: Golden parity
-
-Acceptance SHALL compare every trigger mask and trace field against the copied BBB implementation for all supported trigger components and both trade sides.
-
-#### Scenario: Run trigger golden parity
-
-- **WHEN** every supported trigger is evaluated for long and short fixtures
-- **THEN** each mask and trace field SHALL match the copied BBB implementation.

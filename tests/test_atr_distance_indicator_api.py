@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 
+import pytest
 from fastapi.testclient import TestClient
 
 from strategy_engine.adapters.http.app import create_app
@@ -109,3 +111,52 @@ def test_atr_distance_api_uses_one_market_read() -> None:
             "6",
         ]
         assert market_data.calls == 1
+
+
+@pytest.mark.parametrize("multiplier", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_atr_distance_multiplier_is_rejected_before_market_read(
+    multiplier: float,
+) -> None:
+    app_services, market_data = services()
+    payload = {
+        "market": {
+            "ticker": "BTCUSDT.P",
+            "base_timeframe": "5m",
+            "from_ms": 0,
+            "to_ms": 1_500_000,
+        },
+        "plan": {
+            "plan_version": "1",
+            "features": [
+                {
+                    "output_id": "atr_base_3",
+                    "kind": "atr",
+                    "timeframe": "base",
+                    "source": "close",
+                    "parameters": {"period": 3},
+                    "dependencies": [],
+                },
+                {
+                    "output_id": "atr_base_3_x2",
+                    "kind": "atr_distance",
+                    "timeframe": "base",
+                    "source": None,
+                    "parameters": {"multiplier": multiplier},
+                    "dependencies": ["atr_base_3"],
+                },
+            ],
+        },
+    }
+    with TestClient(create_app(services=app_services)) as client:
+        # httpx's own JSON encoder rejects NaN/Infinity outright, so send the
+        # raw body ourselves to exercise the HTTP boundary the same way a
+        # non-httpx client sending these RFC-8259-noncompliant-but-JSON-module
+        # tokens would.
+        response = client.post(
+            "/v1/indicator-evaluations/range",
+            content=json.dumps(payload),
+            headers={"content-type": "application/json"},
+        )
+        assert response.status_code == 422
+        assert response.json()["error"] == "invalid_request"
+        assert market_data.calls == 0

@@ -4,16 +4,16 @@ Independent Indicator Engine and Strategy Engine extracted semantically from BBB
 
 Current state:
 
-- immutable BBB source slice under `legacy_source/` with SHA-256 provenance;
 - detailed BBB call-contract and FastAPI replacement audit;
 - implemented `strategy-engine-foundation-v1` FastAPI service;
 - canonical market/range/decimal/hash contracts;
 - separate Indicator and Strategy application boundaries;
 - Market Data Service client behind a port;
-- operational BBB-compatible EMA, ATR, and RSI Indicator Engine range evaluation;
-- one shared range evaluator and one Market Data Service read for mixed EMA+ATR+RSI plans;
-- indicator catalog advertising only the ported `ema`, `atr`, and `rsi` capabilities;
+- operational BBB-compatible EMA, ATR, ATR-distance, RSI, and ADX/DMI Indicator Engine range evaluation;
+- one shared range evaluator and one Market Data Service read for mixed indicator plans;
+- indicator catalog advertising the ported `ema`, `atr`, `atr_distance`, `rsi`, `adx`, `di_plus`, and `di_minus` capabilities;
 - structured `501` for all remaining unported indicators and strategies;
+- full EMA Pullback strategy evaluation (contexts, direction, blockers, setups, triggers, entries, exit policy, managed replay) and the live-entry/open-trade projection endpoints described below;
 - The original BBB repository remains independent and is not part of this service runtime.
 
 ## Dependencies
@@ -56,12 +56,6 @@ docs/11_ema_indicator_vertical_slice_v1.md
 docs/12_atr_indicator_vertical_slice_v1.md
 docs/13_rsi_indicator_vertical_slice_v1.md
 docs/14_adx_dmi_indicator_vertical_slice_v1.md
-```
-
-Verify the immutable BBB source slice:
-
-```bash
-python scripts/verify_legacy_source.py
 ```
 
 ## EMA range example
@@ -177,63 +171,43 @@ Strategy Engine now owns BBB-compatible feature discovery for canonical serializ
 POST /v1/strategies/ema_pullback/feature-plan
 ```
 
-The response contains the ordered/deduplicated indicator plan and BBB-compatible column mappings. Full context, entry, exit, and managed strategy evaluation remain intentionally unsupported until their semantic slices are ported.
+The response contains the ordered/deduplicated indicator plan and BBB-compatible column mappings.
 
 ## EMA Pullback feature-stage evaluation
 
-`POST /v1/strategy-evaluations/range` now builds the strategy-owned feature plan internally and returns the calculated FeatureFrame. The service reads candles from Market Data Service through `MarketDataPort`. The strategy response now advances to `contexts_ready`: declared HTF contexts are built internally, while entries and exits remain unported.
+`POST /v1/strategy-evaluations/range` builds the strategy-owned feature plan internally and returns the calculated FeatureFrame. The service reads candles from Market Data Service through `MarketDataPort`.
 
 ## EMA Pullback context stage
 
-`POST /v1/strategy-evaluations/range` now builds declared `htf_context` providers after feature calculation and returns BBB-compatible `up`, `down`, `neutral`, and state series. The result stage is `contexts_ready`; trading decisions are still not ported.
+`POST /v1/strategy-evaluations/range` builds declared `htf_context` providers after feature calculation and returns BBB-compatible `up`, `down`, `neutral`, and state series.
 
 ## Context consumption stage
 
-EMA Pullback range evaluation now resolves HTF context by trade side and evaluates `htf_regime_gate` and exit-profile context policies. Results are returned as policy evidence; entries and exits are still intentionally not ready.
+EMA Pullback range evaluation resolves HTF context by trade side and evaluates `htf_regime_gate` and exit-profile context policies. Results are returned as policy evidence.
 
 ## Current strategy evaluation stage
 
-`ema_pullback` range evaluation now reaches `direction_blockers_ready`: the service builds features, contexts, context-consumption masks, side-aware direction, and all current blocker masks. It still does not claim final entry decisions because setups, triggers, and risk composition remain pending.
+`ema_pullback` range evaluation builds features, contexts, context-consumption masks, side-aware direction, and all current blocker masks.
 
-## Current strategy migration stage
+## EMA pullback setups, triggers, and entries
 
-`ema_pullback` range evaluation currently reaches `setups_ready`. The engine owns indicators, contexts, context policies, direction, blockers, and all three setup families. Trigger, risk, final entries, exits, and managed execution are not yet ported.
-
-## EMA pullback trigger stage
-
-The range evaluator now supports `reclaim_anchor`, `strong_reclaim_anchor`, and `touch_anchor`. It returns bar-aligned trigger evidence and `pre_risk_entry_allowed`, while keeping final `entries` empty until the risk layer is ported.
-
-## EMA pullback final entry stage
-
-The range evaluator now resolves the BBB `risk` component and returns final side entry masks. Current BBB semantics support `no_risk_filter`, so the final mask preserves `pre_risk_entry_allowed`. The response stage is `entries_ready`; exits and managed execution remain subsequent slices.
+The engine owns indicators, contexts, context policies, direction, blockers, and all three setup families (`untouched_anchor_setup`, `ema_bounce_counter_setup`, `anchor_stack_width_setup`), the `reclaim_anchor`/`strong_reclaim_anchor`/`touch_anchor` triggers, and the `risk` component (`no_risk_filter` in v1). Range evaluation returns bar-aligned setup/trigger evidence, `pre_risk_entry_allowed`, and final side entry masks.
 
 ## Standard strategy decisions
 
-`POST /v1/strategy-evaluations/range` now returns final entry masks and standard profile-aware exit policy outputs: signal exits, initial relative stop/take distances, readiness masks, and rule evidence. These are policy decisions only; Research Service owns backtest execution and position lifecycle; a future live runtime owns live execution orchestration. Managed policy decisions are available through the managed-replay endpoint; fill arbitration remains outside Strategy Engine.
+`POST /v1/strategy-evaluations/range` returns final entry masks and standard profile-aware exit policy outputs: signal exits, initial relative stop/take distances, readiness masks, and rule evidence. These are policy decisions only; Research Service owns backtest execution and position lifecycle; Runtime owns live execution orchestration through the live-entry/open-trade endpoints below. Managed policy decisions are available through the managed-replay endpoint; fill arbitration remains outside Strategy Engine.
 
 ## Managed exit policy
 
 Managed EMA Pullback policy is available through `POST /v1/strategy-evaluations/managed-replay`. The endpoint returns phase, stop, take-profile and runtime-exit decisions for an already-open logical trade. It does not perform OHLC fill arbitration or create exchange orders.
 
-## Semantic parity gate
+## Live entry and open-trade projections
 
-Before accepting Strategy Engine semantics for use by a new consumer service, run the complete copied-BBB semantic acceptance gate:
-
-```bash
-python scripts/run_semantic_parity_gate.py
-```
-
-The command verifies all 84 immutable legacy-source hashes, runs every mandatory indicator/strategy/API parity test, and writes `artifacts/ema_pullback_semantic_parity_report.json`. A green report proves strategy-owned semantic parity only; execution fills, fees/PnL, BBB presentation translation and live runtime checkpointing remain separate later gates.
+`POST /v1/strategy-evaluations/live-entry` accepts a flat strategy/market/target-bar request (no Runtime-supplied history) and returns one atomic `desired_entry` (or `null`) for the requested target bar. `POST /v1/strategy-evaluations/open-trade` accepts an immutable `executed_trade_receipt` and returns post-target-bar `desired_protection` and a target-active `close_signal`. Both endpoints share one internal live-history acquisition path and return no execution facts, fills, or PnL; see `docs/22_live_projections_architecture.md`.
 
 ## Composer catalog
 
 The authoritative EMA Pullback Workbench catalog is available at `GET /v1/strategies/ema_pullback/composer-catalog`.
-
-## Legacy reference source
-
-`legacy_source/bbb/` is an immutable, disconnected mirror of selected BBB files. It exists only so maintainers and parity tests can inspect how behavior was implemented in the original repository. Production modules under `src/` do not import it, runtime wiring does not load it, and no API request executes code from it.
-
-
 
 ## Normative cross-service seam
 

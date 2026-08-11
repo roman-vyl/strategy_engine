@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from numbers import Real
 
 from strategy_engine.domain.errors import InvalidRequestError
@@ -23,6 +24,11 @@ def validate_atr_distance_feature(feature: PlannedFeature) -> None:
     if isinstance(multiplier, bool) or not isinstance(multiplier, Real):
         raise InvalidRequestError(
             "atr_distance multiplier must be a positive number",
+            output_id=feature.output_id,
+        )
+    if not math.isfinite(float(multiplier)):
+        raise InvalidRequestError(
+            "atr_distance multiplier must be finite",
             output_id=feature.output_id,
         )
     if float(multiplier) <= 0:
