@@ -2,14 +2,15 @@
 
 ## ADDED Requirements
 
-### Requirement: Standard exit component parity
+### Requirement: Standard exit components
 
-The engine SHALL implement `no_signal_exit`, `rsi_signal_exit`, `ema_close_loss_exit`, `ema_cross_loss_exit`, `atr_stop_loss`, `atr_take_profit`, `constant_usd_stop_loss`, and `constant_usd_take_profit` with BBB-compatible bar semantics.
+The engine SHALL implement `no_signal_exit`, `rsi_signal_exit`, `ema_close_loss_exit`, `ema_cross_loss_exit`, `atr_stop_loss`, `atr_take_profit`, `constant_usd_stop_loss`, and `constant_usd_take_profit`. Signal components SHALL return a bar-aligned signal output. Stop and take components SHALL return a bar-aligned protection distance output according to their configuration.
 
 #### Scenario: Evaluate a standard exit component
 
-- **WHEN** a supported standard exit receives identical inputs to BBB
-- **THEN** its bar-aligned signal or distance output SHALL match BBB semantics.
+- **WHEN** a supported standard exit is evaluated
+- **THEN** a signal component SHALL return a bar-aligned signal output
+- **AND** a stop or take component SHALL return a bar-aligned protection distance output according to its configuration.
 
 ### Requirement: Profile-aware composition
 
