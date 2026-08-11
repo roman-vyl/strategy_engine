@@ -1,0 +1,13 @@
+services:
+  strategy-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: strategy-engine:local
+    read_only: true
+    ports:
+      - "127.0.0.1:8090:8090"
+    environment:
+      STRATEGY_ENGINE_MDS_BASE_URL: "${STRATEGY_ENGINE_MDS_BASE_URL:-http://host.docker.internal:8080}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
