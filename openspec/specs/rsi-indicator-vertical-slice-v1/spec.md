@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the calculation, validation, higher-timeframe visibility, public API, and parity guarantees for the RSI indicator vertical slice.
+Define the calculation, validation, higher-timeframe visibility, and public API for the RSI indicator vertical slice.
 ## Requirements
 ### Requirement: BBB-compatible RSI
 

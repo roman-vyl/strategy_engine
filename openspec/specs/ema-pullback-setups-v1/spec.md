@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define BBB-compatible EMA Pullback setup evaluation, stateful behavior, context ordering, setup composition, accumulated-stage readiness, and diagnostic evidence.
+Define deterministic EMA Pullback setup evaluation, stateful behavior, context ordering, setup composition, accumulated-stage readiness, and diagnostic evidence.
 ## Requirements
 ### Requirement: Stateful bounce semantics
 

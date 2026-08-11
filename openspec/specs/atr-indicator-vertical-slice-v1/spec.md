@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the public catalog, validation, computation, warmup, higher-timeframe, shared-read, and parity behavior for the ATR indicator vertical slice.
+Define the public catalog, validation, computation, warmup, higher-timeframe, and shared-read behavior for the ATR indicator vertical slice.
 ## Requirements
 ### Requirement: ATR catalog capability
 

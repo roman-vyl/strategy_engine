@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define Strategy Engine-owned context construction, BBB-compatible context semantics, bundle reuse, stable API output, module boundaries, and golden parity for EMA Pullback.
+Define Strategy Engine-owned context construction, BBB-compatible context semantics, bundle reuse, stable API output, and module boundaries for EMA Pullback.
 ## Requirements
 ### Requirement: Strategy-owned context construction
 

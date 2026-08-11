@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define Strategy Engine-owned EMA Pullback trigger semantics, prior-window behavior, side symmetry, composition, accumulated-stage capability metadata, and golden parity.
+Define Strategy Engine-owned EMA Pullback trigger semantics, prior-window behavior, side symmetry, composition, and accumulated-stage capability metadata.
 ## Requirements
 ### Requirement: Trigger ownership
 

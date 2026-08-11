@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the architectural, contract, and service boundaries for the independent Strategy Engine foundation before indicator and strategy semantics are ported.
+Define the architectural, contract, and service boundaries for the independent Strategy Engine foundation.
 ## Requirements
 ### Requirement: Independent service foundation
 
@@ -84,7 +84,7 @@ Indicator-specific formulas and schemas SHALL be provided only by registered imp
 
 The service SHALL define a `StrategySpecEnvelope` capable of preserving the current BBB strategy identity, instance/variant identity, raw JSON spec, compatibility profile, and deterministic config identity.
 
-The foundation SHALL NOT semantically parse `ema_pullback`; that responsibility belongs to a later porting change.
+This foundational envelope SHALL NOT itself semantically parse `ema_pullback`; semantic parsing is owned by the EMA Pullback feature-planning capability.
 
 #### Scenario: Preserve strategy configuration identity
 
@@ -96,7 +96,7 @@ The foundation SHALL NOT semantically parse `ema_pullback`; that responsibility 
 
 `POST /v1/strategy-evaluations/range` SHALL accept one strategy envelope plus canonical market/range identity and output options.
 
-The contract SHALL model that the service, not BBB, later derives required features, loads market data, calculates indicators, contexts, entries, and exits internally.
+The service SHALL derive required features, load market data, and calculate indicators, contexts, entries, and exits internally.
 
 The result schema SHALL reserve groups required for BBB compatibility: identity, market, features, contexts, entries, exit policy, component evidence/counters, validity, optional state artifact, and warnings.
 
@@ -122,9 +122,7 @@ Variant ordering SHALL be deterministic. Each variant SHALL retain its own ident
 
 ### Requirement: Catalog and validation APIs
 
-The service SHALL expose indicator and strategy catalog/schema/validation routes.
-
-An empty catalog is valid before semantic ports. Unknown IDs SHALL return structured `404` errors. Unimplemented semantic validation SHALL return structured `501` errors rather than placeholder success.
+The service SHALL expose indicator and strategy catalog/schema/validation routes. Unknown IDs SHALL return structured `404` errors. Unimplemented semantic validation SHALL return structured `501` errors rather than placeholder success.
 
 #### Scenario: Request an unknown catalog item
 
@@ -138,7 +136,7 @@ An empty catalog is valid before semantic ports. Unknown IDs SHALL return struct
 
 `GET /readiness` SHALL report readiness per capability and dependency. The service MAY be ready for catalog/schema operations while indicator or strategy evaluation remains `not_implemented`.
 
-Readiness SHALL NOT claim semantic capability that has not been ported.
+Readiness SHALL NOT claim semantic capability that is not implemented.
 
 #### Scenario: Only catalog operations are available
 
