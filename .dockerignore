@@ -1,0 +1,17 @@
+# Allowlist: ignore everything, then explicitly un-ignore only what the
+# Docker build needs (pyproject.toml, LICENSE, and the src/ package tree).
+# This keeps tests, docs, OpenSpec history, git metadata, caches, local
+# virtual environments, and build artifacts out of the build context
+# without needing to enumerate each of them.
+*
+
+!pyproject.toml
+!LICENSE
+!src
+!src/**
+
+# Defense in depth: even inside the allowlisted src/ tree, never send
+# local bytecode caches into the build context.
+**/__pycache__
+**/*.pyc
+**/*.pyo
