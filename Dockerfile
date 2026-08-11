@@ -27,7 +27,6 @@ FROM mcr.microsoft.com/azurelinux/base/python:3.12 AS runtime
 
 ENV STRATEGY_ENGINE_HTTP_HOST=0.0.0.0 \
     STRATEGY_ENGINE_HTTP_PORT=8090 \
-    STRATEGY_ENGINE_MDS_BASE_URL=http://host.docker.internal:8080 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
