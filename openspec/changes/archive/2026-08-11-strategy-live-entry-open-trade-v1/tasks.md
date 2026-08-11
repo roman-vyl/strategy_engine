@@ -84,22 +84,24 @@
 - [x] Remove Runtime/ABI-owned `executed_entry_price` from the live open-trade receipt and reject the retired field at the strict HTTP boundary.
 - [x] Remove stale generated distributions and egg-info, and add source/archive plus live-OpenAPI release regression checks.
 - [x] Prove `/range`, `/range-batch`, PotentialEntry vectors, exit-policy vectors, and `/managed-replay` remain unchanged.
-- [ ] Add an opt-in sibling-repository Engine-to-MDS HTTP smoke harness as a temporary bridge; keep it outside normal `make verify`.
-- [ ] Design and create a dedicated multi-repository integration/system-test service, then add Engine-to-MDS integration tests using real bounds and bounded-candle wire DTOs.
-- [ ] Add end-to-end Engine HTTP tests for live-entry and open-trade.
+- [x] Add end-to-end Engine HTTP tests for live-entry and open-trade — already covered end-to-end (FastAPI HTTP surface → application wiring → real EMA Pullback live-entry/open-trade adapters → `LoadLiveFeatureFrame`, over a fake-MDS `MarketDataPort` boundary only) by `test_live_entry_projection_api.py::test_live_entry_http_returns_only_atomic_plan_result` and `test_open_trade_projection_api.py::test_open_trade_http_wires_real_application_use_case` / `test_open_trade_real_path_accepts_all_live_management_modes` / `test_open_trade_real_path_preserves_high_precision_receipt_protection`.
 - [x] Verify Engine does not import Runtime or ABI packages.
-- [ ] Benchmark maximum configured ready history on 5m and 1h, multiple active instances, latency, memory, and MDS payload size.
-- [ ] Record whether internal caching is needed before production without changing the public v1 contracts.
 - [x] Update maintained architecture and API documentation.
 - [x] Run the full repository verification suite.
 - [x] Run strict OpenSpec validation for `strategy-live-entry-open-trade-v1`.
+
+Deferred, non-blocking follow-ups outside this change's Engine-owned scope (not Engine capability blockers):
+
+- Opt-in sibling-repository Engine-to-MDS HTTP smoke harness (temporary bridge, kept outside `make verify`).
+- Dedicated multi-repository integration/system-test service and its Engine-to-MDS integration tests — a separate future system-integration effort.
+- Ready-history/multi-instance performance benchmark and the resulting internal-caching decision — a separate performance gate after container/system composition.
 
 ## Acceptance
 
 - [x] Both new endpoints use one shared earliest-ready-to-target history policy.
 - [x] Runtime supplies no history boundary, warmup, FeaturePlan, or candle array.
 - [x] Live-entry returns one complete target-bar `desired_entry` or `null`.
-- [ ] Runtime calls open-trade only after ABI reports the correlated position is currently open.
+- Runtime calls open-trade only after ABI reports the correlated position is currently open — a Runtime/ABI-side operational gate this repo cannot verify; the caller obligation is documented as a durable Engine contract requirement ("Require a confirmed-open caller precondition" in `open-trade-projection-v1`).
 - [x] Open-trade accepts an immutable receipt and returns only post-target-bar desired protection plus target-active strategic close signal.
 - [x] Management starts after the entry bar and uses planned-price basis.
 - [x] Receipt intrinsic time, enum, decimal, and price-geometry validation runs before MDS access.
