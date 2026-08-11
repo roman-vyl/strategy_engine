@@ -14,11 +14,17 @@ The same direct-edit mechanism also covers Purpose for these 3, alongside their 
 - [ ] ema-pullback-direction-blockers-v1 — drop stale "and parity".
 - [ ] strategy-engine-foundation-v1 — drop "before indicator and strategy semantics are ported".
 
-## 2. Apply the requirement deltas
+## 2. Apply the requirement deltas (normal delta merge)
 
 - [ ] Archive merges the 5 delta spec.md files in this change into their canonical specs: `ema-indicator-vertical-slice-v1`, `ema-pullback-feature-plan-v1`, `ema-pullback-direction-blockers-v1`, `strategy-engine-foundation-v1`, `unified-strategy-research-seam-contract-v1`.
 
-## 3. Verify
+## 3. Post-archive direct canonical cleanup (not part of the delta merge)
+
+`unified-strategy-research-seam-contract-v1`'s MODIFIED "Single physical seam" delta had to keep the scenario heading `Map a legacy mixed responsibility` unchanged — the validator requires a MODIFIED block to retain every scenario name the current spec already has, and there is no RENAMED-scenario delta operation to express a heading change. The merged requirement body and scenario body are already durable/present-tense; only the heading is stale.
+
+- [ ] After archive, in `openspec/specs/unified-strategy-research-seam-contract-v1/spec.md`, rename that scenario heading to a neutral present-tense name (e.g. `Coordinate a shared responsibility`) by direct edit. Do not change the scenario's WHEN/THEN semantics.
+
+## 4. Verify
 
 - [ ] Confirm no production code or test file changed.
 - [ ] Run `openspec validate --all --strict`.
