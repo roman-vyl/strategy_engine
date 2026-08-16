@@ -16,7 +16,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install
-        run: pip install '.[dev]'
+        run: |
+          pip install '.[dev]'
+          rm -rf src/*.egg-info
 
       - name: Verify (lint + typecheck + test + release-check)
         run: make verify
