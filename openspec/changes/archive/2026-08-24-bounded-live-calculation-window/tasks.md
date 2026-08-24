@@ -1,0 +1,124 @@
+## 1. Contracts and package scaffold (A)
+
+- [x] 1.1 Create `src/strategy_engine/strategies/live_calculation/__init__.py`
+- [x] 1.2 Create `contracts.py` with `HistoryRequirement(timeframe, bars, reason)`, `PlannedHistoryStart(from_ms, winning_indicator_requirement, winning_strategy_requirement, requirements)`, and the `StrategyHistoryRequirements` Protocol boundary between the generic planner and a concrete strategy family's own semantic-history knowledge (design.md Decision 2/2a)
+- [x] 1.3 Add architecture tests asserting `live_calculation/` modules import no MDS client, pandas, or HTTP dependency, and import no concrete strategy-family package (`live_calculation/` depends only on `StrategyHistoryRequirements`)
+
+## 2. Generic indicator requirement resolution (A + B)
+
+- [x] 2.1 Implement `indicator_requirements.py`: `ResolveIndicatorHistoryRequirements` reading the existing `IndicatorPlan` and emitting one `HistoryRequirement` per planned feature, including an explicit zero-additional-warm-up entry for upstream-scaling features (e.g. `atr_distance` inherits ATR's requirement, contributes none of its own)
+- [x] 2.2 Implement finite-bar lookback policy for RSI and ATR
+- [x] 2.3 EMA convergence-tolerance policy against the actual `.ewm(adjust=False)` recursion (`y[n] = alpha*x[n] + (1-alpha)*y[n-1]`, seed decay `(1-alpha)^n < tolerance` — not `alpha^n`), behind its own `ema_tolerance` constant, calibrated independently of ADX/DI's
+- [x] 2.4 ADX/DI convergence-tolerance policy against Wilder's two-stage RMA cascade in `compute_adx_dmi` (TR/+DM/-DM smoothing, then a second pass smoothing DX into ADX — two independent bootstrap windows, not one), behind its own `adx_dmi_tolerance` constant. Deliberately over-provisioned, documented as a provisional structural policy rather than a precisely derived exact bound.
+- [x] 2.5 Fail-closed behavior for any indicator kind in the plan with no registered policy
+- [x] 2.6 (B) Unit test each indicator's resolved requirement against hand-computed expected bar counts (RSI, ATR finite; EMA, ADX/DI recursive with correct decay base; `atr_distance` zero-additional case; fail-closed case)
+
+## 3. ema_pullback strategy-component requirements (A + B)
+
+- [x] 3.1 Create `src/strategy_engine/strategies/ema_pullback/live_calculation_requirements.py` with `EmaPullbackLiveCalculationRequirements`
+- [x] 3.2 Audit every currently live-supported `ema_pullback` context, blocker, setup, trigger, risk/entry, and exit component and assign each an explicit history policy: zero additional history, finite semantic lookback, or bounded stateful semantic policy. Covers `anchor_stack_width`, `untouched_anchor` (lookback + active_bars - 1), trigger reclaim (object and bare-string forms), RSI/trend-strength blockers, `contexts.*`/`components.direction`/`components.risk` (zero additional), and exit temporal windows (`confirm_bars`, including the `shift(1)` dependency). Every resolved lookback is counted on the base FeatureFrame axis, not the timeframe axis of whichever indicator feeds the component. Fail-closed on every unrecognized component_id.
+- [x] 3.3 Implement bounded semantic warm-up for `ema_bounce_counter_setup`'s trend-episode memory, documented as a policy approximation (no fixed lookback bounds `completed_count`), not a provably sufficient window
+- [x] 3.4 Fail-closed behavior for any live-supported component not covered by the audit in 3.2
+- [x] 3.5 (B) Unit test each strategy-component requirement against its configured lookback, the fail-closed case, and the axis rule (a component's span does not scale with an unrelated indicator's timeframe)
+
+## 4. Window planner (A + B)
+
+- [x] 4.1 Implement `plan_window.py`: `PlanLiveHistoryStart` accepting a `StrategyHistoryRequirements` implementation (required, not defaulted — design.md Decision 2a), `IndicatorPlan`, `base_timeframe`, and history anchor
+- [x] 4.2 Additive composition: `required_pre_anchor_span = indicator_warmup_span + strategy_semantic_span` (max within each source, summed across sources — not `max()` across both), returning `winning_indicator_requirement` and `winning_strategy_requirement` as separate fields
+- [x] 4.3 `(timeframe, bars)` -> base-timeframe span conversion using fixed per-timeframe candle duration and the supplied `base_timeframe`
+- [x] 4.4 HTF bucket alignment: for every distinct higher timeframe present in the indicator plan, roll `from_ms` back to the start of that timeframe's fixed-duration UTC resample bucket, applied simultaneously for all higher timeframes in use, via LCM of all in-use HTF durations
+- [x] 4.5 (B) Unit test additive composition with a composite case (e.g. RSI14 blocker with lookback=20) asserting the consumer's lookback window contains no bars backed by not-yet-valid upstream indicator values
+- [x] 4.6 (B) Unit test aggregation/winner selection across mixed-timeframe requirement sets, including a randomized case, and against a fake `StrategyHistoryRequirements` implementation to prove the planner is generic
+- [x] 4.7 (B) Unit test timeframe-conversion edge cases (base timeframe, HTF multiples)
+- [x] 4.8 (B) Unit test HTF bucket alignment: target inside a `1h` bucket, target inside a `4h` bucket, an unaligned `from` candidate that must snap to a bucket start, and a spec using `1h` and `4h` simultaneously
+
+## 5. Calibration and production readiness of the disconnected planner (C)
+
+**Acceptance principle (design.md/proposal.md):** the gate is numeric parity — every `IndicatorPlan` output and every numeric/intermediate value strategy components compute on top of it, over the downstream-consumed tail each component reads — not categorical business outcomes, which are secondary smoke only.
+
+- [x] 5.1 EMA convergence tolerance calibrated against real BTCUSDT.P/ETHUSDT.P history under the numeric-parity gate; fixed at `1e-4`
+- [x] 5.2 ADX/DI convergence tolerance calibrated independently under the same gate; fixed at `1e-4`
+- [x] 5.3 `ema_bounce_counter_setup`'s anchor-EMA-period tier policy established from real `trend_active` episode-length measurement across three production-family anchor-stack sizes (design.md Decision 12):
+
+  | anchor EMA period | observed max episode | policy `history_bars` |
+  |---|---|---|
+  | ≤ 200 | 1,832 | 2,500 |
+  | 201-500 | 4,736 | 6,000 |
+  | 501-1,000 | 11,000 | 15,000 |
+  | > 1,000, bounce present | — | fail closed |
+
+  Empirical V1 policy, not a mathematical upper bound. Conditional: present only when `ema_bounce_counter_setup` is configured; classified solely by `anchor_stack.anchor.period` (fast/slow EMA periods do not affect tier selection).
+- [x] 5.4 Boundary, conditional-presence, fail-closed, and planner-aggregation regression tests for the tier policy (`tests/test_live_calculation_ema_pullback_requirements.py`)
+- [x] 5.5 Production requirement resolvers, planner, and contracts unit-tested to production-ready state (groups 1-4)
+- [x] 5.6 Architecture cleanup complete: `live_calculation/` depends only on `StrategyHistoryRequirements` (design.md Decision 2a), no concrete strategy family import, no registry/factory/plugin framework, no composition helper created ahead of a real caller; bounce tier policy is a non-overridable private production constant (`_BOUNCE_HISTORY_TIERS`); production diagnostics and comments carry only stable, load-bearing information — full empirical basis and rationale live in this file and design.md, not in source comments
+
+Calibration/validation tooling used to reach 5.1-5.3 (full-history reference harness, tolerance sweeps, episode-distribution measurement, tier validation runs) was disposable research infrastructure and is not retained in the production repository — the calibrated constants and the tier table above are the artifacts that carry forward.
+
+**Group 5: CLOSED.**
+
+## 6. Wire into live acquisition (D) — apply target for this phase
+
+**Scope of apply: Group 6 ONLY. Group 7 (integration/regression/performance tests) and Group 8 (rollout) are NOT started by this apply and SHALL NOT be started — they remain separate, later work.**
+
+The bounded planner (`PlanLiveHistoryStart`, `ResolveIndicatorHistoryRequirements`, `EmaPullbackLiveCalculationRequirements`) is implemented, unit-tested, and calibrated, but remains fully disconnected from the production live path. This group performs only the wiring, touching exactly four production files plus their existing tests:
+
+- `evaluate_live_entry_projection.py`
+- `evaluate_open_trade_projection.py`
+- `load_live_feature_frame.py`
+- `service/wiring.py`
+
+No other production file changes. No new modules, no new abstractions beyond what groups 1-5 already built.
+
+- [x] 6.1 Modify `evaluate_live_entry_projection.py` to compute and pass `history_anchor_open_time_ms = target_bar_open_time_ms`
+- [x] 6.2 Modify `evaluate_open_trade_projection.py` to compute and pass `history_anchor_open_time_ms = min(source_plan_bar_open_time_ms, entry_bar_open_time_ms)`
+- [x] 6.3 Add `history_anchor_open_time_ms` to the internal live feature frame request used by `load_live_feature_frame.py`; `LoadLiveFeatureFrame` SHALL only consume this value, never compute or re-derive it
+- [x] 6.4 Modify `load_live_feature_frame.py`'s `execute()` with the following exact minimal reordering, changing nothing else about its control flow. Current order (unchanged parts) is, in this exact sequence:
+  1. `step_ms` / `target` extraction — **unchanged.**
+  2. The existing target base-timeframe alignment precheck (`target < 0 or target % step_ms`, raising `InvalidRequestError`) — **unchanged, stays exactly where it is.**
+  3. `self._strategy_validator.execute(request.strategy)` — **remains exactly where it already is today: immediately after the target-alignment precheck in step 2, and before the MDS bounds/committed-bar checks.** `ValidateLiveStrategySpec` itself is NOT modified, NOT refactored, and is NOT moved above the target-alignment precheck.
+  4. `bounds = self._market_data.load_bounds(...)`, the `ready`/`earliest`/`latest` check, and the target-committed-bar check — **unchanged, stay exactly where they are today**, immediately after the validator call in step 3.
+
+  Only after all four of the above (unchanged) steps does the new behavior begin:
+
+  5. `planned = self._feature_planner.execute(request.strategy)` — **moved earlier**, from after `requested_range` construction to immediately after the existing committed-bar check from step 4, because the window planner (next step) needs `planned.indicator_plan`.
+  6. Invoke `PlanLiveHistoryStart.execute(raw_spec=request.strategy.raw_spec, indicator_plan=planned.indicator_plan, base_timeframe=request.market.base_timeframe, history_anchor_open_time_ms=request.history_anchor_open_time_ms)` to get `planned_from_ms`.
+  7. `actual_from_ms = max(planned_from_ms, earliest)` — replaces today's `requested_range = TimeRange(from_ms=earliest, to_ms=target + step_ms)`; the new `requested_range = TimeRange(from_ms=actual_from_ms, to_ms=target + step_ms)`, then `requested_range.validate_alignment(...)` unchanged.
+  8. `self._indicator_evaluator.execute(...)` — unchanged, still consumes `planned.indicator_plan` and the (now bounded) `requested_range`.
+
+  `to_ms = target_bar_open_time_ms + base_timeframe_duration` is untouched throughout. No other line in `execute()` is reordered or altered.
+
+  **Explicitly out of scope for this apply:** do NOT move `ValidateLiveStrategySpec` above the existing target-alignment precheck; do NOT refactor `ValidateLiveStrategySpec`; do NOT remove or collapse the existing duplicate feature-plan validation/build behavior (`self._feature_planner.execute(request.strategy)` running once here, independent of whatever `ValidateLiveStrategySpec` itself does) — that de-duplication, if ever wanted, is not part of Group 6.
+- [x] 6.5 **Exact contract, not an implementation choice.** `LiveFeatureFrameBundle` gains exactly one new field: `planned_from_ms: int` (the `from_ms` returned by `PlanLiveHistoryStart.execute()`, i.e. before MDS-bounds clamping). Do NOT add: a `history_truncated` boolean flag; the full `PlannedHistoryStart` object; `winning_indicator_requirement`/`winning_strategy_requirement`; a diagnostics DTO; a logger call; a metrics emitter; or any observability port/framework. Truncation is derivable by callers/tests as `bundle.requested_range.from_ms > bundle.planned_from_ms` — no separate flag is stored. The full `PlannedHistoryStart` value from step 6.4.6 stays local to `LoadLiveFeatureFrame.execute()`; only its `from_ms` is propagated downstream, via this one field.
+- [x] 6.6 Wire `PlanLiveHistoryStart` to a concrete `EmaPullbackLiveCalculationRequirements()` (and `ResolveIndicatorHistoryRequirements`) at the composition boundary in `service/wiring.py` — this is where the "ema_pullback is the current live strategy family" knowledge is allowed to live
+
+**Corresponding existing live tests SHALL be updated/extended in place** (e.g. the existing `LoadLiveFeatureFrame`/`EvaluateLiveEntryProjection`/`EvaluateOpenTradeProjection` test files) rather than new test files or new test infrastructure being introduced, unless an existing file genuinely has no home for a new case.
+
+**Group 6: CLOSED.** Applied exactly the four production files in scope (`evaluate_live_entry_projection.py`, `evaluate_open_trade_projection.py`, `load_live_feature_frame.py`, `service/wiring.py`), no others. `LiveFeatureFrameBundle` gained exactly one field (`planned_from_ms`); no diagnostic/logging infrastructure was added. `ValidateLiveStrategySpec` was not moved or refactored. Existing live test files (`tests/test_live_feature_frame.py`, `tests/test_live_entry_projection.py`, `tests/test_live_entry_projection_api.py`, `tests/test_open_trade_projection_composition.py`) were extended in place — no new test files. Full suite, ruff, and mypy pass.
+
+## 7. Integration, regression, and performance tests (E)
+
+- [x] 7.1 Add/confirm a test asserting Research/Backtest range evaluation never invokes the new planner and is unaffected by this change. `tests/test_architecture.py::test_research_backtest_range_evaluation_does_not_use_live_acquisition` (new, AST-based) asserts `strategies/application/evaluate_range.py`, `evaluate_range_batch.py`, and `indicators/application/evaluate_range.py` import neither `strategy_engine.strategies.live_calculation` nor `load_live_feature_frame`.
+- [x] 7.2 Integration test: live-entry request with a spec producing a small requirement set reads only the expected bounded range. Deterministic case already covered by `tests/test_live_feature_frame.py::test_live_frame_uses_earliest_bound_and_target_not_absolute_latest`. Additionally accepted via real local infrastructure (production `build_services(settings)`, real MDS HTTP, real DB, `EvaluateLiveEntryProjection`, ETHUSDT.P 5m, target=latest committed bar): actual MDS range `from_ms=1,773,547,200,000` (bounded, not `earliest_committed_open_time_ms=1,615,766,400,000`), `to_ms=1,787,588,100,000` (`=target+step`), 46,803 bars loaded, request succeeded (`desired_entry=None`, a legitimate business outcome, not an error), wall-clock 6.86s.
+- [x] 7.3 Integration test: open-trade request with anchor before target reads a range covering anchor warm-up through target. Accepted via the same real infrastructure and spec: `ExecutedTradeReceipt` with `source_plan_bar_open_time_ms=1,786,982,100,000` < `entry_bar_open_time_ms=1,786,983,000,000` < `target=1,787,587,800,000` (source_plan ~7 days before target). History anchor `= min(source_plan, entry) = 1,786,982,100,000`; actual MDS range `from_ms=1,772,942,400,000` (before the anchor, i.e. covers warm-up-before-anchor through target — not equal to `earliest_committed_open_time_ms`), `to_ms=1,787,588,100,000` (`=target+step`), 48,819 bars loaded, request succeeded, wall-clock 27.51s.
+- [x] 7.4 Integration test: planned window predates MDS bounds -> request is clamped, truncation observable through `planned_from_ms` versus `requested_range.from_ms`, request still succeeds. Already fully covered by the same `test_live_frame_uses_earliest_bound_and_target_not_absolute_latest`: `planned_from_ms < 0` (predates the fixture's `earliest=0`) -> `requested_range.from_ms == 0` -> `requested_range.from_ms > planned_from_ms` -> assertions on `result.frame`/`result.target_index` confirm the request still succeeds.
+- [x] 7.5 Integration test: spec containing a component with no registered history policy -> live request fails closed with a clear error, not a silently under-provisioned window. New `tests/test_live_feature_frame.py::test_live_frame_fails_closed_on_unrecognized_component_before_candle_read`: an unrecognized blocker `component_id` passes `BuildLiveStrategyFeaturePlan`/`ValidateLiveStrategySpec` silently (no dedicated fields to gate on), but `EmaPullbackLiveCalculationRequirements`'s own fail-closed raises `InvalidRequestError` before any candle read (`market_data.range_calls == 0`).
+- [x] 7.6 Measure live-entry and open-trade latency separately, before and after this change is wired in. Same machine/DB/MDS, same ETHUSDT.P 5m target, same canonical spec, via a temporary local git worktree at pre-wiring commit `44aa2ec` (production-tree-identical to `2490755`) versus current bounded wiring:
+
+  | | pre-wiring (unbounded) | bounded (current) |
+  |---|---|---|
+  | live-entry wall-clock | 89.40s | 6.86s |
+  | live-entry bars loaded | 572,738 (`earliest`->`target+step`, fixed) | 46,803 |
+  | open-trade wall-clock | 340.46s | 27.51s |
+  | open-trade bars loaded | 572,738 (same fixed range regardless of anchor) | 48,819 |
+
+  No speedup threshold required by this task; measurement recorded as evidence.
+
+**Group 7: CLOSED.** All of 7.1-7.6 have direct evidence: 7.1/7.4 via existing/extended deterministic unit tests, 7.5 via one new deterministic unit test, 7.2/7.3/7.6 via real local acceptance (production `build_services` composition, real local MDS HTTP, real DB, no fakes) run manually and recorded above (not retained as a repository script). No full-history numeric-parity/calibration research was repeated -- Group 5's calibration is treated as accepted per owner decision.
+
+## 8. Rollout (F)
+
+- [x] 8.1 Review group 6/7 results; if parity or latency is insufficient for any component, adjust the relevant policy constant and re-run calibration before re-attempting rollout. Group 5's calibration and Group 7's real-infrastructure acceptance are accepted per owner decision; no policy constant (EMA/ADX tolerance, bounce anchor tiers) requires adjustment. No calibration/parity/performance analysis was repeated for this task.
+- [x] 8.2 Enable the bounded live path in production once parity, numeric drift, and latency targets are met. The bounded live path is already wired into production composition (`service/wiring.py`, Group 6) and was accepted via real local infrastructure (real MDS HTTP, real DB, production `build_services`) in Group 7 -- no separate rollout step, feature flag, or additional wiring change was needed or made.
+- [x] 8.3 Document the open-trade long-position latency limitation as a known follow-up item. Bounded-history planning successfully eliminated the full-history bottleneck (Group 7: live-entry 89.40s -> 6.86s, open-trade 340.46s -> 27.51s real-infra measurement). A follow-up profiling pass on the current real-infra open-trade run (~30s total) found managed replay accounts for ~22s / ~73% of it -- the dominant remaining cost, not full-history acquisition. A brief source audit localized the likely cause to `managed.py`'s `_series()` helper being called from inside the per-bar replay loop (via `_runtime_signal`'s `ema_cross_loss_exit` branch and `_phase_met`'s `mfe_atr` branch), each call re-materializing the entire FeatureFrame column rather than reusing a value computed once outside the loop. This is a distinct performance problem in existing managed-replay code, unrelated to and not a blocker for this OpenSpec change (which only bounds live *acquisition*, not managed-replay computation). No fix is designed or applied here; managed-replay optimization is explicitly deferred to a separate follow-up change after this one merges.
+
+**Group 8: CLOSED.**

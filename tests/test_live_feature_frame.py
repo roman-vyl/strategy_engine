@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 
 from strategy_engine.domain.errors import (
+    InvalidRequestError,
     MarketStreamNotReadyError,
     TargetBarNotCommittedError,
     UpstreamContractError,
@@ -28,6 +29,10 @@ from strategy_engine.strategies.application.validate_live_strategy_spec import (
 )
 from strategy_engine.strategies.contracts import LiveStrategySpec
 from strategy_engine.strategies.ema_pullback.evaluator import EmaPullbackRangeEvaluator
+from strategy_engine.strategies.ema_pullback.live_calculation_requirements import (
+    EmaPullbackLiveCalculationRequirements,
+)
+from strategy_engine.strategies.live_calculation.plan_window import PlanLiveHistoryStart
 
 
 class FakeMarketData:
@@ -125,8 +130,11 @@ def build_loader(market_data: FakeMarketData) -> LoadLiveFeatureFrame:
     strategy_registry = StrategyRegistry(EmaPullbackRangeEvaluator(planner, indicator_evaluator))
     live_planner = BuildLiveStrategyFeaturePlan()
     validator = ValidateLiveStrategySpec(strategy_registry, live_planner)
+    window_planner = PlanLiveHistoryStart(
+        strategy_requirements=EmaPullbackLiveCalculationRequirements()
+    )
     return LoadLiveFeatureFrame(
-        market_data, live_planner, indicator_evaluator, validator
+        market_data, live_planner, indicator_evaluator, validator, window_planner
     )
 
 
@@ -138,6 +146,7 @@ def request(target: int = 3_300_000) -> LiveFeatureFrameRequest:
         ),
         market=MarketStream("BTCUSDT.P", "5m"),
         target_bar_open_time_ms=target,
+        history_anchor_open_time_ms=target,
     )
 
 
@@ -150,6 +159,13 @@ def test_live_frame_uses_earliest_bound_and_target_not_absolute_latest() -> None
     assert result.target_index == 11
     assert result.frame.time_ms[-1] == 3_300_000
     assert result.market_data_hash == "fixture-market-hash"
+    # minimal_spec's small EMA periods need less warm-up than the anchor
+    # itself (3_300_000ms), so the planner's own planned_from_ms is
+    # negative -- clamped to the MDS earliest bound (0). Truncation is
+    # derivable from these two fields, with no separate flag stored.
+    assert result.planned_from_ms < 0
+    assert result.requested_range.from_ms == 0
+    assert result.requested_range.from_ms > result.planned_from_ms
 
 
 def test_live_frame_rejects_non_ready_or_empty_bounds_without_candle_read() -> None:
@@ -208,3 +224,30 @@ def test_live_frame_rejects_incomplete_or_wrong_final_frame() -> None:
 
     with pytest.raises(UpstreamContractError):
         build_loader(BrokenMarketData()).execute(request())
+
+
+def test_live_frame_fails_closed_on_unrecognized_component_before_candle_read() -> None:
+    """An unrecognized blocker component_id has no dedicated fields
+    (feature_plan.py's blocker loop only reads `rsi`/`trend_strength` when
+    present), so it passes through BuildLiveStrategyFeaturePlan/
+    ValidateLiveStrategySpec silently -- it is EmaPullbackLiveCalculation
+    Requirements's own fail-closed (design.md Decision 10) that must catch
+    it, and it must do so before any candle is read, not as a silently
+    under-provisioned live calculation."""
+
+    spec = minimal_spec()
+    spec["components"] = {
+        "blockers": [
+            {"instance_id": "unknown-1", "component_id": "totally_unknown_blocker_component"}
+        ]
+    }
+    market_data = FakeMarketData(latest=3_600_000)
+    unknown_component_request = LiveFeatureFrameRequest(
+        strategy=LiveStrategySpec(strategy_id="ema_pullback", raw_spec=spec),
+        market=MarketStream("BTCUSDT.P", "5m"),
+        target_bar_open_time_ms=3_300_000,
+        history_anchor_open_time_ms=3_300_000,
+    )
+    with pytest.raises(InvalidRequestError):
+        build_loader(market_data).execute(unknown_component_request)
+    assert market_data.range_calls == 0

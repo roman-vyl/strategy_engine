@@ -24,6 +24,7 @@ from strategy_engine.strategies.application.validate_live_strategy_spec import (
 )
 from strategy_engine.strategies.contracts import LiveStrategySpec
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
+from strategy_engine.strategies.live_calculation.plan_window import PlanLiveHistoryStart
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +32,7 @@ class LiveFeatureFrameRequest:
     strategy: LiveStrategySpec
     market: MarketStream
     target_bar_open_time_ms: int
+    history_anchor_open_time_ms: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +45,7 @@ class LiveFeatureFrameBundle:
     requested_range: TimeRange
     planned_features: EmaPullbackFeaturePlan
     frame: FeatureFrame
+    planned_from_ms: int
 
     @property
     def market_data_hash(self) -> str:
@@ -58,11 +61,13 @@ class LoadLiveFeatureFrame:
         feature_planner: BuildLiveStrategyFeaturePlan,
         indicator_evaluator: EvaluateIndicatorRange,
         strategy_validator: ValidateLiveStrategySpec,
+        window_planner: PlanLiveHistoryStart,
     ) -> None:
         self._market_data = market_data
         self._feature_planner = feature_planner
         self._indicator_evaluator = indicator_evaluator
         self._strategy_validator = strategy_validator
+        self._window_planner = window_planner
 
     def execute(self, request: LiveFeatureFrameRequest) -> LiveFeatureFrameBundle:
         step_ms = timeframe_duration_ms(request.market.base_timeframe)
@@ -91,9 +96,17 @@ class LoadLiveFeatureFrame:
                 latest_committed_open_time_ms=latest,
             )
 
-        requested_range = TimeRange(from_ms=earliest, to_ms=target + step_ms)
-        requested_range.validate_alignment(request.market.base_timeframe)
         planned = self._feature_planner.execute(request.strategy)
+        planned_history_start = self._window_planner.execute(
+            raw_spec=request.strategy.raw_spec,
+            indicator_plan=planned.indicator_plan,
+            base_timeframe=request.market.base_timeframe,
+            history_anchor_open_time_ms=request.history_anchor_open_time_ms,
+        )
+        planned_from_ms = planned_history_start.from_ms
+        actual_from_ms = max(planned_from_ms, earliest)
+        requested_range = TimeRange(from_ms=actual_from_ms, to_ms=target + step_ms)
+        requested_range.validate_alignment(request.market.base_timeframe)
         frame = self._indicator_evaluator.execute(
             IndicatorRangeRequest(
                 market=request.market,
@@ -120,4 +133,5 @@ class LoadLiveFeatureFrame:
             requested_range=requested_range,
             planned_features=planned,
             frame=frame,
+            planned_from_ms=planned_from_ms,
         )

@@ -35,11 +35,16 @@ class EvaluateOpenTradeProjection:
 
     def execute(self, request: OpenTradeProjectionRequest) -> OpenTradeProjectionResult:
         validate_open_trade_request(request)
+        receipt = request.executed_trade_receipt
+        history_anchor_open_time_ms = min(
+            receipt.source_plan_bar_open_time_ms, receipt.entry_bar_open_time_ms
+        )
         bundle = self._live_frame_loader.execute(
             LiveFeatureFrameRequest(
                 strategy=request.strategy,
                 market=request.market,
                 target_bar_open_time_ms=request.target_bar_open_time_ms,
+                history_anchor_open_time_ms=history_anchor_open_time_ms,
             )
         )
         projection = self._adapters.resolve(request.strategy.strategy_id).evaluate(
