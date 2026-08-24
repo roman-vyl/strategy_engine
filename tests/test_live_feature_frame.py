@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 
 from strategy_engine.domain.errors import (
+    InvalidRequestError,
     MarketStreamNotReadyError,
     TargetBarNotCommittedError,
     UpstreamContractError,
@@ -223,3 +224,30 @@ def test_live_frame_rejects_incomplete_or_wrong_final_frame() -> None:
 
     with pytest.raises(UpstreamContractError):
         build_loader(BrokenMarketData()).execute(request())
+
+
+def test_live_frame_fails_closed_on_unrecognized_component_before_candle_read() -> None:
+    """An unrecognized blocker component_id has no dedicated fields
+    (feature_plan.py's blocker loop only reads `rsi`/`trend_strength` when
+    present), so it passes through BuildLiveStrategyFeaturePlan/
+    ValidateLiveStrategySpec silently -- it is EmaPullbackLiveCalculation
+    Requirements's own fail-closed (design.md Decision 10) that must catch
+    it, and it must do so before any candle is read, not as a silently
+    under-provisioned live calculation."""
+
+    spec = minimal_spec()
+    spec["components"] = {
+        "blockers": [
+            {"instance_id": "unknown-1", "component_id": "totally_unknown_blocker_component"}
+        ]
+    }
+    market_data = FakeMarketData(latest=3_600_000)
+    unknown_component_request = LiveFeatureFrameRequest(
+        strategy=LiveStrategySpec(strategy_id="ema_pullback", raw_spec=spec),
+        market=MarketStream("BTCUSDT.P", "5m"),
+        target_bar_open_time_ms=3_300_000,
+        history_anchor_open_time_ms=3_300_000,
+    )
+    with pytest.raises(InvalidRequestError):
+        build_loader(market_data).execute(unknown_component_request)
+    assert market_data.range_calls == 0

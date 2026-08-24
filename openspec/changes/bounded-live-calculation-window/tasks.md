@@ -95,14 +95,25 @@ No other production file changes. No new modules, no new abstractions beyond wha
 
 **Group 6: CLOSED.** Applied exactly the four production files in scope (`evaluate_live_entry_projection.py`, `evaluate_open_trade_projection.py`, `load_live_feature_frame.py`, `service/wiring.py`), no others. `LiveFeatureFrameBundle` gained exactly one field (`planned_from_ms`); no diagnostic/logging infrastructure was added. `ValidateLiveStrategySpec` was not moved or refactored. Existing live test files (`tests/test_live_feature_frame.py`, `tests/test_live_entry_projection.py`, `tests/test_live_entry_projection_api.py`, `tests/test_open_trade_projection_composition.py`) were extended in place — no new test files. Full suite, ruff, and mypy pass.
 
-## 7. Integration, regression, and performance tests (E) — NOT STARTED BY THIS APPLY
+## 7. Integration, regression, and performance tests (E)
 
-- [ ] 7.1 Add/confirm a test asserting Research/Backtest range evaluation never invokes the new planner and is unaffected by this change
-- [ ] 7.2 Integration test: live-entry request with a spec producing a small requirement set reads only the expected bounded range
-- [ ] 7.3 Integration test: open-trade request with anchor before target reads a range covering anchor warm-up through target
-- [ ] 7.4 Integration test: planned window predates MDS bounds -> request is clamped, truncation observable through `planned_from_ms` versus `requested_range.from_ms`, request still succeeds
-- [ ] 7.5 Integration test: spec containing a component with no registered history policy -> live request fails closed with a clear error, not a silently under-provisioned window
-- [ ] 7.6 Measure live-entry and open-trade latency separately, before and after this change is wired in
+- [x] 7.1 Add/confirm a test asserting Research/Backtest range evaluation never invokes the new planner and is unaffected by this change. `tests/test_architecture.py::test_research_backtest_range_evaluation_does_not_use_live_acquisition` (new, AST-based) asserts `strategies/application/evaluate_range.py`, `evaluate_range_batch.py`, and `indicators/application/evaluate_range.py` import neither `strategy_engine.strategies.live_calculation` nor `load_live_feature_frame`.
+- [x] 7.2 Integration test: live-entry request with a spec producing a small requirement set reads only the expected bounded range. Deterministic case already covered by `tests/test_live_feature_frame.py::test_live_frame_uses_earliest_bound_and_target_not_absolute_latest`. Additionally accepted via real local infrastructure (production `build_services(settings)`, real MDS HTTP, real DB, `EvaluateLiveEntryProjection`, ETHUSDT.P 5m, target=latest committed bar): actual MDS range `from_ms=1,773,547,200,000` (bounded, not `earliest_committed_open_time_ms=1,615,766,400,000`), `to_ms=1,787,588,100,000` (`=target+step`), 46,803 bars loaded, request succeeded (`desired_entry=None`, a legitimate business outcome, not an error), wall-clock 6.86s.
+- [x] 7.3 Integration test: open-trade request with anchor before target reads a range covering anchor warm-up through target. Accepted via the same real infrastructure and spec: `ExecutedTradeReceipt` with `source_plan_bar_open_time_ms=1,786,982,100,000` < `entry_bar_open_time_ms=1,786,983,000,000` < `target=1,787,587,800,000` (source_plan ~7 days before target). History anchor `= min(source_plan, entry) = 1,786,982,100,000`; actual MDS range `from_ms=1,772,942,400,000` (before the anchor, i.e. covers warm-up-before-anchor through target — not equal to `earliest_committed_open_time_ms`), `to_ms=1,787,588,100,000` (`=target+step`), 48,819 bars loaded, request succeeded, wall-clock 27.51s.
+- [x] 7.4 Integration test: planned window predates MDS bounds -> request is clamped, truncation observable through `planned_from_ms` versus `requested_range.from_ms`, request still succeeds. Already fully covered by the same `test_live_frame_uses_earliest_bound_and_target_not_absolute_latest`: `planned_from_ms < 0` (predates the fixture's `earliest=0`) -> `requested_range.from_ms == 0` -> `requested_range.from_ms > planned_from_ms` -> assertions on `result.frame`/`result.target_index` confirm the request still succeeds.
+- [x] 7.5 Integration test: spec containing a component with no registered history policy -> live request fails closed with a clear error, not a silently under-provisioned window. New `tests/test_live_feature_frame.py::test_live_frame_fails_closed_on_unrecognized_component_before_candle_read`: an unrecognized blocker `component_id` passes `BuildLiveStrategyFeaturePlan`/`ValidateLiveStrategySpec` silently (no dedicated fields to gate on), but `EmaPullbackLiveCalculationRequirements`'s own fail-closed raises `InvalidRequestError` before any candle read (`market_data.range_calls == 0`).
+- [x] 7.6 Measure live-entry and open-trade latency separately, before and after this change is wired in. Same machine/DB/MDS, same ETHUSDT.P 5m target, same canonical spec, via a temporary local git worktree at pre-wiring commit `44aa2ec` (production-tree-identical to `2490755`) versus current bounded wiring:
+
+  | | pre-wiring (unbounded) | bounded (current) |
+  |---|---|---|
+  | live-entry wall-clock | 89.40s | 6.86s |
+  | live-entry bars loaded | 572,738 (`earliest`->`target+step`, fixed) | 46,803 |
+  | open-trade wall-clock | 340.46s | 27.51s |
+  | open-trade bars loaded | 572,738 (same fixed range regardless of anchor) | 48,819 |
+
+  No speedup threshold required by this task; measurement recorded as evidence.
+
+**Group 7: CLOSED.** All of 7.1-7.6 have direct evidence: 7.1/7.4 via existing/extended deterministic unit tests, 7.5 via one new deterministic unit test, 7.2/7.3/7.6 via real local acceptance (production `build_services` composition, real local MDS HTTP, real DB, no fakes) run manually and recorded above (not retained as a repository script). No full-history numeric-parity/calibration research was repeated -- Group 5's calibration is treated as accepted per owner decision.
 
 ## 8. Rollout (F) — NOT STARTED BY THIS APPLY
 

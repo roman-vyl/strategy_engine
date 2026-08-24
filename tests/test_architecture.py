@@ -7,15 +7,21 @@ ROOT = Path(__file__).parents[1]
 SRC = ROOT / "src" / "strategy_engine"
 
 
+def imports_of_file(file: Path) -> set[str]:
+    imports: set[str] = set()
+    tree = ast.parse(file.read_text(), filename=str(file))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.add(node.module)
+    return imports
+
+
 def imports_under(path: Path) -> set[str]:
     imports: set[str] = set()
     for file in path.rglob("*.py"):
-        tree = ast.parse(file.read_text(), filename=str(file))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                imports.update(alias.name for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                imports.add(node.module)
+        imports |= imports_of_file(file)
     return imports
 
 
@@ -44,3 +50,22 @@ def test_http_routes_do_not_own_indicator_or_strategy_semantics() -> None:
     assert "numpy" not in text
     assert "def calculate_ema" not in text
     assert "sqlite" not in text.lower()
+
+
+def test_research_backtest_range_evaluation_does_not_use_live_acquisition() -> None:
+    """Group 6 (bounded-live-calculation-window) only changed the live
+    acquisition path (LoadLiveFeatureFrame / PlanLiveHistoryStart). The
+    explicit caller-supplied-TimeRange Research/Backtest range evaluators
+    SHALL NOT depend on that planning chain -- they keep taking their
+    TimeRange as-is, unbounded by any live-history policy."""
+
+    imports = (
+        imports_of_file(SRC / "strategies" / "application" / "evaluate_range.py")
+        | imports_of_file(SRC / "strategies" / "application" / "evaluate_range_batch.py")
+        | imports_of_file(SRC / "indicators" / "application" / "evaluate_range.py")
+    )
+    forbidden = (
+        "strategy_engine.strategies.live_calculation",
+        "strategy_engine.strategies.application.load_live_feature_frame",
+    )
+    assert not any(name.startswith(forbidden) for name in imports)
