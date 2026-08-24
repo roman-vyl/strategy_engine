@@ -241,6 +241,30 @@ def _series(frame: FeatureFrame, output_id: str) -> tuple[float | None, ...]:
     return tuple(None if value is None else float(value) for value in values)
 
 
+# Per-replay-execution memoization: _series(frame, output_id) is O(len(frame))
+# and was previously called from inside the per-bar replay loop, re-materializing
+# the same output_id's series up to once per bar per rule that reads it. The
+# cache is scoped to a single _evaluate_managed_replay_core call (created and
+# discarded there, never module-level/cross-request/persistent) and is valid
+# because frame is immutable and never replaced for the duration of one replay
+# (design.md Decision 2a): a cached tuple is exactly what a fresh _series() call
+# would return at any later point in the same replay. The missing-output_id case
+# (all-None tuple, no exception) is memoized the same way as any other result --
+# not special-cased -- so callers observe identical behavior with or without
+# the cache.
+SeriesCache = dict[str, tuple[float | None, ...]]
+
+
+def _cached_series(
+    cache: SeriesCache, frame: FeatureFrame, output_id: str
+) -> tuple[float | None, ...]:
+    cached = cache.get(output_id)
+    if cached is None:
+        cached = _series(frame, output_id)
+        cache[output_id] = cached
+    return cached
+
+
 def _atr_output_id(plan: EmaPullbackFeaturePlan, timeframe: str, period: int) -> str | None:
     for feature in plan.indicator_plan.features:
         if (
@@ -252,10 +276,12 @@ def _atr_output_id(plan: EmaPullbackFeaturePlan, timeframe: str, period: int) ->
     return None
 
 
-def _feature_value(frame: FeatureFrame, output_id: str | None, index: int) -> float | None:
+def _feature_value(
+    cache: SeriesCache, frame: FeatureFrame, output_id: str | None, index: int
+) -> float | None:
     if output_id is None:
         return None
-    values = _series(frame, output_id)
+    values = _cached_series(cache, frame, output_id)
     if not (0 <= index < len(values)):
         return None
     return values[index]
@@ -286,6 +312,7 @@ def _phase_met(
     index: int,
     frame: FeatureFrame,
     plan: EmaPullbackFeaturePlan,
+    series_cache: SeriesCache,
 ) -> tuple[bool, dict[str, object]]:
     component_id = str(condition.get("component_id", ""))
     params = _mapping(condition.get("params", {}), "phase condition params")
@@ -300,7 +327,7 @@ def _phase_met(
         atr = _mapping(params.get("atr"), "mfe_atr.atr")
         key = (str(atr.get("timeframe", "")), _int(atr.get("period"), "mfe_atr.atr.period"))
         output_id = _atr_output_id(plan, key[0], key[1])
-        value = _feature_value(frame, output_id, index)
+        value = _feature_value(series_cache, frame, output_id, index)
         if value is None or value <= 0:
             return False, {"reason": "indicator_not_ready"}
         distance = abs(state.mfe_price - state.entry_price)
@@ -311,9 +338,9 @@ def _phase_met(
             _int(params.get("period"), "adx_di_threshold.period"),
         )
         columns = plan.adx_dmi_columns.get(key, {})
-        adx = _feature_value(frame, columns.get("adx"), index)
-        plus = _feature_value(frame, columns.get("di_plus"), index)
-        minus = _feature_value(frame, columns.get("di_minus"), index)
+        adx = _feature_value(series_cache, frame, columns.get("adx"), index)
+        plus = _feature_value(series_cache, frame, columns.get("di_plus"), index)
+        minus = _feature_value(series_cache, frame, columns.get("di_minus"), index)
         if adx is None or plus is None or minus is None:
             return False, {"reason": "indicator_not_ready"}
         adx_threshold = _float(
@@ -340,6 +367,7 @@ def _runtime_signal(
     frame: FeatureFrame,
     plan: EmaPullbackFeaturePlan,
     evaluation_start_index: int,
+    series_cache: SeriesCache,
 ) -> bool:
     component_id = str(rule.get("component_id", ""))
     params = _mapping(rule.get("params", {}), "runtime exit params")
@@ -352,7 +380,7 @@ def _runtime_signal(
     if component_id == "rsi_signal_exit":
         rsi = _mapping(params.get("rsi"), "runtime rsi")
         output = plan.rsi_columns.get((str(rsi.get("timeframe", "")), int(rsi.get("period", 0))))
-        values = _series(frame, output or "")
+        values = _cached_series(series_cache, frame, output or "")
         threshold = (
             params.get("long_exit_above")
             if state.side == "long"
@@ -371,8 +399,8 @@ def _runtime_signal(
         slow = _mapping(params.get("slow_ema"), "runtime slow_ema")
         fast_id = plan.ema_columns.get((str(fast.get("timeframe", "")), int(fast.get("period", 0))))
         slow_id = plan.ema_columns.get((str(slow.get("timeframe", "")), int(slow.get("period", 0))))
-        fast_values = _series(frame, fast_id or "")
-        slow_values = _series(frame, slow_id or "")
+        fast_values = _cached_series(series_cache, frame, fast_id or "")
+        slow_values = _cached_series(series_cache, frame, slow_id or "")
         for pos in range(start, index + 1):
             fast_value = fast_values[pos]
             slow_value = slow_values[pos]
@@ -429,6 +457,9 @@ def _evaluate_managed_replay_core(
     events: list[ManagedPolicyEvent] = []
     bars: list[ManagedBarDecision] = []
     evaluation_start_index = entry_index + evaluation_start_offset
+    # Lives only for the duration of this call -- see _cached_series' docstring
+    # comment above for the correctness invariant this relies on.
+    series_cache: SeriesCache = {}
     for index in range(evaluation_start_index, target_index + 1):
         bar = frame.market_bars[index]
         high, low, close = float(bar.high), float(bar.low), float(bar.close)
@@ -444,6 +475,7 @@ def _evaluate_managed_replay_core(
                 index=index,
                 frame=frame,
                 plan=plan,
+                series_cache=series_cache,
             )
             if not met:
                 continue
@@ -483,7 +515,9 @@ def _evaluate_managed_replay_core(
                         str(atr_ref.get("timeframe", "base")),
                         int(atr_ref.get("period", params.get("atr_period", 14))),
                     )
-                    atr = _feature_value(frame, _atr_output_id(plan, key[0], key[1]), index)
+                    atr = _feature_value(
+                        series_cache, frame, _atr_output_id(plan, key[0], key[1]), index
+                    )
                     if atr is None:
                         continue
                     buffer = float(params.get("buffer_atr", 0.0)) * atr
@@ -494,7 +528,9 @@ def _evaluate_managed_replay_core(
                     str(atr_ref.get("timeframe", "base")),
                     int(atr_ref.get("period", params.get("atr_period", 14))),
                 )
-                atr = _feature_value(frame, _atr_output_id(plan, key[0], key[1]), index)
+                atr = _feature_value(
+                    series_cache, frame, _atr_output_id(plan, key[0], key[1]), index
+                )
                 if atr is None:
                     continue
                 offset = float(params.get("lock_atr", 0.0)) * atr
@@ -572,6 +608,7 @@ def _evaluate_managed_replay_core(
                 frame=frame,
                 plan=plan,
                 evaluation_start_index=evaluation_start_index,
+                series_cache=series_cache,
             ):
                 rule_id = str(rule.get("rule_id", ""))
                 armed.append(rule_id)

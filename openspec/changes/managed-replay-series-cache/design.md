@@ -44,11 +44,17 @@ A plain `dict[str, tuple[float | None, ...]]` local to one `_evaluate_managed_re
 **2. Cache lives inside `_evaluate_managed_replay_core`'s call frame, not as a module-level or object-level cache.**
 A fresh cache is created every call and discarded when the call returns -- no persistence across replay executions, no cross-request sharing, no global state. This matches the existing purity of the function (no I/O, no shared mutable module state today) and avoids any staleness/invalidation concern (a `FeatureFrame` is always fully materialized input to a given call; nothing about it changes mid-call).
 
+**2a. Read-only-`FeatureFrame`-within-one-execution is the correctness invariant that makes memoization valid.**
+`FeatureFrame` (`indicators/contracts.py`) is `@dataclass(frozen=True, slots=True)` and every field consumed by `_series()` (`frame.series`, a `dict[str, tuple[str | None, ...]]`) is itself immutable in the parts that matter -- `_evaluate_managed_replay_core` and everything it calls never writes to `frame.series` or replaces the `frame` it was given; the same `FeatureFrame` instance is the single input for the entire duration of one replay call. Under that invariant, materializing `_series(frame, output_id)` once and reusing the result is semantically identical to calling `_series(frame, output_id)` fresh on every access -- both read the exact same underlying data. This is the correctness argument for the cache, not merely a performance argument: caching is valid *because* nothing between the first and any later access can change what `_series()` would return.
+
 **3. No signature or contract change to `evaluate_managed_replay` / `evaluate_start_after_entry_managed_projection`.**
 Both public entry points keep their exact current signatures and return types. The cache is entirely internal to `_evaluate_managed_replay_core` and the private helpers it calls (`_feature_value`, `_phase_met`, `_runtime_signal`) -- callers in `open_trade.py` and `evaluate_managed_replay.py` (application service) require zero changes.
 
 **4. `_series()` itself is not removed.**
 It remains the single place that knows how to convert a `FeatureFrame` column into the `tuple[float | None, ...]` representation the replay logic consumes; the cache wraps it rather than replacing its logic, keeping the change small and the diff reviewable.
+
+**5. Missing-`output_id` behavior is preserved exactly, including for the cache.**
+Today, `_series(frame, output_id)` returns `tuple(None for _ in frame.time_ms)` (an all-`None` sequence the length of the frame) when `frame.series.get(output_id)` is `None` -- not an exception, not an empty tuple. The cache must reuse this exact result the same way it reuses any other materialized series (i.e. a missing `output_id` is memoized to its all-`None` tuple on first access too, not special-cased to bypass the cache or to raise). Callers of `_feature_value`/`_runtime_signal` see identical behavior whether the cache is present or not.
 
 ## Risks / Trade-offs
 
