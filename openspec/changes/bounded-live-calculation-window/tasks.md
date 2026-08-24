@@ -56,18 +56,36 @@ Calibration/validation tooling used to reach 5.1-5.3 (full-history reference har
 
 **Group 5: CLOSED.**
 
-## 6. Wire into live acquisition (D) — NOT STARTED
+## 6. Wire into live acquisition (D) — apply target for this phase
 
-The bounded planner (`PlanLiveHistoryStart`, `ResolveIndicatorHistoryRequirements`, `EmaPullbackLiveCalculationRequirements`) is implemented, unit-tested, and calibrated, but remains fully disconnected from the production live path. This group performs the wiring; a later, separate task.
+**Scope of apply: Group 6 ONLY. Group 7 (integration/regression/performance tests) and Group 8 (rollout) are NOT started by this apply and SHALL NOT be started — they remain separate, later work.**
+
+The bounded planner (`PlanLiveHistoryStart`, `ResolveIndicatorHistoryRequirements`, `EmaPullbackLiveCalculationRequirements`) is implemented, unit-tested, and calibrated, but remains fully disconnected from the production live path. This group performs only the wiring, touching exactly four production files plus their existing tests:
+
+- `evaluate_live_entry_projection.py`
+- `evaluate_open_trade_projection.py`
+- `load_live_feature_frame.py`
+- `service/wiring.py`
+
+No other production file changes. No new modules, no new abstractions beyond what groups 1-5 already built.
 
 - [ ] 6.1 Modify `evaluate_live_entry_projection.py` to compute and pass `history_anchor_open_time_ms = target_bar_open_time_ms`
 - [ ] 6.2 Modify `evaluate_open_trade_projection.py` to compute and pass `history_anchor_open_time_ms = min(source_plan_bar_open_time_ms, entry_bar_open_time_ms)`
 - [ ] 6.3 Add `history_anchor_open_time_ms` to the internal live feature frame request used by `load_live_feature_frame.py`; `LoadLiveFeatureFrame` SHALL only consume this value, never compute or re-derive it
-- [ ] 6.4 Modify `load_live_feature_frame.py`: invoke `PlanLiveHistoryStart` (passing `request.market.base_timeframe` and the received anchor) before `MDS.load_bounds()`, then compute `actual_from_ms = max(planned_from_ms, bounds.earliest_committed_open_time_ms)`; keep `to_ms = target_bar_open_time_ms + base_timeframe_duration` unchanged
-- [ ] 6.5 Emit a structured diagnostic when `bounds.earliest_committed_open_time_ms > planned_from_ms` (truncation), including `winning_indicator_requirement` and `winning_strategy_requirement`
+- [ ] 6.4 Modify `load_live_feature_frame.py`'s `execute()` with the following exact minimal reordering, changing nothing else about its control flow:
+  1. `self._strategy_validator.execute(request.strategy)` — **unchanged, stays first.** `ValidateLiveStrategySpec` itself is NOT modified, NOT refactored, and NOT reordered relative to the bounds/committed-bar checks that already follow it — those checks (`bounds.state`, `earliest`/`latest`, target-in-range) also stay exactly where they are today.
+  2. `planned = self._feature_planner.execute(request.strategy)` — **moved earlier**, from after `requested_range` construction to immediately after the existing committed-bar check, because the window planner (next step) needs `planned.indicator_plan`.
+  3. Invoke `PlanLiveHistoryStart.execute(raw_spec=request.strategy.raw_spec, indicator_plan=planned.indicator_plan, base_timeframe=request.market.base_timeframe, history_anchor_open_time_ms=request.history_anchor_open_time_ms)` to get `planned_from_ms`.
+  4. `actual_from_ms = max(planned_from_ms, earliest)` — replaces today's `requested_range = TimeRange(from_ms=earliest, to_ms=target + step_ms)`; the new `requested_range = TimeRange(from_ms=actual_from_ms, to_ms=target + step_ms)`, then `requested_range.validate_alignment(...)` unchanged.
+  5. `self._indicator_evaluator.execute(...)` — unchanged, still consumes `planned.indicator_plan` and the (now bounded) `requested_range`.
+
+  `to_ms = target_bar_open_time_ms + base_timeframe_duration` is untouched throughout. No other line in `execute()` is reordered or altered.
+- [ ] 6.5 No new diagnostic/logging infrastructure. If `actual_from_ms > planned_from_ms` (i.e. the plan was truncated against MDS bounds), that fact SHALL be observable only through data already returned by this call — e.g. exposing `planned_from_ms` (or an equivalent truncated flag) as a field on the existing `LiveFeatureFrameBundle`/`PlannedHistoryStart` result already carried through `execute()`. Do not add a logger call, structured-logging framework, metrics emitter, or any other new observability mechanism as part of this apply.
 - [ ] 6.6 Wire `PlanLiveHistoryStart` to a concrete `EmaPullbackLiveCalculationRequirements()` (and `ResolveIndicatorHistoryRequirements`) at the composition boundary in `service/wiring.py` — this is where the "ema_pullback is the current live strategy family" knowledge is allowed to live
 
-## 7. Integration, regression, and performance tests (E)
+**Corresponding existing live tests SHALL be updated/extended in place** (e.g. the existing `LoadLiveFeatureFrame`/`EvaluateLiveEntryProjection`/`EvaluateOpenTradeProjection` test files) rather than new test files or new test infrastructure being introduced, unless an existing file genuinely has no home for a new case.
+
+## 7. Integration, regression, and performance tests (E) — NOT STARTED BY THIS APPLY
 
 - [ ] 7.1 Add/confirm a test asserting Research/Backtest range evaluation never invokes the new planner and is unaffected by this change
 - [ ] 7.2 Integration test: live-entry request with a spec producing a small requirement set reads only the expected bounded range
@@ -76,7 +94,7 @@ The bounded planner (`PlanLiveHistoryStart`, `ResolveIndicatorHistoryRequirement
 - [ ] 7.5 Integration test: spec containing a component with no registered history policy -> live request fails closed with a clear error, not a silently under-provisioned window
 - [ ] 7.6 Measure live-entry and open-trade latency separately, before and after this change is wired in
 
-## 8. Rollout (F)
+## 8. Rollout (F) — NOT STARTED BY THIS APPLY
 
 - [ ] 8.1 Review group 6/7 results; if parity or latency is insufficient for any component, adjust the relevant policy constant and re-run calibration before re-attempting rollout
 - [ ] 8.2 Enable the bounded live path in production once parity, numeric drift, and latency targets are met
