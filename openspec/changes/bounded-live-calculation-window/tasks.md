@@ -100,7 +100,7 @@ No other production file changes. No new modules, no new abstractions beyond wha
 - [ ] 7.1 Add/confirm a test asserting Research/Backtest range evaluation never invokes the new planner and is unaffected by this change
 - [ ] 7.2 Integration test: live-entry request with a spec producing a small requirement set reads only the expected bounded range
 - [ ] 7.3 Integration test: open-trade request with anchor before target reads a range covering anchor warm-up through target
-- [ ] 7.4 Integration test: planned window predates MDS bounds -> request is clamped, diagnostic emitted, request still succeeds
+- [ ] 7.4 Integration test: planned window predates MDS bounds -> request is clamped, truncation observable through `planned_from_ms` versus `requested_range.from_ms`, request still succeeds
 - [ ] 7.5 Integration test: spec containing a component with no registered history policy -> live request fails closed with a clear error, not a silently under-provisioned window
 - [ ] 7.6 Measure live-entry and open-trade latency separately, before and after this change is wired in
 

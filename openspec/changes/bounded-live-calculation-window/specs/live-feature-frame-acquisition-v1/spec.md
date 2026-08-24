@@ -15,7 +15,9 @@ Engine SHALL load that range through the existing bounded candle-read operation.
 
 The target SHALL NOT be required to equal the absolute latest committed MDS bar.
 
-When `earliest_committed_open_time_ms` is later than `planned_from_ms`, Engine SHALL clamp `from_ms` to `earliest_committed_open_time_ms` and SHALL emit a diagnostic indicating the planned warm-up was truncated by available history. This truncation SHALL NOT be treated as an error and SHALL NOT block the live request.
+When `earliest_committed_open_time_ms` is later than `planned_from_ms`, Engine SHALL clamp `from_ms` to `earliest_committed_open_time_ms`. This truncation SHALL NOT be treated as an error and SHALL NOT block the live request.
+
+Engine SHALL retain `planned_from_ms` (the pre-clamp value) on the existing internal `LiveFeatureFrameBundle`, alongside the already-present `requested_range.from_ms` (the actual, possibly-clamped value), so that truncation is observable by comparing the two: truncation occurred iff `requested_range.from_ms > planned_from_ms`. This observability SHALL NOT require, and this requirement SHALL NOT introduce, any logger call, metrics emitter, event, or diagnostic DTO.
 
 #### Scenario: MDS has bars later than target
 
@@ -27,14 +29,14 @@ When `earliest_committed_open_time_ms` is later than `planned_from_ms`, Engine S
 
 - **WHEN** `planned_from_ms` is at or after `earliest_committed_open_time_ms`
 - **THEN** Engine SHALL use `planned_from_ms` as `from_ms`
-- **AND** SHALL NOT emit a truncation diagnostic.
+- **AND** `LiveFeatureFrameBundle.requested_range.from_ms` SHALL equal `LiveFeatureFrameBundle.planned_from_ms`.
 
 #### Scenario: Planned history start predates available bounds
 
 - **WHEN** `planned_from_ms` is earlier than `earliest_committed_open_time_ms`
 - **THEN** Engine SHALL use `earliest_committed_open_time_ms` as `from_ms`
-- **AND** SHALL emit a diagnostic that the requested warm-up exceeded available history
-- **AND** SHALL proceed with the live request without returning an error.
+- **AND** `LiveFeatureFrameBundle.requested_range.from_ms` SHALL be greater than `LiveFeatureFrameBundle.planned_from_ms`
+- **AND** Engine SHALL proceed with the live request without returning an error.
 
 ### Requirement: Share the history policy across live use cases
 
