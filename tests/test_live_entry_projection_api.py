@@ -30,9 +30,13 @@ from strategy_engine.strategies.application.validate_live_strategy_spec import (
 from strategy_engine.strategies.application.validate_spec import ValidateStrategySpec
 from strategy_engine.strategies.contracts import LiveEntryPlan
 from strategy_engine.strategies.ema_pullback.evaluator import EmaPullbackRangeEvaluator
+from strategy_engine.strategies.ema_pullback.live_calculation_requirements import (
+    EmaPullbackLiveCalculationRequirements,
+)
 from strategy_engine.strategies.ema_pullback.live_projections.contracts import (
     EmaPullbackLiveEntryProjection,
 )
+from strategy_engine.strategies.live_calculation.plan_window import PlanLiveHistoryStart
 from strategy_engine.strategies.live_projections.registry import LiveEntryProjectionRegistry
 
 
@@ -162,11 +166,15 @@ def _services(
     range_eval = EvaluateStrategyRange(registry, validate_strategy)
     live_planner = BuildLiveStrategyFeaturePlan()
     validate_live_strategy = ValidateLiveStrategySpec(registry, live_planner)
+    window_planner = PlanLiveHistoryStart(
+        strategy_requirements=EmaPullbackLiveCalculationRequirements()
+    )
     loader = LoadLiveFeatureFrame(
         market_data,
         live_planner,
         indicator_eval,
         validate_live_strategy,
+        window_planner,
     )
     adapters = (
         LiveEntryProjectionRegistry(FakeLiveEntryAdapter(plans_by_side))

@@ -58,6 +58,7 @@ class EvaluateLiveEntryProjection:
                 strategy=request.strategy,
                 market=request.market,
                 target_bar_open_time_ms=request.target_bar_open_time_ms,
+                history_anchor_open_time_ms=request.target_bar_open_time_ms,
             )
         )
         projection = self._adapters.resolve(request.strategy.strategy_id).evaluate(

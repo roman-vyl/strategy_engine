@@ -198,14 +198,18 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
             ),
         ),
     )
-    loader = SimpleNamespace(
-        execute=lambda _request: SimpleNamespace(
+    captured_requests: list[object] = []
+
+    def _fake_execute(request: object) -> SimpleNamespace:
+        captured_requests.append(request)
+        return SimpleNamespace(
             frame=frame,
             planned_features=object(),
             target_index=2,
             market_data_hash="market-hash",
         )
-    )
+
+    loader = SimpleNamespace(execute=_fake_execute)
     evaluation = _evaluation(always=(False, False, False), aligned=(False, False, True))
     state = ManagedTradeState.initial(
         side="long",
@@ -238,6 +242,9 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
     assert result.desired_protection.take_price is None
     assert result.close_signal.reason == "signal:aligned-ema"
     assert result.diagnostics.phase == "protected"
+    assert len(captured_requests) == 1
+    # history anchor is min(source_plan_bar_open_time_ms=0, entry_bar_open_time_ms=300_000)
+    assert captured_requests[0].history_anchor_open_time_ms == 0
     assert {item.name for item in fields(OpenTradeProjectionResult)} == {
         "desired_protection",
         "close_signal",

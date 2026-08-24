@@ -33,6 +33,10 @@ from strategy_engine.strategies.contracts import (
     StrategySpecEnvelope,
 )
 from strategy_engine.strategies.ema_pullback.evaluator import EmaPullbackRangeEvaluator
+from strategy_engine.strategies.ema_pullback.live_calculation_requirements import (
+    EmaPullbackLiveCalculationRequirements,
+)
+from strategy_engine.strategies.live_calculation.plan_window import PlanLiveHistoryStart
 
 
 class FakeMarketData:
@@ -118,8 +122,11 @@ def services() -> tuple[EvaluateLiveEntryProjection, EvaluateStrategyRange, Stra
     validator = ValidateStrategySpec(registry, planner)
     live_planner = BuildLiveStrategyFeaturePlan()
     live_validator = ValidateLiveStrategySpec(registry, live_planner)
+    window_planner = PlanLiveHistoryStart(
+        strategy_requirements=EmaPullbackLiveCalculationRequirements()
+    )
     loader = LoadLiveFeatureFrame(
-        market_data, live_planner, indicator_eval, live_validator
+        market_data, live_planner, indicator_eval, live_validator, window_planner
     )
     strategy = StrategySpecEnvelope("ema_pullback", "v1", "live-1", spec())
     return (

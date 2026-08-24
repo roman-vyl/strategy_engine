@@ -30,6 +30,10 @@ from strategy_engine.strategies.application.validate_live_strategy_spec import (
 )
 from strategy_engine.strategies.application.validate_spec import ValidateStrategySpec
 from strategy_engine.strategies.ema_pullback.evaluator import EmaPullbackRangeEvaluator
+from strategy_engine.strategies.ema_pullback.live_calculation_requirements import (
+    EmaPullbackLiveCalculationRequirements,
+)
+from strategy_engine.strategies.live_calculation.plan_window import PlanLiveHistoryStart
 
 
 @dataclass(slots=True)
@@ -86,11 +90,15 @@ def build_services(settings: Settings) -> ApplicationServices:
         strategy_registry,
         build_live_strategy_feature_plan,
     )
+    window_planner = PlanLiveHistoryStart(
+        strategy_requirements=EmaPullbackLiveCalculationRequirements()
+    )
     live_frame_loader = LoadLiveFeatureFrame(
         market_data_client,
         build_live_strategy_feature_plan,
         evaluate_indicator_range,
         validate_live_strategy_spec,
+        window_planner,
     )
     return ApplicationServices(
         indicator_catalog=IndicatorCatalog(indicator_registry),
