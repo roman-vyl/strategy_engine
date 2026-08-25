@@ -57,18 +57,27 @@ arr = np.asarray(width_atr, dtype=float)
 finite = np.isfinite(arr)
 roll_max = pd.Series(arr).rolling(lookback, min_periods=lookback).max()
 roll_all_finite = (
-    pd.Series(finite.astype(float)).rolling(lookback, min_periods=lookback).min().astype(bool)
+    pd.Series(finite.astype(np.int8))
+    .rolling(lookback, min_periods=lookback)
+    .sum()
+    .eq(lookback)
 )
 recent_max = roll_max.where(roll_all_finite, other=np.nan).to_numpy()
 ```
 Ordinary `rolling().max()` silently skips NaN, which is NOT the original
 semantics (`all(isfinite(v) for v in window)` gates the whole window to NaN
-if any element is non-finite). The `roll_all_finite` gate — computed as the
-rolling min of a 0/1 finiteness indicator, true only if every element in the
-window is finite — is required and is the one decision in this change that
-is not a mechanical copy of an existing pattern. `min_periods=lookback` on
-both rollings reproduces "full lookback required" (window empty when
-`index + 1 < lookback`).
+if any element is non-finite). The `roll_all_finite` gate is required and is
+the one decision in this change that is not a mechanical copy of an existing
+pattern. It is computed as a rolling **sum** of a 0/1 finiteness indicator
+compared with `.eq(lookback)` — not `rolling(...).min().astype(bool)`: with
+`min_periods=lookback`, an incomplete window (index+1 < lookback) produces
+`NaN` from `.min()`, and `NaN` casts to `True` under `.astype(bool)`, which
+would wrongly pass the gate for a not-yet-full window. `.eq(lookback)`
+correctly evaluates a `NaN` sum to `False` (`NaN != lookback`), so the gate
+is explicitly `False` — and `recent_max` is `NaN` — until a full window
+exists, matching the original `window and all(...)` short-circuit exactly.
+`min_periods=lookback` on both rollings reproduces "full lookback required"
+(window empty when `index + 1 < lookback`).
 
 **Decision 4 — `setups_ok` combine:**
 ```python
