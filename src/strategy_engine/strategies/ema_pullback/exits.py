@@ -8,6 +8,7 @@ from decimal import Decimal
 from math import isfinite
 from typing import Any, cast
 
+import numpy as np
 import pandas as pd
 
 from strategy_engine.domain.errors import InvalidRequestError
@@ -19,6 +20,7 @@ from strategy_engine.strategies.ema_pullback.context_consumption import (
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 
 _PROFILE_ORDER = ("aligned", "countertrend", "neutral")
+_PROFILE_CODE = {name: index for index, name in enumerate(_PROFILE_ORDER)}
 _SIGNAL_COMPONENTS = {
     "no_signal_exit",
     "rsi_signal_exit",
@@ -323,19 +325,33 @@ def _min(ratios: list[pd.Series], index: pd.Index) -> pd.Series:
 
 
 def _select(profile: tuple[str, ...], values: dict[str, pd.Series], index: pd.Index) -> pd.Series:
-    output = pd.Series(float("nan"), index=index, dtype=float)
-    for position, name in enumerate(profile):
-        output.iloc[position] = values[name].iloc[position]
-    return output
+    # Positional gather, not label/index-aligned (design.md Decision 1):
+    # np.column_stack/.to_numpy() strip pandas index alignment entirely, so
+    # column `codes[i]` at row `i` is selected purely by bar position -- the
+    # same guarantee the previous .iloc[position] loop gave, now structural
+    # rather than incidental. _PROFILE_CODE[name] raises KeyError on an
+    # unrecognized profile name, matching the prior values[name] KeyError --
+    # deliberately not np.select(default=...), which would silently produce
+    # a default value instead of failing closed.
+    matrix = np.column_stack([values[name].to_numpy(dtype=float) for name in _PROFILE_ORDER])
+    codes = np.fromiter(
+        (_PROFILE_CODE[name] for name in profile), dtype=np.intp, count=len(profile)
+    )
+    selected = matrix[np.arange(len(profile)), codes]
+    return pd.Series(selected, index=index, dtype=float)
 
 
 def _select_bool(
     profile: tuple[str, ...], values: dict[str, pd.Series], index: pd.Index
 ) -> pd.Series:
-    output = pd.Series(False, index=index, dtype=bool)
-    for position, name in enumerate(profile):
-        output.iloc[position] = bool(values[name].iloc[position])
-    return output
+    # Same positional gather as _select, bool dtype throughout -- see its
+    # docstring comment for the positional/fail-closed rationale.
+    matrix = np.column_stack([values[name].to_numpy(dtype=bool) for name in _PROFILE_ORDER])
+    codes = np.fromiter(
+        (_PROFILE_CODE[name] for name in profile), dtype=np.intp, count=len(profile)
+    )
+    selected = matrix[np.arange(len(profile)), codes]
+    return pd.Series(selected, index=index, dtype=bool)
 
 
 def _ready(sl: pd.Series, tp: pd.Series, sl_configured: bool, tp_configured: bool) -> pd.Series:
