@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from math import isfinite
 from typing import Any
+
+import numpy as np
+import pandas as pd
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.indicators.contracts import FeatureFrame
@@ -169,21 +171,22 @@ def _rsi_blocker(
         if side == "long"
         else float(item.get("short_block_below", 20.0))
     )
-    extreme: list[bool] = []
-    for value in values:
-        extreme.append(
-            False
-            if not isfinite(value)
-            else value > threshold
-            if side == "long"
-            else value < threshold
-        )
-    seen: list[bool] = []
-    for index in range(len(extreme)):
-        start = max(0, index - lookback + 1)
-        seen.append(any(extreme[start : index + 1]))
-    allowed = tuple(not value for value in seen)
-    return allowed, {"rsi": tuple(values), "extreme_seen": tuple(seen)}
+    # Positional, vectorized replacement for the per-bar Python loop
+    # (design.md Decision 1, direction-blockers-vectorization): the
+    # explicit isfinite gate is required, not redundant with the
+    # comparison, because +/-inf must never count as "extreme" even
+    # though e.g. `inf > threshold` is True in numpy. rolling(lookback,
+    # min_periods=1).max() reproduces the original's shortened window at
+    # the start (extreme[max(0, i-lookback+1):i+1]) exactly.
+    arr = np.asarray(values, dtype=float)
+    finite = np.isfinite(arr)
+    extreme_arr = finite & (arr > threshold) if side == "long" else finite & (arr < threshold)
+    seen_arr = (
+        pd.Series(extreme_arr).rolling(lookback, min_periods=1).max().to_numpy().astype(bool)
+    )
+    allowed = tuple((~seen_arr).tolist())
+    seen = tuple(seen_arr.tolist())
+    return allowed, {"rsi": tuple(values), "extreme_seen": seen}
 
 
 def _trend_strength_blocker(
@@ -205,65 +208,86 @@ def _trend_strength_blocker(
     require_alignment = bool(params.get("require_di_alignment_on_peak", True))
     block_flip = bool(params.get("block_on_opposite_di_flip", True))
     margin = float(params.get("opposite_di_margin", 0.0))
-    allowed: list[bool] = []
-    reasons: list[str] = []
-    peak_indices: list[int] = []
-    bars_since: list[int] = []
-    for index in range(len(adx)):
-        if not all(isfinite(value) for value in (adx[index], di_plus[index], di_minus[index])):
-            allowed.append(False)
-            reasons.append("indicator_not_ready")
-            peak_indices.append(-1)
-            bars_since.append(-1)
-            continue
-        start = max(0, index - peak_lookback + 1)
-        peak_index = -1
-        for candidate in range(index, start - 1, -1):
-            if not all(
-                isfinite(value)
-                for value in (adx[candidate], di_plus[candidate], di_minus[candidate])
-            ):
-                continue
-            aligned = (
-                di_plus[candidate] > di_minus[candidate]
-                if side == "long"
-                else di_minus[candidate] > di_plus[candidate]
-            )
-            if adx[candidate] >= min_peak and (aligned or not require_alignment):
-                peak_index = candidate
-                break
-        peak_indices.append(peak_index)
-        bars_since.append(index - peak_index if peak_index >= 0 else -1)
-        if peak_index < 0:
-            allowed.append(False)
-            reasons.append("no_recent_adx_peak")
-            continue
-        if index - peak_index > max_since:
-            allowed.append(False)
-            reasons.append("peak_too_old")
-            continue
-        if adx[index] < min_current:
-            allowed.append(False)
-            reasons.append("current_adx_too_low")
-            continue
-        opposite = (
-            di_minus[index] > di_plus[index] + margin
-            if side == "long"
-            else di_plus[index] > di_minus[index] + margin
-        )
-        if block_flip and opposite:
-            allowed.append(False)
-            reasons.append("opposite_di_flip")
-            continue
-        allowed.append(True)
-        reasons.append("")
-    return tuple(allowed), {
-        "blocked_reason": tuple(reasons),
+    # Positional running-last-qualifying-index replacement for the nested
+    # backward scan (design.md Decision 2, direction-blockers-vectorization).
+    # np.maximum.accumulate over per-bar candidate positions (-1 where not
+    # qualifying) gives, at each i, the largest index <= i where a candidate
+    # qualified -- exactly "most recent qualifying bar found scanning
+    # backward", checked against the trailing peak_lookback window. The
+    # elif-chain below is applied in the SAME priority order as the
+    # original (indicator_not_ready > no_recent_adx_peak > peak_too_old >
+    # current_adx_too_low > opposite_di_flip > allowed) via sequential
+    # np.where overrides -- reordering these would change which reason
+    # wins when multiple conditions hold on the same bar.
+    adx_arr = np.asarray(adx, dtype=float)
+    plus_arr = np.asarray(di_plus, dtype=float)
+    minus_arr = np.asarray(di_minus, dtype=float)
+    n = len(adx_arr)
+    finite = np.isfinite(adx_arr) & np.isfinite(plus_arr) & np.isfinite(minus_arr)
+    aligned = (plus_arr > minus_arr) if side == "long" else (minus_arr > plus_arr)
+    qualifies = finite & (adx_arr >= min_peak) & (aligned | (not require_alignment))
+
+    idx = np.arange(n)
+    candidate_idx = np.where(qualifies, idx, -1)
+    running_last_true = np.maximum.accumulate(candidate_idx)
+    window_start = idx - peak_lookback + 1
+    peak_index_arr = np.where(running_last_true >= window_start, running_last_true, -1)
+
+    current_not_ready = ~finite
+    peak_missing = peak_index_arr < 0
+    bars_since_arr = np.where(peak_index_arr >= 0, idx - peak_index_arr, -1)
+    peak_too_old = (~peak_missing) & (bars_since_arr > max_since)
+    current_too_low = adx_arr < min_current
+    opposite = (
+        minus_arr > plus_arr + margin if side == "long" else plus_arr > minus_arr + margin
+    )
+    opposite_flip = block_flip & opposite
+
+    allowed_arr = np.ones(n, dtype=bool)
+    reasons_arr = np.full(n, "", dtype=object)
+
+    allowed_arr &= ~current_not_ready
+    reasons_arr = np.where(current_not_ready, "indicator_not_ready", reasons_arr)
+
+    mask = (~current_not_ready) & peak_missing
+    allowed_arr &= ~mask
+    reasons_arr = np.where(mask, "no_recent_adx_peak", reasons_arr)
+
+    mask = (~current_not_ready) & (~peak_missing) & peak_too_old
+    allowed_arr &= ~mask
+    reasons_arr = np.where(mask, "peak_too_old", reasons_arr)
+
+    mask = (~current_not_ready) & (~peak_missing) & (~peak_too_old) & current_too_low
+    allowed_arr &= ~mask
+    reasons_arr = np.where(mask, "current_adx_too_low", reasons_arr)
+
+    mask = (
+        (~current_not_ready)
+        & (~peak_missing)
+        & (~peak_too_old)
+        & (~current_too_low)
+        & opposite_flip
+    )
+    allowed_arr &= ~mask
+    reasons_arr = np.where(mask, "opposite_di_flip", reasons_arr)
+
+    # A not-ready current bar forces peak_index/bars_since to -1
+    # unconditionally, matching the original's early-continue that skips
+    # peak search entirely for that bar.
+    peak_index_out = np.where(current_not_ready, -1, peak_index_arr)
+    bars_since_out = np.where(current_not_ready, -1, bars_since_arr)
+
+    allowed = tuple(allowed_arr.tolist())
+    reasons = tuple(str(value) for value in reasons_arr.tolist())
+    peak_indices = tuple(int(value) for value in peak_index_out.tolist())
+    bars_since = tuple(int(value) for value in bars_since_out.tolist())
+    return allowed, {
+        "blocked_reason": reasons,
         "adx_current": tuple(adx),
         "di_plus_current": tuple(di_plus),
         "di_minus_current": tuple(di_minus),
-        "adx_peak_idx": tuple(peak_indices),
-        "bars_since_adx_peak": tuple(bars_since),
+        "adx_peak_idx": peak_indices,
+        "bars_since_adx_peak": bars_since,
     }
 
 
@@ -307,6 +331,23 @@ def _blocker(
     )
 
 
+def _combine_blocker_masks(
+    blocker_allowed: tuple[tuple[bool, ...], ...], length: int
+) -> tuple[bool, ...]:
+    # Vectorized replacement for
+    # `all(mask.allowed[index] for mask in blockers) for index in range(length)`
+    # (design.md Decision 3, direction-blockers-vectorization). The empty
+    # branch is explicit rather than relying on np.logical_and.reduce's
+    # behavior on a zero-length stacked array, to guarantee it matches
+    # Python's `all([]) == True` even though evaluate_direction_and_blockers
+    # never actually calls this with zero blockers today.
+    if not blocker_allowed:
+        return tuple([True] * length)
+    stacked = np.array(blocker_allowed, dtype=bool)
+    reduced = np.logical_and.reduce(stacked, axis=0, initial=True)
+    return tuple(reduced.tolist())
+
+
 def evaluate_direction_and_blockers(
     raw_spec: Mapping[str, Any],
     frame: FeatureFrame,
@@ -328,8 +369,8 @@ def evaluate_direction_and_blockers(
         blockers = tuple(
             _blocker(item, frame, plan, side, context_records) for item in blocker_items
         )
-        blockers_ok = tuple(
-            all(mask.allowed[index] for mask in blockers) for index in range(len(frame.time_ms))
+        blockers_ok = _combine_blocker_masks(
+            tuple(mask.allowed for mask in blockers), len(frame.time_ms)
         )
         pre_setup = tuple(a and b for a, b in zip(direction.allowed, blockers_ok, strict=True))
         outputs.append(SideDirectionBlockers(side, direction, blockers, blockers_ok, pre_setup))
