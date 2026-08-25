@@ -9,6 +9,7 @@ from strategy_engine.domain.market import MarketBar, MarketFrame, MarketStream
 from strategy_engine.domain.ranges import TimeRange
 from strategy_engine.indicators.application.evaluate_range import EvaluateIndicatorRange
 from strategy_engine.indicators.application.validate_plan import ValidateIndicatorPlan
+from strategy_engine.indicators.contracts import FeatureFrame, IndicatorRangeRequest
 from strategy_engine.service.registries import IndicatorRegistry, StrategyRegistry
 from strategy_engine.strategies.application.build_feature_plan import BuildStrategyFeaturePlan
 from strategy_engine.strategies.application.evaluate_range import EvaluateStrategyRange
@@ -46,6 +47,19 @@ class SpyMarketData:
 
     def close(self) -> None:
         pass
+
+
+class RecordingIndicatorEvaluator:
+    """Wraps a real EvaluateIndicatorRange, recording the exact MarketFrame
+    object (identity, not just equality) each call was given."""
+
+    def __init__(self, delegate: EvaluateIndicatorRange) -> None:
+        self._delegate = delegate
+        self.seen_market_frames: list[object] = []
+
+    def execute(self, request: IndicatorRangeRequest) -> FeatureFrame:
+        self.seen_market_frames.append(request.market_frame)
+        return self._delegate.execute(request)
 
 
 class FailingMarketData:
@@ -90,6 +104,22 @@ def _build(market_data: object) -> tuple[EvaluateStrategyRangeBatch, EvaluateStr
     return batch_eval, strategy_eval
 
 
+def _build_with_recording(
+    market_data: object,
+) -> tuple[EvaluateStrategyRangeBatch, RecordingIndicatorEvaluator]:
+    indicator_registry = IndicatorRegistry()
+    validate_plan = ValidateIndicatorPlan(indicator_registry)
+    real_indicator_eval = EvaluateIndicatorRange(indicator_registry, market_data, validate_plan)  # type: ignore[arg-type]
+    recorder = RecordingIndicatorEvaluator(real_indicator_eval)
+    planner = BuildStrategyFeaturePlan()
+    strategy_impl = EmaPullbackRangeEvaluator(planner, recorder)  # type: ignore[arg-type]
+    strategy_registry = StrategyRegistry(strategy_impl)
+    validate_strategy = ValidateStrategySpec(strategy_registry, planner)
+    strategy_eval = EvaluateStrategyRange(strategy_registry, validate_strategy)
+    batch_eval = EvaluateStrategyRangeBatch(strategy_eval, market_data)  # type: ignore[arg-type]
+    return batch_eval, recorder
+
+
 def _batch_request(count: int) -> StrategyRangeBatchRequest:
     market = MarketStream("BTCUSDT.P", "5m")
     time_range = TimeRange(0, 3_600_000)
@@ -124,8 +154,15 @@ def test_batch_with_multiple_variants_loads_market_data_exactly_once() -> None:
 
 def test_all_variants_consume_the_exact_same_acquired_market_frame() -> None:
     market_data = SpyMarketData()
-    batch_eval, _ = _build(market_data)
+    batch_eval, recorder = _build_with_recording(market_data)
     outcomes = batch_eval.execute(_batch_request(3))
+    assert market_data.calls == 1
+    assert len(recorder.seen_market_frames) == 3
+    first_frame = recorder.seen_market_frames[0]
+    assert first_frame is not None
+    # object identity, not just equality: every variant must have been
+    # handed the exact same acquired MarketFrame instance.
+    assert all(frame is first_frame for frame in recorder.seen_market_frames)
     hashes = {outcome.result.features["market_data_hash"] for outcome in outcomes}  # type: ignore[union-attr]
     assert hashes == {"fixture-market-hash"}
 
@@ -192,6 +229,23 @@ def test_shared_market_acquisition_failure_precedes_per_variant_validation_error
         batch_eval.execute(
             StrategyRangeBatchRequest(market=market, time_range=time_range, variants=variants)
         )
+
+
+def test_misaligned_batch_range_is_rejected_before_market_acquisition() -> None:
+    market_data = SpyMarketData()
+    batch_eval, _ = _build(market_data)
+    market = MarketStream("BTCUSDT.P", "5m")
+    misaligned_range = TimeRange(1, 3_600_000)  # not a multiple of the 5m step
+    variant = StrategyBatchVariant(
+        "a", StrategySpecEnvelope("ema_pullback", "v1", "a", minimal_spec())
+    )
+    with pytest.raises(InvalidRequestError):
+        batch_eval.execute(
+            StrategyRangeBatchRequest(
+                market=market, time_range=misaligned_range, variants=(variant,)
+            )
+        )
+    assert market_data.calls == 0
 
 
 def test_empty_or_duplicate_variant_ids_still_rejected_before_market_acquisition() -> None:

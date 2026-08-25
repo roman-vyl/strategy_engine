@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from strategy_engine.domain.errors import UnsupportedCapabilityError
+from strategy_engine.domain.errors import EvaluationInvariantError, UnsupportedCapabilityError
 from strategy_engine.indicators.application.validate_plan import ValidateIndicatorPlan
 from strategy_engine.indicators.contracts import FeatureFrame, IndicatorRangeRequest
 from strategy_engine.indicators.ports import IndicatorRegistryPort
@@ -27,6 +27,36 @@ class EvaluateIndicatorRange:
         if evaluator is None:
             raise UnsupportedCapabilityError("indicator_range_evaluation")
         if request.market_frame is not None:
+            # batch-market-dataset-reuse: fail closed if an internal caller
+            # ever threads a preloaded MarketFrame that does not actually
+            # match this request's identity -- silently accepting a
+            # mismatched frame would let a result be computed against the
+            # wrong market/range/dataset without any observable signal.
+            if request.market_frame.market != request.market:
+                raise EvaluationInvariantError(
+                    "preloaded market frame does not match requested market",
+                    expected_ticker=request.market.ticker,
+                    expected_timeframe=request.market.base_timeframe,
+                    actual_ticker=request.market_frame.market.ticker,
+                    actual_timeframe=request.market_frame.market.base_timeframe,
+                )
+            if request.market_frame.requested_range != request.time_range:
+                raise EvaluationInvariantError(
+                    "preloaded market frame does not match requested time range",
+                    expected_from_ms=request.time_range.from_ms,
+                    expected_to_ms=request.time_range.to_ms,
+                    actual_from_ms=request.market_frame.requested_range.from_ms,
+                    actual_to_ms=request.market_frame.requested_range.to_ms,
+                )
+            if (
+                request.expected_market_data_hash is not None
+                and request.market_frame.market_data_hash != request.expected_market_data_hash
+            ):
+                raise EvaluationInvariantError(
+                    "preloaded market frame does not match expected market data hash",
+                    expected_market_data_hash=request.expected_market_data_hash,
+                    actual_market_data_hash=request.market_frame.market_data_hash,
+                )
             market_frame = request.market_frame
         elif request.expected_market_data_hash is None:
             market_frame = self._market_data.load_range(

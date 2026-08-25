@@ -27,7 +27,12 @@ class EvaluateStrategyRangeBatch:
         ids = [variant.variant_id for variant in request.variants]
         if not ids or len(ids) != len(set(ids)):
             raise InvalidRequestError("batch variants must be non-empty with unique variant_id")
-        # batch-market-dataset-reuse: acquire the shared market dataset exactly
+        # batch-market-dataset-reuse: this call now owns the shared
+        # acquisition, so it must validate the batch range itself rather
+        # than relying on a downstream layer (HTTP adapter, MarketDataPort
+        # implementation) to be the only place this is ever checked.
+        request.time_range.validate_alignment(request.market.base_timeframe)
+        # Acquire the shared market dataset exactly
         # once, outside and before the variant loop. A terminal failure here
         # (uncaught StrategyEngineError) fails the whole batch -- see
         # design.md Decision 2 -- rather than being retried independently per
