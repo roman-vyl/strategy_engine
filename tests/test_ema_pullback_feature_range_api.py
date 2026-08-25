@@ -94,7 +94,7 @@ def services() -> tuple[ApplicationServices, FakeMarketData]:
             strategy_catalog=StrategyCatalog(strategy_registry),
             validate_strategy_spec=validate_strategy,
             evaluate_strategy_range=strategy_eval,
-            evaluate_strategy_range_batch=EvaluateStrategyRangeBatch(strategy_eval),
+            evaluate_strategy_range_batch=EvaluateStrategyRangeBatch(strategy_eval, market_data),
             market_data_client=market_data,  # type: ignore[arg-type]
             build_strategy_feature_plan=planner,
         ),

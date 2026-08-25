@@ -1,8 +1,69 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from fastapi.testclient import TestClient
 
 from strategy_engine.adapters.http.app import create_app
+from strategy_engine.domain.market import MarketBar, MarketFrame, MarketStream
+from strategy_engine.domain.ranges import TimeRange
+from strategy_engine.indicators.application.catalog import IndicatorCatalog
+from strategy_engine.indicators.application.evaluate_range import EvaluateIndicatorRange
+from strategy_engine.indicators.application.validate_plan import ValidateIndicatorPlan
+from strategy_engine.service.registries import IndicatorRegistry, StrategyRegistry
+from strategy_engine.service.wiring import ApplicationServices
+from strategy_engine.strategies.application.build_feature_plan import BuildStrategyFeaturePlan
+from strategy_engine.strategies.application.catalog import StrategyCatalog
+from strategy_engine.strategies.application.evaluate_range import EvaluateStrategyRange
+from strategy_engine.strategies.application.evaluate_range_batch import EvaluateStrategyRangeBatch
+from strategy_engine.strategies.application.validate_spec import ValidateStrategySpec
+from strategy_engine.strategies.ema_pullback.evaluator import EmaPullbackRangeEvaluator
+
+
+class _FakeMarketData:
+    """Deterministic, network-free market data stub for HTTP-layer tests
+    that must not depend on a live Market Data Service being reachable."""
+
+    def load_range(self, market: MarketStream, time_range: TimeRange, **_: object) -> MarketFrame:
+        count = (time_range.to_ms - time_range.from_ms) // 300_000
+        bars = tuple(
+            MarketBar(
+                time_range.from_ms + index * 300_000,
+                Decimal(str(index + 1)),
+                Decimal(str(index + 2)),
+                Decimal(str(index)),
+                Decimal(str(index + 1)),
+                Decimal("10"),
+            )
+            for index in range(count)
+        )
+        return MarketFrame(market, time_range, bars, "fixture-hash")
+
+    def close(self) -> None:
+        pass
+
+
+def _services_with_fake_market_data() -> ApplicationServices:
+    indicator_registry = IndicatorRegistry()
+    market_data = _FakeMarketData()
+    validate_plan = ValidateIndicatorPlan(indicator_registry)
+    indicator_eval = EvaluateIndicatorRange(indicator_registry, market_data, validate_plan)
+    planner = BuildStrategyFeaturePlan()
+    strategy_impl = EmaPullbackRangeEvaluator(planner, indicator_eval)
+    strategy_registry = StrategyRegistry(strategy_impl)
+    validate_strategy = ValidateStrategySpec(strategy_registry, planner)
+    strategy_eval = EvaluateStrategyRange(strategy_registry, validate_strategy)
+    return ApplicationServices(
+        indicator_catalog=IndicatorCatalog(indicator_registry),
+        validate_indicator_plan=validate_plan,
+        evaluate_indicator_range=indicator_eval,
+        strategy_catalog=StrategyCatalog(strategy_registry),
+        validate_strategy_spec=validate_strategy,
+        evaluate_strategy_range=strategy_eval,
+        evaluate_strategy_range_batch=EvaluateStrategyRangeBatch(strategy_eval, market_data),
+        market_data_client=market_data,  # type: ignore[arg-type]
+        build_strategy_feature_plan=planner,
+    )
 
 
 def strategy_payload() -> dict[str, object]:
@@ -95,23 +156,54 @@ def test_unported_strategy_evaluation_returns_501() -> None:
 
 
 def test_batch_preserves_variant_order_and_error_identity() -> None:
+    # batch-market-dataset-reuse: the shared market dataset is now acquired
+    # once, before any per-variant evaluation, so this test injects a
+    # network-free market data stub (via create_app(services=...)) instead
+    # of relying on a live Market Data Service being reachable -- a live MDS
+    # is not guaranteed in CI, and this test's intent (per-variant error
+    # identity after successful acquisition) does not depend on real data.
     first = strategy_payload()["strategy"]
     assert isinstance(first, dict)
     second = dict(first)
     second["instance_id"] = "variant-b"
     payload = {
-        "market": strategy_payload()["market"],
+        "market": {
+            "ticker": "ETHUSDT.P",
+            "base_timeframe": "5m",
+            "from_ms": 1615766400000,
+            "to_ms": 1615767000000,
+        },
         "variants": [
             {"variant_id": "a", "strategy": first},
             {"variant_id": "b", "strategy": second},
         ],
     }
-    with TestClient(create_app()) as client:
+    with TestClient(create_app(services=_services_with_fake_market_data())) as client:
         response = client.post("/v1/strategy-evaluations/range-batch", json=payload)
         assert response.status_code == 200
         variants = response.json()["variants"]
         assert [item["variant_id"] for item in variants] == ["a", "b"]
         assert all(item["error"]["error"] == "invalid_request" for item in variants)
+
+
+def test_batch_shared_market_acquisition_failure_fails_whole_batch() -> None:
+    # batch-market-dataset-reuse design.md Decision 2: a terminal failure of
+    # the once-per-batch shared market acquisition fails the whole batch
+    # rather than being retried/surfaced independently per variant. This
+    # payload's market range (year-1970 epoch) is not an available range for
+    # any configured stream, so acquisition itself fails before any variant
+    # is evaluated.
+    first = strategy_payload()["strategy"]
+    assert isinstance(first, dict)
+    payload = {
+        "market": strategy_payload()["market"],
+        "variants": [{"variant_id": "a", "strategy": first}],
+    }
+    with TestClient(create_app()) as client:
+        response = client.post("/v1/strategy-evaluations/range-batch", json=payload)
+        assert response.status_code != 200
+        body = response.json()
+        assert "variants" not in body
 
 
 def test_invalid_range_uses_stable_error_envelope() -> None:

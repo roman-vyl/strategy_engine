@@ -189,7 +189,7 @@ def _services(
             strategy_catalog=StrategyCatalog(registry),
             validate_strategy_spec=validate_strategy,
             evaluate_strategy_range=range_eval,
-            evaluate_strategy_range_batch=EvaluateStrategyRangeBatch(range_eval),
+            evaluate_strategy_range_batch=EvaluateStrategyRangeBatch(range_eval, market_data),
             market_data_client=market_data,  # type: ignore[arg-type]
             build_strategy_feature_plan=planner,
             load_live_feature_frame=loader,
