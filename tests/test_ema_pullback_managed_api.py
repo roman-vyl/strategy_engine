@@ -62,7 +62,7 @@ def services() -> ApplicationServices:
         strategy_catalog=StrategyCatalog(strategies),
         validate_strategy_spec=validate_strategy,
         evaluate_strategy_range=range_eval,
-        evaluate_strategy_range_batch=EvaluateStrategyRangeBatch(range_eval),
+        evaluate_strategy_range_batch=EvaluateStrategyRangeBatch(range_eval, market_data),
         market_data_client=market_data,  # type: ignore[arg-type]
         evaluate_managed_replay=EvaluateManagedReplay(
             planner,

@@ -29,6 +29,7 @@ class EmaPullbackRangeEvaluator:
                 time_range=request.time_range,
                 plan=planned.indicator_plan,
                 expected_market_data_hash=request.expected_market_data_hash,
+                market_frame=request.market_frame,
             )
         )
         evaluation = evaluate_ema_pullback_frame(request.strategy, frame, planned)

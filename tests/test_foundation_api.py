@@ -95,12 +95,22 @@ def test_unported_strategy_evaluation_returns_501() -> None:
 
 
 def test_batch_preserves_variant_order_and_error_identity() -> None:
+    # batch-market-dataset-reuse: the shared market dataset is now acquired
+    # once, before any per-variant evaluation, so this market range must be
+    # real/available -- otherwise the batch fails as a whole (see the
+    # dedicated shared-acquisition-failure test below) before any variant
+    # ever reaches its own (invalid-spec) error.
     first = strategy_payload()["strategy"]
     assert isinstance(first, dict)
     second = dict(first)
     second["instance_id"] = "variant-b"
     payload = {
-        "market": strategy_payload()["market"],
+        "market": {
+            "ticker": "ETHUSDT.P",
+            "base_timeframe": "5m",
+            "from_ms": 1615766400000,
+            "to_ms": 1615767000000,
+        },
         "variants": [
             {"variant_id": "a", "strategy": first},
             {"variant_id": "b", "strategy": second},
@@ -112,6 +122,26 @@ def test_batch_preserves_variant_order_and_error_identity() -> None:
         variants = response.json()["variants"]
         assert [item["variant_id"] for item in variants] == ["a", "b"]
         assert all(item["error"]["error"] == "invalid_request" for item in variants)
+
+
+def test_batch_shared_market_acquisition_failure_fails_whole_batch() -> None:
+    # batch-market-dataset-reuse design.md Decision 2: a terminal failure of
+    # the once-per-batch shared market acquisition fails the whole batch
+    # rather than being retried/surfaced independently per variant. This
+    # payload's market range (year-1970 epoch) is not an available range for
+    # any configured stream, so acquisition itself fails before any variant
+    # is evaluated.
+    first = strategy_payload()["strategy"]
+    assert isinstance(first, dict)
+    payload = {
+        "market": strategy_payload()["market"],
+        "variants": [{"variant_id": "a", "strategy": first}],
+    }
+    with TestClient(create_app()) as client:
+        response = client.post("/v1/strategy-evaluations/range-batch", json=payload)
+        assert response.status_code != 200
+        body = response.json()
+        assert "variants" not in body
 
 
 def test_invalid_range_uses_stable_error_envelope() -> None:

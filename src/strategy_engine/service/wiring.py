@@ -107,7 +107,9 @@ def build_services(settings: Settings) -> ApplicationServices:
         strategy_catalog=StrategyCatalog(strategy_registry),
         validate_strategy_spec=validate_strategy_spec,
         evaluate_strategy_range=evaluate_strategy_range,
-        evaluate_strategy_range_batch=EvaluateStrategyRangeBatch(evaluate_strategy_range),
+        evaluate_strategy_range_batch=EvaluateStrategyRangeBatch(
+            evaluate_strategy_range, market_data_client
+        ),
         evaluate_managed_replay=EvaluateManagedReplay(
             build_strategy_feature_plan,
             evaluate_indicator_range,

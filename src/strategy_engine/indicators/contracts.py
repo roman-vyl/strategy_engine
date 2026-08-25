@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from strategy_engine.domain.market import MarketBar, MarketStream
+from strategy_engine.domain.market import MarketBar, MarketFrame, MarketStream
 from strategy_engine.domain.ranges import TimeRange
 from strategy_engine.domain.validity import Validity
 from strategy_engine.domain.values import canonical_json_hash
@@ -52,6 +52,12 @@ class IndicatorRangeRequest:
     time_range: TimeRange
     plan: IndicatorPlan
     expected_market_data_hash: str | None = None
+    # Internal-only seam (batch-market-dataset-reuse): when set, this exact
+    # already-acquired MarketFrame is used instead of fetching one, so a
+    # batch caller can share one acquisition across variants. Not exposed on
+    # any HTTP request DTO; absent (None) preserves today's fetch-per-call
+    # behavior exactly.
+    market_frame: MarketFrame | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from strategy_engine.domain.errors import InvalidRequestError, StrategyEngineError
+from strategy_engine.ports.market_data import MarketDataPort
 from strategy_engine.strategies.application.evaluate_range import EvaluateStrategyRange
 from strategy_engine.strategies.contracts import StrategyRangeBatchRequest, StrategyRangeRequest
 
@@ -18,13 +19,20 @@ class BatchVariantOutcome:
 
 
 class EvaluateStrategyRangeBatch:
-    def __init__(self, evaluator: EvaluateStrategyRange) -> None:
+    def __init__(self, evaluator: EvaluateStrategyRange, market_data: MarketDataPort) -> None:
         self._evaluator = evaluator
+        self._market_data = market_data
 
     def execute(self, request: StrategyRangeBatchRequest) -> tuple[BatchVariantOutcome, ...]:
         ids = [variant.variant_id for variant in request.variants]
         if not ids or len(ids) != len(set(ids)):
             raise InvalidRequestError("batch variants must be non-empty with unique variant_id")
+        # batch-market-dataset-reuse: acquire the shared market dataset exactly
+        # once, outside and before the variant loop. A terminal failure here
+        # (uncaught StrategyEngineError) fails the whole batch -- see
+        # design.md Decision 2 -- rather than being retried independently per
+        # variant.
+        market_frame = self._market_data.load_range(request.market, request.time_range)
         outcomes: list[BatchVariantOutcome] = []
         for variant in request.variants:
             try:
@@ -34,6 +42,7 @@ class EvaluateStrategyRangeBatch:
                         market=request.market,
                         time_range=request.time_range,
                         options=request.options,
+                        market_frame=market_frame,
                     )
                 )
                 outcomes.append(BatchVariantOutcome(variant.variant_id, result, None))

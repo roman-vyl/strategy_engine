@@ -26,7 +26,9 @@ class EvaluateIndicatorRange:
         evaluator = self._registry.evaluator()
         if evaluator is None:
             raise UnsupportedCapabilityError("indicator_range_evaluation")
-        if request.expected_market_data_hash is None:
+        if request.market_frame is not None:
+            market_frame = request.market_frame
+        elif request.expected_market_data_hash is None:
             market_frame = self._market_data.load_range(
                 request.market,
                 request.time_range,
