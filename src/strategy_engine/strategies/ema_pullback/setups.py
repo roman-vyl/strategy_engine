@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Any
 
+import numpy as np
+import pandas as pd
+
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.indicators.contracts import FeatureFrame
 from strategy_engine.strategies.ema_pullback.context_consumption import (
@@ -131,12 +134,20 @@ def _untouched_anchor(
         for close_value, anchor_value in zip(close, anchor, strict=True)
     )
     prior_touch = (False,) + touch[:-1]
-    untouched_prior: list[bool] = []
-    for index in range(len(touch)):
-        if index < lookback:
-            untouched_prior.append(False)
-            continue
-        untouched_prior.append(not any(touch[index - lookback : index]))
+    # Vectorized, positional replacement for the per-bar Python loop
+    # (design.md Decision 1, ema-pullback-setup-vectorization): shift(1)
+    # excludes the current bar from the window (matching
+    # touch[index-lookback:index]); min_periods=lookback reproduces "full
+    # lookback required"; positions before `lookback` are hard-forced to
+    # False, matching the original's explicit `continue` branch exactly.
+    touch_arr = np.asarray(touch, dtype=bool)
+    n = len(touch_arr)
+    shifted = pd.Series(touch_arr).shift(1, fill_value=False)
+    seen = shifted.rolling(lookback, min_periods=lookback).max()
+    untouched_prior_arr = np.where(
+        np.arange(n) < lookback, False, (~seen.fillna(1).astype(bool)).to_numpy()
+    )
+    untouched_prior = untouched_prior_arr.tolist()
     armed_pre = tuple(
         ok and untouched and not touched
         for ok, untouched, touched in zip(side_ok, untouched_prior, touch, strict=True)
@@ -144,10 +155,18 @@ def _untouched_anchor(
     first_touch = tuple(
         touched and untouched for touched, untouched in zip(touch, untouched_prior, strict=True)
     )
-    touch_active = tuple(
-        any(first_touch[max(0, index - active_bars + 1) : index + 1])
-        for index in range(len(first_touch))
+    # Vectorized, positional replacement for the per-bar Python loop
+    # (design.md Decision 2): min_periods=1 reproduces the original's
+    # start-of-series window clipping (max(0, index-active_bars+1)) exactly,
+    # same technique as the already-shipped _rsi_blocker.
+    touch_active_arr = (
+        pd.Series(np.asarray(first_touch, dtype=bool))
+        .rolling(active_bars, min_periods=1)
+        .max()
+        .to_numpy()
+        .astype(bool)
     )
+    touch_active = tuple(touch_active_arr.tolist())
     setup = tuple(armed or active for armed, active in zip(armed_pre, touch_active, strict=True))
     return setup, {
         "touch": touch,
@@ -312,17 +331,33 @@ def _anchor_stack_width(
         abs(f - s) / a if all(isfinite(v) for v in (f, s, a)) and a > 0 else float("nan")
         for f, s, a in zip(fast, slow, atr, strict=True)
     )
-    recent_max: list[float] = []
+    # Vectorized, positional replacement for the per-bar Python loop
+    # (design.md Decision 3, ema-pullback-setup-vectorization): ordinary
+    # rolling().max() silently skips NaN, which is NOT the original
+    # semantics (all(isfinite(v) for v in window) gates the whole window to
+    # NaN if any element is non-finite). roll_all_finite uses a rolling SUM
+    # of a 0/1 finiteness indicator compared with .eq(lookback) -- not
+    # rolling().min().astype(bool), because an incomplete window
+    # (min_periods=lookback) produces NaN from .min(), and NaN casts to True
+    # under .astype(bool), which would wrongly pass the gate before a full
+    # window exists. .eq(lookback) evaluates a NaN sum to False, so the gate
+    # stays explicitly False (recent_max NaN) until a full window exists.
+    width_arr = np.asarray(width_atr, dtype=float)
+    finite_arr = np.isfinite(width_arr)
+    roll_max = pd.Series(width_arr).rolling(lookback, min_periods=lookback).max()
+    roll_all_finite = (
+        pd.Series(finite_arr.astype(np.int8))
+        .rolling(lookback, min_periods=lookback)
+        .sum()
+        .eq(lookback)
+    )
+    recent_max = roll_max.where(roll_all_finite, other=np.nan).tolist()
     allowed: list[bool] = []
     reasons: list[str] = []
     current_ok: list[bool] = []
     recent_ok: list[bool] = []
     for index, current in enumerate(width_atr):
-        window = width_atr[index - lookback + 1 : index + 1] if index + 1 >= lookback else ()
-        recent = (
-            max(window) if window and all(isfinite(value) for value in window) else float("nan")
-        )
-        recent_max.append(recent)
+        recent = recent_max[index]
         not_ready = (
             not all(
                 isfinite(value)
@@ -357,6 +392,16 @@ def _anchor_stack_width(
         "slow_ema": slow,
         "atr_value": atr,
     }
+
+
+def _combine_setup_masks(
+    mask_allowed: tuple[tuple[bool, ...], ...], length: int
+) -> tuple[bool, ...]:
+    if not mask_allowed:
+        return tuple([True] * length)
+    stacked = np.array(mask_allowed, dtype=bool)
+    reduced = np.logical_and.reduce(stacked, axis=0, initial=True)
+    return tuple(reduced.tolist())
 
 
 def _setup(
@@ -413,13 +458,9 @@ def evaluate_setups(
         masks = tuple(
             _setup(item, frame, plan, prior.side, context_records) for item in setup_items
         )
-        if masks:
-            setups_ok = tuple(
-                all(mask.final_setup_allowed[index] for mask in masks)
-                for index in range(len(frame.time_ms))
-            )
-        else:
-            setups_ok = tuple(True for _ in frame.time_ms)
+        setups_ok = _combine_setup_masks(
+            tuple(mask.final_setup_allowed for mask in masks), len(frame.time_ms)
+        )
         pre_trigger = tuple(
             allowed and setup_ok
             for allowed, setup_ok in zip(prior.pre_setup_allowed, setups_ok, strict=True)
