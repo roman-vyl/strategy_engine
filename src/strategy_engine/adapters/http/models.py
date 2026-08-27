@@ -163,6 +163,7 @@ class StrategyRangeBatchRequestModel(BaseModel):
     market: MarketRangeModel
     variants: list[StrategyBatchVariantModel]
     options: StrategyOutputOptionsModel = Field(default_factory=StrategyOutputOptionsModel)
+    expected_market_data_hash: StrictStr | None = None
 
     def to_domain(self) -> StrategyRangeBatchRequest:
         market, time_range = self.market.to_domain()
@@ -171,6 +172,7 @@ class StrategyRangeBatchRequestModel(BaseModel):
             time_range=time_range,
             variants=tuple(variant.to_domain() for variant in self.variants),
             options=self.options.to_domain(),
+            expected_market_data_hash=self.expected_market_data_hash,
         )
 
 

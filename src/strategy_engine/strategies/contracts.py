@@ -93,6 +93,11 @@ class StrategyRangeBatchRequest:
     time_range: TimeRange
     variants: tuple[StrategyBatchVariant, ...]
     options: StrategyOutputOptions = field(default_factory=StrategyOutputOptions)
+    # Same fail-closed provenance contract as single-range evaluation
+    # (StrategyRangeRequest.expected_market_data_hash): when set, the shared
+    # L0 market acquisition is verified against it rather than trusted
+    # unconditionally.
+    expected_market_data_hash: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

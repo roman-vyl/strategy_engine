@@ -217,3 +217,28 @@ equality. Closed per `ema-pullback-authoring-config-validation-v1`'s new
       instances identifies the offending index; mismatch is caught before
       semantic validation of the offending instance (not surfaced via
       `ValidateStrategySpec`'s unknown-strategy path).
+
+## Slice 10 — Corrective: range-batch shared market-data provenance
+
+Found while reviewing Research's Step 3 batch rebuild (which finally
+began calling `/range-batch` for real): the shared L0 acquisition in
+`EvaluateStrategyRangeBatch.execute()` never accepted an
+`expected_market_data_hash`, unlike single-range evaluation, so it always
+called `MarketDataPort.load_range()` unverified — trusting whatever MDS
+returned rather than failing closed on a stale/wrong dataset the way
+single `/range` already does. Not a new design: this brings batch's
+shared-L0 acquisition up to the same fail-closed provenance contract
+single-range evaluation already had.
+
+- [x] `StrategyRangeBatchRequest` (`strategies/contracts.py`) and
+      `StrategyRangeBatchRequestModel` (`adapters/http/models.py`): add
+      optional `expected_market_data_hash`.
+- [x] `EvaluateStrategyRangeBatch.execute()`: forward
+      `expected_market_data_hash` to the shared `market_data.load_range()`
+      call, and to each variant's `StrategyRangeRequest` (for the same
+      defense-in-depth check `EvaluateIndicatorRange` already performs
+      against a preloaded `market_frame`).
+- [x] Regression tests: hash forwarded to the shared acquisition; absent
+      hash means no verification requested (unchanged prior behavior);
+      mismatched hash fails the whole batch before any variant is
+      evaluated.

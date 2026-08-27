@@ -36,8 +36,15 @@ class EvaluateStrategyRangeBatch:
         # once, outside and before the variant loop. A terminal failure here
         # (uncaught StrategyEngineError) fails the whole batch -- see
         # design.md Decision 2 -- rather than being retried independently per
-        # variant.
-        market_frame = self._market_data.load_range(request.market, request.time_range)
+        # variant. Same fail-closed provenance contract as single-range
+        # evaluation: when the caller supplies expected_market_data_hash,
+        # the shared acquisition is verified against it, not trusted
+        # unconditionally.
+        market_frame = self._market_data.load_range(
+            request.market,
+            request.time_range,
+            expected_market_data_hash=request.expected_market_data_hash,
+        )
         outcomes: list[BatchVariantOutcome] = []
         for variant in request.variants:
             try:
@@ -48,6 +55,7 @@ class EvaluateStrategyRangeBatch:
                         time_range=request.time_range,
                         options=request.options,
                         market_frame=market_frame,
+                        expected_market_data_hash=request.expected_market_data_hash,
                     )
                 )
                 outcomes.append(BatchVariantOutcome(variant.variant_id, result, None))

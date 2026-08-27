@@ -86,6 +86,36 @@ separately per variant.
 - **AND** remaining variants SHALL still be evaluated from the same
   already-acquired dataset, without a second acquisition.
 
+### Requirement: Optional fail-closed market-data provenance for the shared acquisition
+
+A range-batch request MAY declare `expected_market_data_hash` at the
+request level, alongside `market`. When present, Engine SHALL verify the
+one shared market-data acquisition against it — the same fail-closed
+provenance contract single-range evaluation already has via
+`StrategyRangeRequest.expected_market_data_hash` — rather than trusting
+the acquired dataset unconditionally. A mismatch SHALL fail the whole
+batch before any variant is evaluated. When absent, Engine SHALL acquire
+the shared dataset without hash verification, exactly as before this
+requirement existed.
+
+#### Scenario: Matching hash, batch proceeds
+
+- **WHEN** a range-batch request supplies `expected_market_data_hash`
+  and the shared acquisition's own market-data hash matches it
+- **THEN** every variant is evaluated normally from that acquisition.
+
+#### Scenario: Mismatched hash fails the whole batch
+
+- **WHEN** a range-batch request supplies `expected_market_data_hash`
+  and the shared acquisition's own market-data hash does not match it
+- **THEN** the whole batch fails before any variant is evaluated — no
+  per-variant outcome is produced for anyone.
+
+#### Scenario: Absent hash means no verification is requested
+
+- **WHEN** a range-batch request omits `expected_market_data_hash`
+- **THEN** Engine acquires the shared dataset without hash verification.
+
 ### Requirement: Per-variant outcome, no batch-wide short-circuit
 
 The response SHALL report one outcome per requested variant, each
