@@ -341,7 +341,11 @@ def test_open_trade_openapi_publishes_success_and_error_contracts() -> None:
         "target_bar_open_time_ms",
         "executed_trade_receipt",
     }
-    assert "LiveStrategySpecModel" not in schema["components"]["schemas"]
+    # LiveStrategySpecModel is the canonical strategy-input model shared
+    # across range/range-batch/managed-replay/validate/feature-plan -- it
+    # legitimately appears in the app's schema components (from those other
+    # endpoints), just not referenced by open-trade's own flat request model
+    # (asserted above). LiveMarketModel has no other user and stays retired.
     assert "LiveMarketModel" not in schema["components"]["schemas"]
     assert "strategy_version" not in receipt_schema["properties"]
     assert "strategy_version" not in response_schema["properties"]
