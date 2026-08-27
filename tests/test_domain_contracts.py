@@ -13,7 +13,7 @@ from strategy_engine.domain.values import (
     parse_decimal_text,
 )
 from strategy_engine.indicators.contracts import IndicatorPlan, PlannedFeature
-from strategy_engine.strategies.contracts import StrategySpecEnvelope
+from strategy_engine.strategies.contracts import LiveStrategySpec, strategy_config_hash
 
 
 def test_market_stream_requires_canonical_identity() -> None:
@@ -65,6 +65,6 @@ def test_plan_and_strategy_hashes_are_deterministic() -> None:
     assert first.plan_hash == second.plan_hash
     assert canonical_json_hash({"b": 1, "a": 2}) == canonical_json_hash({"a": 2, "b": 1})
 
-    spec = StrategySpecEnvelope("ema_pullback", "v1", "run-a", {"b": 1, "a": 2})
-    same_semantics = StrategySpecEnvelope("ema_pullback", "v1", "run-b", {"a": 2, "b": 1})
-    assert spec.config_hash == same_semantics.config_hash
+    spec = LiveStrategySpec("ema_pullback", {"b": 1, "a": 2})
+    same_semantics = LiveStrategySpec("ema_pullback", {"a": 2, "b": 1})
+    assert strategy_config_hash(spec) == strategy_config_hash(same_semantics)

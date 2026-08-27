@@ -9,7 +9,8 @@ def test_ema_pullback_composer_catalog_preserves_bbb_contract() -> None:
     response = client.get("/v1/strategies/ema_pullback/composer-catalog")
     assert response.status_code == 200
     body = response.json()
-    assert body["family"] == "ema_pullback"
+    assert body["strategy_id"] == "ema_pullback"
+    assert "family" not in body
     assert body["schema_version"] == 1
     ids = {item["component_id"] for item in body["components"]}
     assert {"ema_anchor_stack_trend", "untouched_anchor_setup", "reclaim_anchor"} <= ids

@@ -13,8 +13,6 @@ def serialize_strategy_result(result: StrategyRangeResult) -> dict[str, object]:
     return {
         "contract_version": "strategy_evaluation.v1",
         "strategy_id": result.strategy_id,
-        "strategy_version": result.strategy_version,
-        "instance_id": result.instance_id,
         "config_hash": result.config_hash,
         "market": {
             "ticker": result.market.ticker,

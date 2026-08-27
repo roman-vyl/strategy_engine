@@ -170,8 +170,6 @@ class IndicatorRegistry:
 _EMA_PULLBACK_SCHEMA: dict[str, Any] = {
     "strategy_id": "ema_pullback",
     "title": "EMA Pullback",
-    "strategy_version": "v1",
-    "compatibility_profile": "bbb_v1",
     "accepted_spec_shape": "strategy_spec_to_dict",
     "supports_feature_planning": True,
     "supports_range_evaluation": True,

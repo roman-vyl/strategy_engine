@@ -76,7 +76,7 @@ class ComposerSectionSchema(BaseModel):
 class ComponentCatalog(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    family: str
+    strategy_id: str
     schema_version: int = 1
     sections: list[ComposerSectionSchema]
     components: list[ComponentSchema]

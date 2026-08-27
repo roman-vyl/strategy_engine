@@ -59,9 +59,9 @@ _SETUP_CONTEXT_POLICIES = [
 ]
 
 
-def get_component_catalog(*, family: str = "ema_pullback") -> ComponentCatalog:
-    if family != "ema_pullback":
-        raise ValueError(f"unsupported family {family!r}; supported: ema_pullback")
+def get_component_catalog(*, strategy_id: str = "ema_pullback") -> ComponentCatalog:
+    if strategy_id != "ema_pullback":
+        raise ValueError(f"unsupported strategy_id {strategy_id!r}; supported: ema_pullback")
 
     sections = [
         ComposerSectionSchema(section_id="envelope", label="Experiment"),
@@ -479,7 +479,7 @@ def get_component_catalog(*, family: str = "ema_pullback") -> ComponentCatalog:
     ]
 
     return ComponentCatalog(
-        family=family,
+        strategy_id=strategy_id,
         schema_version=1,
         sections=sections,
         components=components,

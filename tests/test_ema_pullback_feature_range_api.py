@@ -102,7 +102,7 @@ def services() -> tuple[ApplicationServices, FakeMarketData]:
     )
 
 
-def payload(instance_id: str = "fixture") -> dict[str, object]:
+def payload() -> dict[str, object]:
     return {
         "market": {
             "ticker": "BTCUSDT.P",
@@ -112,10 +112,7 @@ def payload(instance_id: str = "fixture") -> dict[str, object]:
         },
         "strategy": {
             "strategy_id": "ema_pullback",
-            "strategy_version": "v1",
-            "instance_id": instance_id,
             "raw_spec": minimal_spec(),
-            "compatibility_profile": "bbb_v1",
         },
     }
 
@@ -148,6 +145,32 @@ def test_strategy_range_builds_plan_and_features_inside_service() -> None:
     evidence = body["component_evidence"]["direction_blockers"][0]
     assert evidence["direction"]["component_id"] == "ema_anchor_stack_trend"
     assert market_data.calls == 1
+
+
+def test_range_response_exact_key_set() -> None:
+    # Sequencing artifact for strategy-evaluation-canonical-boundary-v1:
+    # the authoritative reference for exactly what a successful /range
+    # response top level looks like now (no strategy_version, no
+    # instance_id).
+    app_services, _ = services()
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/range", json=payload())
+    assert response.status_code == 200
+    assert set(response.json()) == {
+        "contract_version",
+        "strategy_id",
+        "config_hash",
+        "market",
+        "features",
+        "contexts",
+        "entries",
+        "potential_entries",
+        "exit_policy",
+        "component_evidence",
+        "validity",
+        "state_artifact",
+        "warnings",
+    }
 
 
 def test_touch_anchor_range_adds_enabled_side_potential_prices_without_recalculation() -> None:
