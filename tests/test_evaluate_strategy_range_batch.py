@@ -18,10 +18,10 @@ from strategy_engine.strategies.application.evaluate_range_batch import (
 )
 from strategy_engine.strategies.application.validate_spec import ValidateStrategySpec
 from strategy_engine.strategies.contracts import (
+    LiveStrategySpec,
     StrategyBatchVariant,
     StrategyRangeBatchRequest,
     StrategyRangeRequest,
-    StrategySpecEnvelope,
 )
 from strategy_engine.strategies.ema_pullback.evaluator import EmaPullbackRangeEvaluator
 
@@ -29,9 +29,17 @@ from strategy_engine.strategies.ema_pullback.evaluator import EmaPullbackRangeEv
 class SpyMarketData:
     def __init__(self) -> None:
         self.calls = 0
+        self.expected_market_data_hashes: list[str | None] = []
 
-    def load_range(self, market: MarketStream, time_range: TimeRange) -> MarketFrame:
+    def load_range(
+        self,
+        market: MarketStream,
+        time_range: TimeRange,
+        *,
+        expected_market_data_hash: str | None = None,
+    ) -> MarketFrame:
         self.calls += 1
+        self.expected_market_data_hashes.append(expected_market_data_hash)
         bars = tuple(
             MarketBar(
                 index * 300_000,
@@ -63,8 +71,45 @@ class RecordingIndicatorEvaluator:
 
 
 class FailingMarketData:
-    def load_range(self, market: MarketStream, time_range: TimeRange) -> MarketFrame:
+    def load_range(
+        self,
+        market: MarketStream,
+        time_range: TimeRange,
+        *,
+        expected_market_data_hash: str | None = None,
+    ) -> MarketFrame:
         raise MarketDataUnavailableError("Market Data Service is unavailable")
+
+
+class HashMismatchMarketData:
+    """Real Market Data Service semantics: an expected_market_data_hash
+    mismatch fails closed rather than silently returning stale/wrong
+    data."""
+
+    def load_range(
+        self,
+        market: MarketStream,
+        time_range: TimeRange,
+        *,
+        expected_market_data_hash: str | None = None,
+    ) -> MarketFrame:
+        if (
+            expected_market_data_hash is not None
+            and expected_market_data_hash != "fixture-market-hash"
+        ):
+            raise MarketDataUnavailableError("market_data_hash mismatch")
+        bars = tuple(
+            MarketBar(
+                index * 300_000,
+                Decimal(str(index + 1)),
+                Decimal(str(index + 2)),
+                Decimal(str(index)),
+                Decimal(str(index + 1)),
+                Decimal("10"),
+            )
+            for index in range(12)
+        )
+        return MarketFrame(market, time_range, bars, "fixture-market-hash")
 
 
 def minimal_spec() -> dict[str, object]:
@@ -126,9 +171,7 @@ def _batch_request(count: int) -> StrategyRangeBatchRequest:
     variants = tuple(
         StrategyBatchVariant(
             variant_id=f"variant-{index}",
-            strategy=StrategySpecEnvelope(
-                "ema_pullback", "v1", f"instance-{index}", minimal_spec()
-            ),
+            strategy=LiveStrategySpec("ema_pullback", minimal_spec()),
         )
         for index in range(count)
     )
@@ -172,7 +215,7 @@ def test_single_variant_evaluate_strategy_range_still_fetches_its_own_dataset() 
     # still fetch independently -- unaffected by the batch-only seam.
     market_data = SpyMarketData()
     _, strategy_eval = _build(market_data)
-    strategy = StrategySpecEnvelope("ema_pullback", "v1", "solo", minimal_spec())
+    strategy = LiveStrategySpec("ema_pullback", minimal_spec())
     request = StrategyRangeRequest(
         strategy=strategy,
         market=MarketStream("BTCUSDT.P", "5m"),
@@ -190,12 +233,8 @@ def test_per_variant_errors_still_envelope_after_successful_acquisition() -> Non
     market = MarketStream("BTCUSDT.P", "5m")
     time_range = TimeRange(0, 3_600_000)
     variants = (
-        StrategyBatchVariant(
-            "good", StrategySpecEnvelope("ema_pullback", "v1", "good", minimal_spec())
-        ),
-        StrategyBatchVariant(
-            "bad", StrategySpecEnvelope("ema_pullback", "v1", "bad", {"anchor_stack": {}})
-        ),
+        StrategyBatchVariant("good", LiveStrategySpec("ema_pullback", minimal_spec())),
+        StrategyBatchVariant("bad", LiveStrategySpec("ema_pullback", {"anchor_stack": {}})),
     )
     outcomes = batch_eval.execute(
         StrategyRangeBatchRequest(market=market, time_range=time_range, variants=variants)
@@ -204,6 +243,55 @@ def test_per_variant_errors_still_envelope_after_successful_acquisition() -> Non
     assert outcomes[0].error is None
     assert outcomes[1].error is not None
     assert outcomes[1].error["error"] == "invalid_request"
+
+
+def test_expected_market_data_hash_is_forwarded_to_shared_acquisition() -> None:
+    market_data = SpyMarketData()
+    batch_eval, _ = _build(market_data)
+    market = MarketStream("BTCUSDT.P", "5m")
+    time_range = TimeRange(0, 3_600_000)
+    variants = (StrategyBatchVariant("a", LiveStrategySpec("ema_pullback", minimal_spec())),)
+
+    outcomes = batch_eval.execute(
+        StrategyRangeBatchRequest(
+            market=market,
+            time_range=time_range,
+            variants=variants,
+            expected_market_data_hash="fixture-market-hash",
+        )
+    )
+
+    assert market_data.calls == 1
+    assert market_data.expected_market_data_hashes == ["fixture-market-hash"]
+    assert outcomes[0].error is None
+
+
+def test_no_expected_market_data_hash_means_no_verification_requested() -> None:
+    market_data = SpyMarketData()
+    batch_eval, _ = _build(market_data)
+    outcomes = batch_eval.execute(_batch_request(1))
+    assert market_data.expected_market_data_hashes == [None]
+    assert outcomes[0].error is None
+
+
+def test_expected_market_data_hash_mismatch_fails_the_whole_batch_before_any_variant() -> None:
+    batch_eval, _ = _build(HashMismatchMarketData())
+    market = MarketStream("BTCUSDT.P", "5m")
+    time_range = TimeRange(0, 3_600_000)
+    variants = tuple(
+        StrategyBatchVariant(f"variant-{i}", LiveStrategySpec("ema_pullback", minimal_spec()))
+        for i in range(3)
+    )
+
+    with pytest.raises(MarketDataUnavailableError):
+        batch_eval.execute(
+            StrategyRangeBatchRequest(
+                market=market,
+                time_range=time_range,
+                variants=variants,
+                expected_market_data_hash="stale-hash",
+            )
+        )
 
 
 def test_shared_market_acquisition_failure_fails_the_whole_batch() -> None:
@@ -220,9 +308,7 @@ def test_shared_market_acquisition_failure_precedes_per_variant_validation_error
     market = MarketStream("BTCUSDT.P", "5m")
     time_range = TimeRange(0, 3_600_000)
     variants = (
-        StrategyBatchVariant(
-            "bad", StrategySpecEnvelope("ema_pullback", "v1", "bad", {"anchor_stack": {}})
-        ),
+        StrategyBatchVariant("bad", LiveStrategySpec("ema_pullback", {"anchor_stack": {}})),
     )
     batch_eval, _ = _build(FailingMarketData())
     with pytest.raises(MarketDataUnavailableError):
@@ -236,9 +322,7 @@ def test_misaligned_batch_range_is_rejected_before_market_acquisition() -> None:
     batch_eval, _ = _build(market_data)
     market = MarketStream("BTCUSDT.P", "5m")
     misaligned_range = TimeRange(1, 3_600_000)  # not a multiple of the 5m step
-    variant = StrategyBatchVariant(
-        "a", StrategySpecEnvelope("ema_pullback", "v1", "a", minimal_spec())
-    )
+    variant = StrategyBatchVariant("a", LiveStrategySpec("ema_pullback", minimal_spec()))
     with pytest.raises(InvalidRequestError):
         batch_eval.execute(
             StrategyRangeBatchRequest(

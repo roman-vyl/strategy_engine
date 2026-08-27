@@ -13,6 +13,7 @@ from strategy_engine.adapters.http.models import (
     ErrorResponseModel,
     LiveEntryProjectionRequestModel,
     LiveEntryProjectionResponseModel,
+    LiveStrategySpecModel,
     ManagedReplayRequestModel,
     OpenTradeDiagnosticsResponseModel,
     OpenTradeProjectionRequestModel,
@@ -21,11 +22,9 @@ from strategy_engine.adapters.http.models import (
     StrategyAuthoringValidationRequestModel,
     StrategyRangeBatchRequestModel,
     StrategyRangeRequestModel,
-    StrategySpecEnvelopeModel,
 )
 from strategy_engine.adapters.http.strategy_serialization import serialize_strategy_result
 from strategy_engine.service.wiring import ApplicationServices
-from strategy_engine.strategies.ema_pullback.authoring import authoring_instance_to_envelope
 from strategy_engine.strategies.ema_pullback.composer_catalog import get_component_catalog
 
 router = APIRouter(prefix="/v1", tags=["strategies"])
@@ -52,13 +51,13 @@ def strategy_composer_catalog(strategy_id: str) -> dict[str, Any]:
         from strategy_engine.domain.errors import UnknownResourceError
 
         raise UnknownResourceError("unknown strategy", strategy_id=strategy_id)
-    return get_component_catalog(family=strategy_id).model_dump(mode="json")
+    return get_component_catalog(strategy_id=strategy_id).model_dump(mode="json")
 
 
 @router.post("/strategies/{strategy_id}/validate")
 def validate_strategy(
     strategy_id: str,
-    strategy: StrategySpecEnvelopeModel,
+    strategy: LiveStrategySpecModel,
     app: ApplicationServices = Depends(services),
 ) -> dict[str, object]:
     if strategy_id != strategy.strategy_id:
@@ -83,14 +82,22 @@ def validate_authoring_config(
         from strategy_engine.domain.errors import UnknownResourceError
 
         raise UnknownResourceError("unknown strategy", strategy_id=strategy_id)
+    for index, instance in enumerate(request.instances):
+        if instance.strategy_id != strategy_id:
+            from strategy_engine.domain.errors import InvalidRequestError
+
+            raise InvalidRequestError(
+                "path strategy_id does not match instance strategy_id",
+                path=f"instances[{index}].strategy_id",
+                path_strategy_id=strategy_id,
+                instance_strategy_id=instance.strategy_id,
+            )
     validated = []
     for index, instance in enumerate(request.instances):
         try:
-            envelope = authoring_instance_to_envelope(instance)
-            config_hash = app.validate_strategy_spec.execute(envelope)
-            validated.append(
-                {"index": index, "instance_id": envelope.instance_id, "config_hash": config_hash}
-            )
+            canonical = instance.to_domain()
+            config_hash = app.validate_strategy_spec.execute(canonical)
+            validated.append({"index": index, "config_hash": config_hash})
         except Exception as exc:
             return {
                 "valid": False,
@@ -102,7 +109,7 @@ def validate_authoring_config(
 @router.post("/strategies/{strategy_id}/feature-plan")
 def build_strategy_feature_plan(
     strategy_id: str,
-    strategy: StrategySpecEnvelopeModel,
+    strategy: LiveStrategySpecModel,
     app: ApplicationServices = Depends(services),
 ) -> dict[str, object]:
     if strategy_id != strategy.strategy_id:

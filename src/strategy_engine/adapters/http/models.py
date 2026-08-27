@@ -23,7 +23,6 @@ from strategy_engine.strategies.contracts import (
     StrategyOutputOptions,
     StrategyRangeBatchRequest,
     StrategyRangeRequest,
-    StrategySpecEnvelope,
 )
 
 
@@ -91,22 +90,21 @@ class IndicatorRangeRequestModel(BaseModel):
         )
 
 
-class StrategySpecEnvelopeModel(BaseModel):
+class LiveStrategySpecModel(BaseModel):
+    """The one canonical strategy input, reused across every
+    Research-facing evaluation/validation boundary (range, range-batch,
+    managed-replay, validate, feature-plan) — no strategy_version, no
+    caller-supplied instance_id, no compatibility_profile."""
+
     model_config = ConfigDict(extra="forbid")
 
     strategy_id: StrictStr
-    strategy_version: StrictStr
-    instance_id: StrictStr
     raw_spec: dict[str, Any]
-    compatibility_profile: StrictStr = "bbb_v1"
 
-    def to_domain(self) -> StrategySpecEnvelope:
-        return StrategySpecEnvelope(
+    def to_domain(self) -> LiveStrategySpec:
+        return LiveStrategySpec(
             strategy_id=self.strategy_id,
-            strategy_version=self.strategy_version,
-            instance_id=self.instance_id,
             raw_spec=self.raw_spec,
-            compatibility_profile=self.compatibility_profile,
         )
 
 
@@ -131,7 +129,7 @@ class StrategyRangeRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     market: MarketRangeModel
-    strategy: StrategySpecEnvelopeModel
+    strategy: LiveStrategySpecModel
     expected_market_data_hash: StrictStr | None = None
     options: StrategyOutputOptionsModel = Field(default_factory=StrategyOutputOptionsModel)
 
@@ -150,7 +148,7 @@ class StrategyBatchVariantModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     variant_id: StrictStr
-    strategy: StrategySpecEnvelopeModel
+    strategy: LiveStrategySpecModel
 
     def to_domain(self) -> StrategyBatchVariant:
         return StrategyBatchVariant(
@@ -165,6 +163,7 @@ class StrategyRangeBatchRequestModel(BaseModel):
     market: MarketRangeModel
     variants: list[StrategyBatchVariantModel]
     options: StrategyOutputOptionsModel = Field(default_factory=StrategyOutputOptionsModel)
+    expected_market_data_hash: StrictStr | None = None
 
     def to_domain(self) -> StrategyRangeBatchRequest:
         market, time_range = self.market.to_domain()
@@ -173,6 +172,7 @@ class StrategyRangeBatchRequestModel(BaseModel):
             time_range=time_range,
             variants=tuple(variant.to_domain() for variant in self.variants),
             options=self.options.to_domain(),
+            expected_market_data_hash=self.expected_market_data_hash,
         )
 
 
@@ -217,7 +217,7 @@ class ManagedReplayRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     market: MarketRangeModel
-    strategy: StrategySpecEnvelopeModel
+    strategy: LiveStrategySpecModel
     trade_id: StrictStr
     side: StrictStr
     entry_time_ms: StrictInt
@@ -238,9 +238,29 @@ class ManagedReplayRequestModel(BaseModel):
         )
 
 
+class CanonicalStrategyInstanceModel(BaseModel):
+    """The canonical flat deployable strategy-instance shape Research
+    Service's config layer sends: identity subset + enabled deployment
+    metadata. `enabled`, `ticker`, and `base_timeframe` are accepted and
+    strictly typed but play no role in strategy validation semantics —
+    only `strategy_id`/`raw_spec` reach the canonical strategy
+    validator."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: StrictBool
+    strategy_id: StrictStr
+    ticker: StrictStr
+    base_timeframe: StrictStr
+    raw_spec: dict[str, Any]
+
+    def to_domain(self) -> LiveStrategySpec:
+        return LiveStrategySpec(strategy_id=self.strategy_id, raw_spec=self.raw_spec)
+
+
 class StrategyAuthoringValidationRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    instances: list[dict[str, Any]] = Field(min_length=1)
+    instances: list[CanonicalStrategyInstanceModel] = Field(min_length=1)
 
 
 class ExecutedTradeReceiptModel(BaseModel):

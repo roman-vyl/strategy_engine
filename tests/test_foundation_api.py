@@ -76,10 +76,7 @@ def strategy_payload() -> dict[str, object]:
         },
         "strategy": {
             "strategy_id": "ema_pullback",
-            "strategy_version": "v1",
-            "instance_id": "variant-a",
             "raw_spec": {"strategy": {"id": "ema_pullback"}},
-            "compatibility_profile": "bbb_v1",
         },
         "options": {
             "include_features": True,
@@ -165,7 +162,6 @@ def test_batch_preserves_variant_order_and_error_identity() -> None:
     first = strategy_payload()["strategy"]
     assert isinstance(first, dict)
     second = dict(first)
-    second["instance_id"] = "variant-b"
     payload = {
         "market": {
             "ticker": "ETHUSDT.P",
@@ -184,6 +180,73 @@ def test_batch_preserves_variant_order_and_error_identity() -> None:
         variants = response.json()["variants"]
         assert [item["variant_id"] for item in variants] == ["a", "b"]
         assert all(item["error"]["error"] == "invalid_request" for item in variants)
+
+
+def _valid_ema_pullback_raw_spec() -> dict[str, object]:
+    return {
+        "anchor_stack": {
+            "fast": {"source": "close", "timeframe": "base", "period": 2},
+            "anchor": {"source": "close", "timeframe": "base", "period": 3},
+            "slow": {"source": "close", "timeframe": "base", "period": 5},
+        },
+        "components": {"blockers": []},
+        "setups": [],
+        "contexts": {},
+        "trade_management": {
+            "exit_policy": {
+                "always_on": {"exits": []},
+                "profiles": {
+                    "aligned": {"exits": []},
+                    "countertrend": {"exits": []},
+                    "neutral": {"exits": []},
+                },
+            },
+            "exit_management": {},
+        },
+    }
+
+
+def test_batch_variant_outcome_result_exact_key_set() -> None:
+    # Sequencing artifact for strategy-evaluation-canonical-boundary-v1:
+    # the authoritative reference for a successful range-batch variant's
+    # embedded result shape.
+    payload = {
+        "market": {
+            "ticker": "BTCUSDT.P",
+            "base_timeframe": "5m",
+            "from_ms": 0,
+            "to_ms": 3_600_000,
+        },
+        "variants": [
+            {
+                "variant_id": "a",
+                "strategy": {
+                    "strategy_id": "ema_pullback",
+                    "raw_spec": _valid_ema_pullback_raw_spec(),
+                },
+            }
+        ],
+    }
+    with TestClient(create_app(services=_services_with_fake_market_data())) as client:
+        response = client.post("/v1/strategy-evaluations/range-batch", json=payload)
+    assert response.status_code == 200
+    variants = response.json()["variants"]
+    assert variants[0]["error"] is None
+    assert set(variants[0]["result"]) == {
+        "contract_version",
+        "strategy_id",
+        "config_hash",
+        "market",
+        "features",
+        "contexts",
+        "entries",
+        "potential_entries",
+        "exit_policy",
+        "component_evidence",
+        "validity",
+        "state_artifact",
+        "warnings",
+    }
 
 
 def test_batch_shared_market_acquisition_failure_fails_whole_batch() -> None:

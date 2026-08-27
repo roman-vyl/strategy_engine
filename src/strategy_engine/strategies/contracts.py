@@ -11,31 +11,34 @@ from strategy_engine.domain.values import canonical_json_hash
 
 
 @dataclass(frozen=True, slots=True)
-class StrategySpecEnvelope:
-    strategy_id: str
-    strategy_version: str
-    instance_id: str
-    raw_spec: dict[str, Any]
-    compatibility_profile: str = "bbb_v1"
-
-    @property
-    def config_hash(self) -> str:
-        return canonical_json_hash(
-            {
-                "strategy_id": self.strategy_id,
-                "strategy_version": self.strategy_version,
-                "raw_spec": self.raw_spec,
-                "compatibility_profile": self.compatibility_profile,
-            }
-        )
-
-
-@dataclass(frozen=True, slots=True)
 class LiveStrategySpec:
-    """Runtime-facing strategy input without Research compatibility selectors."""
+    """The one canonical strategy input for every evaluation/validation
+    boundary — live and historical alike. No strategy_version, no
+    caller-supplied instance_id, no compatibility_profile: none of the
+    three carried real calculation semantics (strategy-evaluation-
+    canonical-boundary-v1)."""
 
     strategy_id: str
     raw_spec: dict[str, Any]
+
+
+def strategy_config_hash(strategy: LiveStrategySpec) -> str:
+    """Provenance hash over the canonical strategy input only.
+
+    Deliberately a standalone function, not a `LiveStrategySpec`
+    property: this type is also used by /live-entry and /open-trade,
+    whose own specs forbid exposing config-hash/provenance in their
+    responses. A property would be one habit away from leaking there;
+    a function called explicitly only from validation/range call sites
+    keeps that boundary honest by construction.
+    """
+
+    return canonical_json_hash(
+        {
+            "strategy_id": strategy.strategy_id,
+            "raw_spec": strategy.raw_spec,
+        }
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +51,7 @@ class StrategyOutputOptions:
 
 @dataclass(frozen=True, slots=True)
 class StrategyRangeRequest:
-    strategy: StrategySpecEnvelope
+    strategy: LiveStrategySpec
     market: MarketStream
     time_range: TimeRange
     expected_market_data_hash: str | None = None
@@ -64,8 +67,6 @@ class StrategyRangeRequest:
 @dataclass(frozen=True, slots=True)
 class StrategyRangeResult:
     strategy_id: str
-    strategy_version: str
-    instance_id: str
     config_hash: str
     market: MarketStream
     requested_range: TimeRange
@@ -83,7 +84,7 @@ class StrategyRangeResult:
 @dataclass(frozen=True, slots=True)
 class StrategyBatchVariant:
     variant_id: str
-    strategy: StrategySpecEnvelope
+    strategy: LiveStrategySpec
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,11 +93,16 @@ class StrategyRangeBatchRequest:
     time_range: TimeRange
     variants: tuple[StrategyBatchVariant, ...]
     options: StrategyOutputOptions = field(default_factory=StrategyOutputOptions)
+    # Same fail-closed provenance contract as single-range evaluation
+    # (StrategyRangeRequest.expected_market_data_hash): when set, the shared
+    # L0 market acquisition is verified against it rather than trusted
+    # unconditionally.
+    expected_market_data_hash: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ManagedReplayRequest:
-    strategy: StrategySpecEnvelope
+    strategy: LiveStrategySpec
     market: MarketStream
     time_range: TimeRange
     trade_id: str

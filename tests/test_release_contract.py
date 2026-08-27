@@ -49,7 +49,6 @@ def test_live_openapi_is_clean_and_research_routes_remain_published() -> None:
         "target_bar_open_time_ms",
     }
     assert open_trade_request == live_entry_request | {"executed_trade_receipt"}
-    assert "LiveStrategySpecModel" not in models
     assert "LiveMarketModel" not in models
     assert receipt == {
         "side",

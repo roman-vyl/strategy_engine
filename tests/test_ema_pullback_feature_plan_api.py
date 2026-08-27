@@ -7,12 +7,12 @@ from tests.test_ema_pullback_feature_plan import canonical_spec
 
 
 def envelope() -> dict[str, object]:
+    # Canonical LiveStrategySpecModel -- strategy_id + raw_spec only, no
+    # strategy_version, no caller-supplied instance_id, no
+    # compatibility_profile.
     return {
         "strategy_id": "ema_pullback",
-        "strategy_version": "v1",
-        "instance_id": "fixture",
         "raw_spec": canonical_spec(),
-        "compatibility_profile": "bbb_v1",
     }
 
 

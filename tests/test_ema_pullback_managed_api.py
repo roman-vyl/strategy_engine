@@ -85,8 +85,6 @@ def test_managed_replay_http_contract() -> None:
                 },
                 "strategy": {
                     "strategy_id": "ema_pullback",
-                    "strategy_version": "v1",
-                    "instance_id": "managed-1",
                     "raw_spec": raw_spec(),
                 },
                 "trade_id": "L1",
@@ -104,3 +102,14 @@ def test_managed_replay_http_contract() -> None:
     assert payload["final_state"]["phase"] == "exhaustion"
     assert payload["final_state"]["active_stop_price"] == "101.5"
     assert any(item["event_type"] == "runtime_exit_triggered" for item in payload["events"])
+
+
+def test_managed_replay_request_strategy_field_exact_key_set() -> None:
+    # Sequencing artifact for strategy-evaluation-canonical-boundary-v1:
+    # this is the canonical "strategy" shape Research must now send to
+    # managed-replay -- strategy_id + raw_spec only, no strategy_version,
+    # no instance_id, no compatibility_profile.
+    with TestClient(create_app(services=services())) as client:
+        schema = client.get("/openapi.json").json()
+    strategy_schema = schema["components"]["schemas"]["LiveStrategySpecModel"]
+    assert set(strategy_schema["properties"]) == {"strategy_id", "raw_spec"}

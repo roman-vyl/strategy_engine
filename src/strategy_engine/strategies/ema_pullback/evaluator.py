@@ -5,7 +5,11 @@ from __future__ import annotations
 from strategy_engine.indicators.application.evaluate_range import EvaluateIndicatorRange
 from strategy_engine.indicators.contracts import IndicatorRangeRequest
 from strategy_engine.strategies.application.build_feature_plan import BuildStrategyFeaturePlan
-from strategy_engine.strategies.contracts import StrategyRangeRequest, StrategyRangeResult
+from strategy_engine.strategies.contracts import (
+    StrategyRangeRequest,
+    StrategyRangeResult,
+    strategy_config_hash,
+)
 from strategy_engine.strategies.ema_pullback.evaluation import evaluate_ema_pullback_frame
 from strategy_engine.strategies.ema_pullback.potential_entries import potential_entries_to_wire
 
@@ -53,9 +57,7 @@ class EmaPullbackRangeEvaluator:
             }
         return StrategyRangeResult(
             strategy_id=request.strategy.strategy_id,
-            strategy_version=request.strategy.strategy_version,
-            instance_id=request.strategy.instance_id,
-            config_hash=request.strategy.config_hash,
+            config_hash=strategy_config_hash(request.strategy),
             market=request.market,
             requested_range=request.time_range,
             features=features,

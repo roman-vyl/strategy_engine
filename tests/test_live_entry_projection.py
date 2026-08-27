@@ -30,7 +30,6 @@ from strategy_engine.strategies.contracts import (
     LiveEntryProjectionRequest,
     LiveStrategySpec,
     StrategyRangeRequest,
-    StrategySpecEnvelope,
 )
 from strategy_engine.strategies.ema_pullback.evaluator import EmaPullbackRangeEvaluator
 from strategy_engine.strategies.ema_pullback.live_calculation_requirements import (
@@ -111,7 +110,7 @@ def spec() -> dict[str, object]:
     }
 
 
-def services() -> tuple[EvaluateLiveEntryProjection, EvaluateStrategyRange, StrategySpecEnvelope]:
+def services() -> tuple[EvaluateLiveEntryProjection, EvaluateStrategyRange, LiveStrategySpec]:
     market_data = FakeMarketData()
     indicators = IndicatorRegistry()
     validate_plan = ValidateIndicatorPlan(indicators)
@@ -128,7 +127,7 @@ def services() -> tuple[EvaluateLiveEntryProjection, EvaluateStrategyRange, Stra
     loader = LoadLiveFeatureFrame(
         market_data, live_planner, indicator_eval, live_validator, window_planner
     )
-    strategy = StrategySpecEnvelope("ema_pullback", "v1", "live-1", spec())
+    strategy = LiveStrategySpec("ema_pullback", spec())
     return (
         EvaluateLiveEntryProjection(loader),
         EvaluateStrategyRange(registry, validator),

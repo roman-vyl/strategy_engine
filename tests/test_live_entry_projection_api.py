@@ -360,7 +360,6 @@ def test_live_entry_openapi_publishes_request_and_response_contracts() -> None:
         "base_timeframe",
         "target_bar_open_time_ms",
     }
-    assert "LiveStrategySpecModel" not in schema["components"]["schemas"]
     assert "LiveMarketModel" not in schema["components"]["schemas"]
     response_schema = schema["components"]["schemas"]["LiveEntryProjectionResponseModel"]
     assert set(response_schema["properties"]) == {"desired_entry"}
