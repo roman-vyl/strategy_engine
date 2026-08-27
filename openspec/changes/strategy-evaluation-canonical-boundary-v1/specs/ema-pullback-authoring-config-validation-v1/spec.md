@@ -57,6 +57,39 @@ boundary check. No instance SHALL be required to carry `instance_id`,
 - **THEN** strict HTTP validation SHALL reject the request before any
   instance is processed.
 
+### Requirement: Path/body strategy_id invariant
+
+Every instance's `strategy_id` SHALL equal the path `strategy_id`. This
+is a boundary invariant enforced by the authoring-validation endpoint
+itself, before any instance reaches semantic (`raw_spec`) validation —
+it SHALL NOT be discovered indirectly through a downstream unknown-
+strategy error, and it SHALL NOT depend on the strategy registry
+currently containing only one strategy.
+
+#### Scenario: All instances match the path strategy_id
+
+- **WHEN** every instance's `strategy_id` equals the path `strategy_id`
+- **THEN** the endpoint SHALL proceed to semantic validation for each
+  instance.
+
+#### Scenario: An instance's strategy_id does not match the path
+
+- **WHEN** any instance's `strategy_id` differs from the path
+  `strategy_id`
+- **THEN** the endpoint SHALL reject the whole request before semantic
+  validation of any instance
+- **AND** the rejection SHALL identify the offending instance by
+  `instances[N].strategy_id`.
+
+#### Scenario: Mismatch among multiple instances
+
+- **WHEN** a batch of instances contains a mismatch at index `N`, with
+  matching instances at other indices
+- **THEN** the endpoint SHALL reject the whole request, identifying
+  index `N`
+- **AND** SHALL NOT return a partially successful result mixing
+  strategy types within one path-scoped authoring-validation call.
+
 ## MODIFIED Requirements
 
 ### Requirement: Canonical semantic validation

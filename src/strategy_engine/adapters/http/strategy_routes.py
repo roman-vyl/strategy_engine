@@ -82,6 +82,16 @@ def validate_authoring_config(
         from strategy_engine.domain.errors import UnknownResourceError
 
         raise UnknownResourceError("unknown strategy", strategy_id=strategy_id)
+    for index, instance in enumerate(request.instances):
+        if instance.strategy_id != strategy_id:
+            from strategy_engine.domain.errors import InvalidRequestError
+
+            raise InvalidRequestError(
+                "path strategy_id does not match instance strategy_id",
+                path=f"instances[{index}].strategy_id",
+                path_strategy_id=strategy_id,
+                instance_strategy_id=instance.strategy_id,
+            )
     validated = []
     for index, instance in enumerate(request.instances):
         try:

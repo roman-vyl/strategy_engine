@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 
 from strategy_engine.adapters.http.app import create_app
+from strategy_engine.service.settings import Settings
+from strategy_engine.service.wiring import build_services
 
 
 def raw_spec() -> dict[str, object]:
@@ -111,3 +113,72 @@ def test_legacy_nested_strategy_field_is_rejected() -> None:
             "/v1/strategies/ema_pullback/authoring-config/validate", json={"instances": [item]}
         )
     assert response.status_code == 422
+
+
+def test_instance_strategy_id_matching_path_is_accepted() -> None:
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/v1/strategies/ema_pullback/authoring-config/validate",
+            json={"instances": [canonical_instance()]},
+        )
+    assert response.status_code == 200
+    assert response.json()["valid"] is True
+
+
+def test_instance_strategy_id_not_matching_path_is_rejected() -> None:
+    item = canonical_instance()
+    item["strategy_id"] = "some_other_strategy"
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/v1/strategies/ema_pullback/authoring-config/validate", json={"instances": [item]}
+        )
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"] == "invalid_request"
+    assert body["details"]["path"] == "instances[0].strategy_id"
+    assert body["details"]["path_strategy_id"] == "ema_pullback"
+    assert body["details"]["instance_strategy_id"] == "some_other_strategy"
+
+
+def test_mismatch_among_multiple_instances_identifies_offending_index() -> None:
+    matching_a = canonical_instance()
+    mismatched = canonical_instance()
+    mismatched["strategy_id"] = "some_other_strategy"
+    matching_b = canonical_instance()
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/v1/strategies/ema_pullback/authoring-config/validate",
+            json={"instances": [matching_a, mismatched, matching_b]},
+        )
+    assert response.status_code == 422
+    body = response.json()
+    assert body["details"]["path"] == "instances[1].strategy_id"
+    assert body["details"]["instance_strategy_id"] == "some_other_strategy"
+
+
+def test_mismatch_is_caught_before_any_semantic_validation_call() -> None:
+    # Boundary invariant: the path/body strategy_id check must reject the
+    # whole request before ValidateStrategySpec.execute is ever invoked --
+    # not be discovered indirectly via a downstream unknown-strategy error
+    # from semantic validation.
+    app_services = build_services(Settings())
+    real_validate = app_services.validate_strategy_spec
+    calls: list[object] = []
+
+    class SpyValidateStrategySpec:
+        def execute(self, strategy: object) -> str:
+            calls.append(strategy)
+            return real_validate.execute(strategy)  # type: ignore[arg-type]
+
+    app_services.validate_strategy_spec = SpyValidateStrategySpec()  # type: ignore[assignment]
+
+    matching_a = canonical_instance()
+    mismatched = canonical_instance()
+    mismatched["strategy_id"] = "some_other_strategy"
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post(
+            "/v1/strategies/ema_pullback/authoring-config/validate",
+            json={"instances": [matching_a, mismatched]},
+        )
+    assert response.status_code == 422
+    assert calls == []

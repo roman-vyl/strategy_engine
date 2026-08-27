@@ -199,3 +199,21 @@ file to keep in sync.
       `index`-only correlation.
 - [ ] Not this change's responsibility, tracked only: none of the above are
       implemented in `strategy_engine`.
+
+## Slice 9 — Corrective: authoring path/body strategy_id invariant
+
+Post-implementation audit finding: `/authoring-config/validate` checked
+only `path strategy_id == "ema_pullback"`, not
+`instances[i].strategy_id == path strategy_id` — unlike the sibling
+`/validate` and `/feature-plan` routes, which already enforce that
+equality. Closed per `ema-pullback-authoring-config-validation-v1`'s new
+"Path/body strategy_id invariant" requirement.
+
+- [x] `strategy_routes.py`: reject the whole authoring-validation request
+      (422 `InvalidRequestError`, `instances[N].strategy_id`) before any
+      instance reaches semantic validation, when any instance's
+      `strategy_id` differs from the path `strategy_id`.
+- [x] Regression tests: single mismatch rejected; mismatch among multiple
+      instances identifies the offending index; mismatch is caught before
+      semantic validation of the offending instance (not surfaced via
+      `ValidateStrategySpec`'s unknown-strategy path).
