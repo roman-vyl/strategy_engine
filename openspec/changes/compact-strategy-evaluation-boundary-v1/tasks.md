@@ -1,23 +1,32 @@
 ## 1. Sparse decision-event contract
 
-- [ ] 1.1 Define `StrategyDecisionEvent` and `StrategyEvaluationExecution`
-      types (`strategies/contracts.py`), replacing the execution-facing
-      fields of `StrategyRangeResult` (`entries`, `exit_policy`) — leave
-      `StrategyRangeResult` itself as the internal-only shape that still
-      carries diagnostics for now (split fully in task 3).
-- [ ] 1.2 Implement sparse event emission in
-      `EmaPullbackRangeEvaluator.evaluate`: walk the currently-dense
-      `entries`/`exit_policy` computation internally (native/dense is
-      fine *inside* the evaluator — the wire boundary is what changes),
-      emit one `StrategyDecisionEvent` per bar carrying at least one of
-      entry/signal_exit/stop_ready.
-- [ ] 1.3 Add the mutual-exclusivity assertion at the point where a
-      per-bar entry decision is finalized into an event — fail loudly on
-      violation, do not silently pick a side.
-- [ ] 1.4 Drop `time_ms` from the wire response entirely.
-- [ ] 1.5 Enforce the `bar_index` invariant (design.md) — every emitted
-      `bar_index` is within `[0, bar_count)` for the range the response's
-      own `market_data_hash`/`bar_count` describe.
+- [x] 1.1 Define `StrategyDecisionEvent`/`StrategyEvaluationExecution`
+      (plus `DecisionEntry`/`DecisionSignalExit`/`DecisionStopReady` and
+      `StrategyDiagnosticEvaluation`) in `strategies/contracts.py`.
+      `StrategyRangeResult` left as-is (internal, still used by the
+      legacy `evaluate()` method) — the new types are additive, not a
+      replacement of its fields yet; actual route cutover is separate
+      remaining work (see status note below task 3.3).
+- [x] 1.2 Implemented as `build_decision_events`
+      (`strategies/decision_events.py`, pure function, unit-tested) and
+      `EmaPullbackRangeEvaluator.evaluate_execution` (new method,
+      `strategies/ema_pullback/evaluator.py`), which builds it from the
+      already-native `entries`/`exit_policy` tuples
+      (`EmaPullbackEvaluation`) — no string-boxing was ever involved in
+      these specific fields.
+- [x] 1.3 `build_decision_events` raises `EvaluationInvariantError` (500,
+      fail loudly) if `entries_long[i]` and `entries_short[i]` are both
+      true — unit-tested (`test_simultaneous_long_and_short_entry_fails_loudly`).
+- [ ] 1.4 NOT done — the legacy `evaluate()`/`StrategyRangeResult` HTTP
+      route (`/range`, `/range-batch`) still serves `time_ms` today. The
+      new `StrategyEvaluationExecution`/`evaluate_execution()` has no
+      `time_ms` field at all (verified by
+      `test_execution_contract_has_no_time_ms_or_diagnostic_fields`), but
+      nothing serves it over HTTP yet — route cutover is remaining work.
+- [x] 1.5 Structurally guaranteed by construction: `build_decision_events`
+      only ever emits `bar_index` values from `range(bar_count)` — there
+      is no code path that could emit one outside `[0, bar_count)`.
+      Verified by `test_execution_contract_decision_events_bar_index_within_bar_count`.
 
 ## 2. Single-instance parity proof (must complete before task 4)
 
@@ -36,20 +45,52 @@
 
 ## 3. Split diagnostics out of the mandatory path
 
-- [ ] 3.1 Move `features`, `contexts`, `component_evidence`,
-      `potential_entries` off the mandatory range-evaluation response
-      type entirely.
-- [ ] 3.2 Add the diagnostic-evaluation entrypoint (application service +
-      route) per the ownership/provenance contract fixed in design.md:
-      Engine computes, request identifies strategy+market+expected hash
-      the same way an execution-evaluation request does, response
-      provenance (`config_hash`/`market_data_hash`/`bar_count`) matches
-      what the corresponding execution evaluation would produce. This is
-      the only place dense per-bar diagnostic data is computed/returned.
-- [ ] 3.3 Confirm `RangeIndicatorEvaluator.evaluate`'s unconditional
-      string-boxing of `FeatureFrame.series` no longer executes on the
-      mandatory execution path — only reachable via the diagnostic
-      entrypoint from 3.2.
+- [ ] 3.1 PARTIAL — `StrategyEvaluationExecution` (mandatory contract
+      type) never has `features`/`contexts`/`component_evidence`/
+      `potential_entries` fields at all (they don't exist on that
+      dataclass); `StrategyDiagnosticEvaluation` (new, separate type)
+      carries them, built by the new `evaluate_diagnostics()` method.
+      NOT done: no HTTP route serves `evaluate_execution()`/
+      `evaluate_diagnostics()` yet — `/range`/`/range-batch` still call
+      the legacy `evaluate()`, which still returns everything combined.
+      Route cutover is remaining work, coordinated with the
+      `research_service` companion change being ready to consume it.
+- [ ] 3.2 PARTIAL — `evaluate_diagnostics()` exists as an application-
+      layer method with the right provenance shape (its
+      `config_hash`/`market_data_hash`/`bar_count` are proven equal to
+      `evaluate_execution()`'s for the same request —
+      `test_execution_and_diagnostic_provenance_agree_for_the_same_request`).
+      NOT done: no HTTP route exposes it yet.
+- [ ] 3.3 **BLOCKED — genuine scope conflict found during implementation,
+      not resolved, needs a coordinator decision.** Attempted to change
+      `FeatureFrame.series` from `dict[str, tuple[str|None,...]]` to
+      native `float|None` (eliminating `RangeIndicatorEvaluator`'s
+      `serialize_value` call on the always-executed path). This broke 4
+      tests asserting `FeatureFrame.series` values as normalized decimal
+      strings, tracing back to `openspec/specs/ema-indicator-vertical-
+      slice-v1/spec.md`'s own requirement: "SHALL serialize values as
+      normalized decimal text or `null`." `EmaIndicatorEvaluator` (the
+      type that spec governs) is a thin wrapper directly around the same
+      `RangeIndicatorEvaluator` strategy evaluation uses — they are not
+      separate implementations. So `RangeIndicatorEvaluator`/
+      `FeatureFrame` is shared, already-spec-governed infrastructure this
+      proposal did not declare as an affected capability, and the
+      original `4.1`-style claim ("no compatibility shim, get the clean
+      target architecture") cannot be honored here without also amending
+      `ema-indicator-vertical-slice-v1` (and likely its ATR/RSI/ADX-DMI/
+      ATR-distance siblings, which share the same evaluator) — out of
+      scope for this proposal as written. Reverted the attempt; all 372
+      pre-existing tests pass again. Options for the coordinator: (a)
+      accept partial 3.3 — the *mandatory wire response* no longer
+      carries dense diagnostics (real, already achieved via 3.1/3.2's
+      type split) but `RangeIndicatorEvaluator`'s internal string-boxing
+      cost remains paid on every evaluation regardless of path; (b)
+      author a companion OpenSpec change against the indicator-vertical-
+      slice specs to relax/relocate their string-serialization
+      requirement, expanding this migration's scope; (c) a strategy-
+      internal-only fast path that duplicates range evaluation without
+      going through the shared, spec-governed evaluator (more code, but
+      leaves the public indicator contract untouched).
 
 ## 4. Batch adoption (only after task 2 passes)
 

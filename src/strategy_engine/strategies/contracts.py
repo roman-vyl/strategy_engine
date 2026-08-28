@@ -65,6 +65,84 @@ class StrategyRangeRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class DecisionEntry:
+    """One side's entry condition firing at a bar, with the SL/TP ratio
+    values relevant to that entry only -- Research reads these exactly
+    once, at the entry bar, per `compact-strategy-evaluation-boundary-v1`
+    (proven from `protection.py::resolve_initial_protection`: the ratio
+    series is never re-read after entry)."""
+
+    side: Literal["long", "short"]
+    stop_loss_ratio: float | None
+    take_profit_ratio: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionSignalExit:
+    long: bool
+    short: bool
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionStopReady:
+    long: bool
+    short: bool
+
+
+@dataclass(frozen=True, slots=True)
+class StrategyDecisionEvent:
+    """One bar carrying at least one of entry/signal_exit/stop_ready.
+    Bars with none of these are not represented at all -- the sparse
+    contract is O(events), not O(bar_count)
+    (`strategy-research-execution-contract-v1`)."""
+
+    bar_index: int
+    entry: DecisionEntry | None = None
+    signal_exit: DecisionSignalExit | None = None
+    stop_ready: DecisionStopReady | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StrategyEvaluationExecution:
+    """The mandatory execution contract: identity, provenance, and sparse
+    decision events only. No `time_ms` (bar_index + market_data_hash +
+    bar_count is the join key back to Research's own MarketFrame -- proven
+    redundant, `compact-strategy-evaluation-boundary-v1`). No diagnostic
+    data (`features`/`contexts`/`component_evidence`/`potential_entries`)
+    -- those live only on `StrategyDiagnosticEvaluation`, produced by a
+    separate, explicitly-requested entrypoint."""
+
+    strategy_id: str
+    config_hash: str
+    market: MarketStream
+    requested_range: TimeRange
+    market_data_hash: str
+    bar_count: int
+    decision_events: tuple[StrategyDecisionEvent, ...]
+    warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class StrategyDiagnosticEvaluation:
+    """Dense per-bar diagnostic trace -- produced only by the diagnostic-
+    evaluation entrypoint, never as a side effect of an execution-contract
+    request. Provenance fields let Research fail closed if this doesn't
+    match the run it's meant to explain."""
+
+    strategy_id: str
+    config_hash: str
+    market: MarketStream
+    requested_range: TimeRange
+    market_data_hash: str
+    bar_count: int
+    features: dict[str, Any]
+    contexts: dict[str, Any]
+    potential_entries: dict[str, Any]
+    component_evidence: dict[str, Any]
+    warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class StrategyRangeResult:
     strategy_id: str
     config_hash: str
