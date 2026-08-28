@@ -213,7 +213,7 @@ do not start I1 work as a consequence of merely reading this list.
       locked-profile-at-entry-opportunity capture, per-profile
       signal-exit candidate correctness, attribution field population,
       deterministic multi-rule tie-back — all green.
-- [ ] **I2 — Engine: Historical Semantics Proof.** Prove the I1 builder
+- [x] **I2 — Engine: Historical Semantics Proof.** Prove the I1 builder
       against old BBB on a profile-sensitive adversarial spec (three
       profiles, distinct signal-exit + SL/TP each, plus a profile-drift-
       while-open scenario) — not the always-on spec section 2 above
