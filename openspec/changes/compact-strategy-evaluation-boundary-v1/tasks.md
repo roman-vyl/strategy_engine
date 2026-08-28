@@ -1,4 +1,22 @@
-## 1. Sparse decision-event contract
+## Status: sections 1-5 below describe the FIRST SHIPPED DRAFT (superseded)
+
+Sections 1-3 were implemented, tested, and route-cut-over on this
+branch — that work happened and is historically accurate as recorded.
+A second audit (old BBB execution core vs current Research consumer map
+vs the live `strategy_engine ↔ strategy_runtime` boundary) found this
+draft reintroduces a real trading-semantics defect (no `locked_exit_
+profile`, no per-profile signal-exit indexing, no exit attribution —
+see `proposal.md`/`design.md`, revised). Section 4 (batch adoption) was
+never started and is now superseded by the Master Plan's I8. Section 5
+(archive) now gates on the full I0-I8 Master Plan, not just this
+section's own tasks.
+
+**Do not resume section 4 as written.** New tasks for the corrected
+model are in the "Master Plan checkpoints" section below, added by this
+revision (I0). I1 reworks sections 1-3's shipped code to match the
+corrected `HistoricalExecutionProjection` model in `design.md`.
+
+## 1. Sparse decision-event contract (first draft, superseded — see above)
 
 - [x] 1.1 Define `StrategyDecisionEvent`/`StrategyEvaluationExecution`
       (plus `DecisionEntry`/`DecisionSignalExit`/`DecisionStopReady` and
@@ -28,7 +46,7 @@
       is no code path that could emit one outside `[0, bar_count)`.
       Verified by `test_execution_contract_decision_events_bar_index_within_bar_count`.
 
-## 2. Single-instance parity proof (must complete before task 4)
+## 2. Single-instance parity proof (first draft, superseded — always-on spec only, cannot exercise the profile defect)
 
 - [x] 2.1 **Engine-side decision parity, done.** `TradeRecord`/accounting-
       level parity is a `research_service`-side deliverable (work
@@ -79,7 +97,7 @@ reduction and 54% RSS reduction are real and measured; "O(events), not
 O(bars)" was accurate for a hypothetical low-frequency strategy, not
 proven (and now disproven) as a universal property of every spec.
 
-## 3. Split diagnostics out of the mandatory path
+## 3. Split diagnostics out of the mandatory path (still valid — diagnostics split and native fast path are unaffected by the semantic correction)
 
 - [x] 3.1 Done. `/v1/strategy-evaluations/range` and `/range-batch` now
       return only `StrategyEvaluationExecution` (no `features`/
@@ -146,26 +164,90 @@ proven (and now disproven) as a universal property of every spec.
       - Full suite: 389 passed (372 baseline + 17 new across this and
         prior sub-tasks), ruff clean, mypy clean (89 files).
 
-## 4. Batch adoption (only after task 2 passes)
+## 4. Batch adoption (SUPERSEDED — never started, replaced by Master Plan I8)
 
-- [ ] 4.1 `EvaluateStrategyRangeBatch`/`evaluate_strategy_range_batch`
-      route adopt the same compact per-variant
-      `StrategyEvaluationExecution` result — no separate batch-only
-      strategy semantics. **This alone does not bound batch memory in
-      N** — `outcomes`/`{"variants":[...]}"` still accumulate all N
-      results before responding, just each is now small.
-- [ ] 4.2 Separate, binding: change the aggregation pattern so N
-      candidates are evaluated, delivered, and released one at a time —
-      never all N held resident simultaneously — while retaining
-      shared-L0 acquisition. Coordinate the exact mechanism with the
-      companion `research_service` change (transport/call-pattern is an
-      implementation decision, not fixed by this proposal).
-- [ ] 4.3 Only after 4.2: re-run the N=1/2/4/11 memory/CPU harness from
-      the earlier diagnostic pass this session; confirm approximately
-      constant memory in N.
+- [ ] ~~4.1-4.3~~ superseded. Batch is now explicitly gated behind I7
+      (single-instance cutover proven in production) per the Master
+      Plan, and I8 re-litigates whether `/range-batch`'s one-big-
+      response shape is even the right transport, not just its
+      aggregation pattern. Do not resume this section as written.
 
-## 5. Spec
+## 5. Spec (archive gate revised)
 
 - [ ] 5.1 `openspec archive compact-strategy-evaluation-boundary-v1`
-      after implementation lands, parity is proven, and the acceptance
-      criteria in `design.md` are met.
+      only after the full Master Plan (I0-I8, see below) is complete —
+      not just this file's now-superseded sections 1-4.
+
+## Master Plan checkpoints (I0-I8, this revision)
+
+Cross-repo master plan, 9 gated checkpoints. Only **I0 (this task list
+revision itself)** is authorized right now. Every checkpoint below
+requires explicit go-ahead after its predecessor's gate is confirmed —
+do not start I1 work as a consequence of merely reading this list.
+
+- [x] **I0 — Spec Freeze.** This revision: `proposal.md`/`design.md`/
+      this file corrected to the `HistoricalExecutionProjection` model
+      (executable entry opportunity replacing `entries`+`stop_ready`,
+      `locked_exit_profile` per opportunity, per-profile-indexed
+      signal-exit events with attribution, deterministic multi-rule
+      tie-break, protected-boundary invariants for `strategy_runtime`
+      live contracts and the public indicator API, revised "Parity
+      means"). Companion `research_service` change gets the matching
+      revision. No application code in either repo. Gate: `openspec
+      validate --strict` green in both repos; spec deltas alone (no
+      re-reading the audit report) are enough to derive I1's builder
+      shape and I2/I5's parity test list.
+- [ ] **I1 — Engine: Projection Model + Pure Builder.** New domain types
+      (`HistoricalExecutionProjection`, `ExecutableEntryOpportunity`,
+      `SignalExitProjection`, `SignalExitEvent`, or whatever names this
+      task finalizes) plus a pure builder
+      `EmaPullbackEvaluation → HistoricalExecutionProjection`, from
+      already-computed native outputs (`evaluation.entries`,
+      `evaluation.exit_policy`'s existing `profile_long/short`,
+      `by_profile.*`, `rule_evidence`) — not from anything serialized.
+      No route change — `evaluate_execution()`/routes stay on the
+      currently-shipped (superseded) contract. Reworks
+      `strategies/decision_events.py`/`strategies/contracts.py`'s
+      shipped `StrategyDecisionEvent` shape. Gate: unit tests over the
+      pure builder — executable-entry selection correctness,
+      locked-profile-at-entry-opportunity capture, per-profile
+      signal-exit candidate correctness, attribution field population,
+      deterministic multi-rule tie-back — all green.
+- [ ] **I2 — Engine: Historical Semantics Proof.** Prove the I1 builder
+      against old BBB on a profile-sensitive adversarial spec (three
+      profiles, distinct signal-exit + SL/TP each, plus a profile-drift-
+      while-open scenario) — not the always-on spec section 2 above
+      used. Scope: per-opportunity/per-profile correctness only
+      (`locked_exit_profile` value per opportunity, per-profile
+      signal-exit stream correctness, attribution including the
+      deterministic tie-break) — trade-lifecycle "held fixed across a
+      real trade" is explicitly NOT provable by Engine alone (no trade
+      state) and is deferred to `research_service`'s I4/I5. Gate: zero
+      semantic diffs vs old BBB on the adversarial spec, at Engine level.
+- [ ] **I7 (Engine's share) — Coordinated Cutover, single-instance
+      only.** Switch `/range` (not `/range-batch`) to the I1/I2 model,
+      coordinated with `research_service`'s same-checkpoint work (old
+      Research cannot parse the new contract, must land together).
+      `/range-batch` may gain schema compatibility if technically
+      necessary but is NOT thereby production-approved — that's I8.
+      Mandatory regression fence: `strategy_runtime` live-entry/
+      open-trade behavioral tests green, unchanged; public indicator API
+      tests green, unchanged. Gate: N=1 production path green end to
+      end against the live stack; Runtime live regression suite green.
+- [ ] **I8 (Engine's share) — Batch Lifetime Redesign.** Only after I7.
+      Re-litigate `/range-batch`'s one-big-response shape — the only
+      required property is shared market-frame acquisition, not
+      necessarily one HTTP response for N evaluations. Gate: N=1/2/4/11
+      benchmark, peak RSS approximately constant in N.
+
+I3/I4/I5/I6 are primarily `research_service`-owned (see that repo's
+tasks.md) — I5's end-to-end proof and I7's cutover are joint gates
+tracked in both repos' task lists.
+
+## Deferred, separate track: Engine internals vectorization
+
+Not part of I0-I8. Real cost is indicator computation (~76% of wall
+time) dropping out of numpy/pandas into Python-tuple `zip()` loops
+immediately — not `build_decision_events`'s per-bar loop (~4%), which
+was the original (incorrect) assumption. Starts only after I7, using the
+I5 parity harness as a regression net for aggressive internal rewrites.
