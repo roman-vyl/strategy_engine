@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from strategy_engine.domain.market import MarketStream
 from strategy_engine.domain.ranges import TimeRange
 from strategy_engine.strategies.ema_pullback.exits import ExitPolicyEvaluation, ExitRuleEvidence
@@ -328,3 +330,113 @@ def test_bar_with_no_opportunity_and_no_signal_carries_no_data() -> None:
     assert projection.entry_opportunities == ()
     assert all(events == () for events in projection.signal_exit_events.long.values())
     assert all(events == () for events in projection.signal_exit_events.short.values())
+
+
+# --- corrective pass: fail-loud invariants + exact epsilon ------------------
+
+
+def test_simultaneous_long_and_short_opportunity_fails_loud() -> None:
+    exit_policy = _exit_policy(
+        bar_count=1,
+        stop_ready_long=(True,),
+        stop_ready_short=(True,),
+    )
+    evaluation = _evaluation(
+        entries=(
+            _entries("long", (True,)),
+            _entries("short", (True,)),
+        ),
+        exit_policy=exit_policy,
+    )
+    with pytest.raises(AssertionError, match="simultaneous executable long and short"):
+        _build(evaluation, bar_count=1)
+
+
+def test_non_simultaneous_long_and_short_does_not_fail() -> None:
+    evaluation = _evaluation(
+        entries=(
+            _entries("long", (True, False)),
+            _entries("short", (False, True)),
+        ),
+        exit_policy=_exit_policy(
+            bar_count=2,
+            stop_ready_long=(True, False),
+            stop_ready_short=(False, True),
+        ),
+    )
+    projection = _build(evaluation, bar_count=2)
+    assert [(o.bar_index, o.side) for o in projection.entry_opportunities] == [
+        (0, "long"),
+        (1, "short"),
+    ]
+
+
+def test_signal_fired_with_no_matching_rule_candidate_fails_loud() -> None:
+    # signal_by_profile says a signal fired for "aligned", but rule_evidence
+    # has no signal rule scoped to that group -- internal inconsistency.
+    evaluation = _evaluation(
+        entries=(_entries("long", (False,)),),
+        exit_policy=_exit_policy(
+            bar_count=1,
+            signal_long={"aligned": (True,), "countertrend": (False,), "neutral": (False,)},
+            rule_evidence=(),
+        ),
+    )
+    with pytest.raises(AssertionError, match="no matching rule_evidence candidate"):
+        _build(evaluation, bar_count=1)
+
+
+def test_epsilon_matches_old_bbb_formula_exactly() -> None:
+    # eps = 1e-9 * max(1.0, abs(aggregate_ratio)); a candidate just inside
+    # tolerance (relative to the AGGREGATE value, not the candidate) must
+    # match, and just outside must not.
+    aggregate = 100.0
+    eps = 1e-9 * max(1.0, abs(aggregate))
+    just_inside = aggregate + eps * 0.5
+    just_outside = aggregate + eps * 2.0
+
+    evidence_inside = (
+        ExitRuleEvidence(
+            "sl_inside",
+            "atr_stop_loss",
+            "stop_loss",
+            "always_on",
+            None,
+            distance_ratio=(just_inside,),
+        ),
+    )
+    evaluation_inside = _evaluation(
+        entries=(_entries("long", (True,)),),
+        exit_policy=_exit_policy(
+            bar_count=1,
+            stop_ready_long=(True,),
+            sl_long=(aggregate,),
+            rule_evidence=evidence_inside,
+        ),
+    )
+    projection = _build(evaluation_inside, bar_count=1)
+    (opportunity,) = projection.entry_opportunities
+    assert opportunity.initial_stop is not None
+    assert opportunity.initial_stop.attribution.rule_id == "sl_inside"
+
+    evidence_outside = (
+        ExitRuleEvidence(
+            "sl_outside",
+            "atr_stop_loss",
+            "stop_loss",
+            "always_on",
+            None,
+            distance_ratio=(just_outside,),
+        ),
+    )
+    evaluation_outside = _evaluation(
+        entries=(_entries("long", (True,)),),
+        exit_policy=_exit_policy(
+            bar_count=1,
+            stop_ready_long=(True,),
+            sl_long=(aggregate,),
+            rule_evidence=evidence_outside,
+        ),
+    )
+    with pytest.raises(AssertionError, match="no matching rule_evidence entry"):
+        _build(evaluation_outside, bar_count=1)

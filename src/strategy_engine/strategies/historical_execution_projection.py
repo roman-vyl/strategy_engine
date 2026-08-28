@@ -49,8 +49,9 @@ from strategy_engine.strategies.ema_pullback.exits import ExitRuleEvidence
 _EPS_REL = 1e-9
 
 
-def _close_enough(a: float, b: float) -> bool:
-    return abs(a - b) <= _EPS_REL * max(1.0, abs(a), abs(b))
+def _close_enough(candidate: float, aggregate_ratio: float) -> bool:
+    eps = _EPS_REL * max(1.0, abs(aggregate_ratio))
+    return abs(candidate - aggregate_ratio) <= eps
 
 
 def _pick_leg_attribution(
@@ -134,6 +135,24 @@ def _entry_opportunities(
         ),
     )
 
+    _, long_opportunity, long_protection_ready, *_ = per_side[0]
+    _, short_opportunity, short_protection_ready, *_ = per_side[1]
+    for i in range(bar_count):
+        if (
+            long_opportunity[i]
+            and long_protection_ready[i]
+            and short_opportunity[i]
+            and short_protection_ready[i]
+        ):
+            # Old BBB proves long/short entries are mutually exclusive per
+            # bar -- a strategy producing both simultaneously is an internal
+            # inconsistency in the caller's config/indicator logic, not a
+            # valid dual-opportunity bar. Fail loudly rather than silently
+            # emit both.
+            raise AssertionError(
+                f"simultaneous executable long and short entry opportunity at bar_index={i}",
+            )
+
     opportunities: list[ExecutableEntryOpportunity] = []
     for side, entries, protection_ready, profile_series, sl_ratio, tp_ratio in per_side:
         for i in range(bar_count):
@@ -198,8 +217,17 @@ def _signal_exit_projection(evaluation: EmaPullbackEvaluation) -> SignalExitProj
                     for rule in profile_rules
                     if rule.signal is not None and rule.signal[i]
                 )
-                if candidates:
-                    events.append(SignalExitEvent(bar_index=i, candidates=candidates))
+                if not candidates:
+                    # A fired profile-level signal with no matching rule
+                    # candidate would be an internal inconsistency between
+                    # signal_by_profile and rule_evidence, not a valid
+                    # "no signal" case (that's fired is False, handled
+                    # above) -- fail loudly rather than silently drop it.
+                    raise AssertionError(
+                        f"signal fired for profile={profile!r} side={side!r} "
+                        f"bar_index={i} with no matching rule_evidence candidate",
+                    )
+                events.append(SignalExitEvent(bar_index=i, candidates=candidates))
             result[profile] = tuple(events)
         return result
 
