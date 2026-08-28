@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 from strategy_engine.domain.market import MarketBar, MarketFrame, MarketStream
 from strategy_engine.domain.ranges import TimeRange
@@ -62,10 +63,74 @@ class IndicatorRangeRequest:
 
 @dataclass(frozen=True, slots=True)
 class FeatureFrame:
+    """The public indicator-evaluation contract. `series` values are
+    normalized-decimal-text strings (`ema-indicator-vertical-slice-v1`
+    and sibling vertical-slice specs) -- this shape and its serialization
+    semantics are unchanged by `compact-strategy-evaluation-boundary-v1`.
+    Internal strategy evaluation uses `NativeFeatureFrame` instead and
+    never constructs this type."""
+
     market: MarketStream
     requested_range: TimeRange
     time_ms: tuple[int, ...]
     series: dict[str, tuple[str | None, ...]]
+    validity: dict[str, Validity]
+    plan_hash: str
+    market_data_hash: str
+    market_bars: tuple[MarketBar, ...] = ()
+
+
+class FeatureFrameLike(Protocol):
+    """Structural contract shared by `FeatureFrame` and
+    `NativeFeatureFrame` -- lets strategy-computation functions
+    (`ema_pullback/{contexts,direction_blockers,setups,triggers,exits,
+    potential_entries}.py`) accept either without duplicating their
+    logic per frame type. `series` is typed loosely (`Mapping[str,
+    tuple[Any, ...]]`) deliberately: it's the one field whose element
+    type legitimately differs (`str | None` on the wire type, `float |
+    None` natively) between the two concrete frames this Protocol
+    covers -- every consumer already tolerates both via `float(value)`
+    (a no-op on an already-native value)."""
+
+    @property
+    def market(self) -> MarketStream: ...
+
+    @property
+    def requested_range(self) -> TimeRange: ...
+
+    @property
+    def time_ms(self) -> tuple[int, ...]: ...
+
+    @property
+    def series(self) -> Mapping[str, tuple[Any, ...]]: ...
+
+    @property
+    def validity(self) -> dict[str, Validity]: ...
+
+    @property
+    def plan_hash(self) -> str: ...
+
+    @property
+    def market_data_hash(self) -> str: ...
+
+    @property
+    def market_bars(self) -> tuple[MarketBar, ...]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NativeFeatureFrame:
+    """Internal-only computation result: `series` values are native
+    `float | None`, never string-boxed. `RangeIndicatorEvaluator
+    .evaluate_native` is the single source of indicator math; the public
+    `FeatureFrame`/`evaluate` boxes this same computation at the wire
+    boundary rather than duplicating the formulas
+    (`compact-strategy-evaluation-boundary-v1`). Not exposed on any HTTP
+    contract."""
+
+    market: MarketStream
+    requested_range: TimeRange
+    time_ms: tuple[int, ...]
+    series: dict[str, tuple[float | None, ...]]
     validity: dict[str, Validity]
     plan_hash: str
     market_data_hash: str

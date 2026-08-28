@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from strategy_engine.domain.errors import InvalidRequestError
-from strategy_engine.indicators.contracts import FeatureFrame
+from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
 )
@@ -77,7 +77,7 @@ def _sequence(value: object, path: str) -> tuple[object, ...]:
     return tuple(value)
 
 
-def _float_series(frame: FeatureFrame, output_id: str) -> tuple[float, ...]:
+def _float_series(frame: FeatureFrameLike, output_id: str) -> tuple[float, ...]:
     try:
         values = frame.series[output_id]
     except KeyError as exc:
@@ -85,7 +85,7 @@ def _float_series(frame: FeatureFrame, output_id: str) -> tuple[float, ...]:
     return tuple(float("nan") if value is None else float(value) for value in values)
 
 
-def _market_values(frame: FeatureFrame, field: str) -> tuple[float, ...]:
+def _market_values(frame: FeatureFrameLike, field: str) -> tuple[float, ...]:
     if len(frame.market_bars) != len(frame.time_ms):
         raise InvalidRequestError("market bars unavailable for setup evaluation")
     return tuple(float(getattr(bar, field)) for bar in frame.market_bars)
@@ -112,7 +112,7 @@ def _apply_gate(local: tuple[bool, ...], gate: tuple[bool, ...] | None) -> tuple
 
 
 def _untouched_anchor(
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     anchor_id: str,
     params: Mapping[str, Any],
     side: str,
@@ -180,7 +180,7 @@ def _untouched_anchor(
 
 
 def _ema_bounce_counter(
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     columns: Mapping[str, str],
     params: Mapping[str, Any],
     side: str,
@@ -314,7 +314,7 @@ def _ema_bounce_counter(
 
 
 def _anchor_stack_width(
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     columns: Mapping[str, str],
     params: Mapping[str, Any],
 ) -> tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]:
@@ -406,7 +406,7 @@ def _combine_setup_masks(
 
 def _setup(
     item: Mapping[str, Any],
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     side: str,
     records: tuple[ContextConsumptionRecord, ...],
@@ -444,7 +444,7 @@ def _setup(
 
 def evaluate_setups(
     raw_spec: Mapping[str, Any],
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     context_records: tuple[ContextConsumptionRecord, ...],
     direction_blockers: tuple[SideDirectionBlockers, ...],

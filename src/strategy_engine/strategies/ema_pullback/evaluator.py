@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from strategy_engine.indicators.application.evaluate_range import EvaluateIndicatorRange
-from strategy_engine.indicators.contracts import FeatureFrame, IndicatorRangeRequest
+from strategy_engine.indicators.contracts import (
+    FeatureFrame,
+    IndicatorRangeRequest,
+    NativeFeatureFrame,
+)
+from strategy_engine.indicators.implementations.frame_ops import serialize_value
 from strategy_engine.strategies.application.build_feature_plan import BuildStrategyFeaturePlan
 from strategy_engine.strategies.contracts import (
     StrategyDiagnosticEvaluation,
@@ -34,6 +39,9 @@ class EmaPullbackRangeEvaluator:
     def _evaluate_frame(
         self, request: StrategyRangeRequest
     ) -> tuple[FeatureFrame, EmaPullbackEvaluation]:
+        """Boxed (wire-serialized) frame -- used only by the legacy
+        `evaluate()` method below, retained until route cutover."""
+
         planned = self._feature_planner.execute(request.strategy)
         frame = self._indicator_evaluator.execute(
             IndicatorRangeRequest(
@@ -47,13 +55,38 @@ class EmaPullbackRangeEvaluator:
         evaluation = evaluate_ema_pullback_frame(request.strategy, frame, planned)
         return frame, evaluation
 
+    def _evaluate_frame_native(
+        self, request: StrategyRangeRequest
+    ) -> tuple[NativeFeatureFrame, EmaPullbackEvaluation]:
+        """Native (non-string-boxed) frame -- the mandatory path for
+        `evaluate_execution`/`evaluate_diagnostics`
+        (`compact-strategy-evaluation-boundary-v1`, "internal-only native
+        fast path"). Strategy computation itself
+        (`evaluate_ema_pullback_frame` and everything it calls) is
+        identical either way -- it accepts `FeatureFrameLike`, the same
+        formulas run against native or boxed values without duplication."""
+
+        planned = self._feature_planner.execute(request.strategy)
+        frame = self._indicator_evaluator.execute_native(
+            IndicatorRangeRequest(
+                market=request.market,
+                time_range=request.time_range,
+                plan=planned.indicator_plan,
+                expected_market_data_hash=request.expected_market_data_hash,
+                market_frame=request.market_frame,
+            )
+        )
+        evaluation = evaluate_ema_pullback_frame(request.strategy, frame, planned)
+        return frame, evaluation
+
     def evaluate_execution(self, request: StrategyRangeRequest) -> StrategyEvaluationExecution:
         """The mandatory execution contract -- sparse decision events only,
-        no dense per-bar arrays, no diagnostic data
+        no dense per-bar arrays, no diagnostic data, no string-boxing
+        anywhere on this path
         (`strategy-research-execution-contract-v1`,
         `compact-strategy-evaluation-boundary-v1`)."""
 
-        frame, evaluation = self._evaluate_frame(request)
+        frame, evaluation = self._evaluate_frame_native(request)
         entries_long = next(
             (item.entry_allowed for item in evaluation.entries if item.side == "long"),
             tuple(False for _ in frame.time_ms),
@@ -93,7 +126,7 @@ class EmaPullbackRangeEvaluator:
         separate, explicitly-requested diagnostic-evaluation entrypoint,
         never as a side effect of an execution-contract request."""
 
-        frame, evaluation = self._evaluate_frame(request)
+        frame, evaluation = self._evaluate_frame_native(request)
         return StrategyDiagnosticEvaluation(
             strategy_id=request.strategy.strategy_id,
             config_hash=strategy_config_hash(request.strategy),
@@ -103,7 +136,14 @@ class EmaPullbackRangeEvaluator:
             bar_count=len(frame.time_ms),
             features={
                 "time_ms": list(frame.time_ms),
-                "series": {key: list(values) for key, values in frame.series.items()},
+                # Boxing to normalized-decimal-text happens only here, at
+                # the diagnostic output boundary -- never as an
+                # intermediate representation of the computation itself
+                # (`compact-strategy-evaluation-boundary-v1`).
+                "series": {
+                    key: [None if value is None else serialize_value(value) for value in values]
+                    for key, values in frame.series.items()
+                },
                 "validity": {
                     key: {
                         "valid_from_ms": value.valid_from_ms,

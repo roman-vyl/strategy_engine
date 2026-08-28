@@ -1,10 +1,10 @@
-"""Pure EMA Pullback evaluation over an already-built FeatureFrame."""
+"""Pure EMA Pullback evaluation over an already-built feature frame."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from strategy_engine.indicators.contracts import FeatureFrame
+from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.strategies.contracts import LiveStrategySpec
 from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
@@ -46,7 +46,7 @@ class EmaPullbackEvaluation:
 
 def evaluate_ema_pullback_frame(
     strategy: LiveStrategySpec,
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     planned: EmaPullbackFeaturePlan,
 ) -> EmaPullbackEvaluation:
     contexts = build_context_bundle(strategy.raw_spec, frame, planned)

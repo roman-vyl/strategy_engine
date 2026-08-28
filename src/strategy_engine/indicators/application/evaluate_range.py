@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 from strategy_engine.domain.errors import EvaluationInvariantError, UnsupportedCapabilityError
+from strategy_engine.domain.market import MarketFrame
 from strategy_engine.indicators.application.validate_plan import ValidateIndicatorPlan
-from strategy_engine.indicators.contracts import FeatureFrame, IndicatorRangeRequest
-from strategy_engine.indicators.ports import IndicatorRegistryPort
+from strategy_engine.indicators.contracts import (
+    FeatureFrame,
+    IndicatorRangeRequest,
+    NativeFeatureFrame,
+)
+from strategy_engine.indicators.ports import IndicatorEvaluator, IndicatorRegistryPort
 from strategy_engine.ports.market_data import MarketDataPort
 
 
@@ -21,6 +26,21 @@ class EvaluateIndicatorRange:
         self._validator = validator
 
     def execute(self, request: IndicatorRangeRequest) -> FeatureFrame:
+        evaluator, market_frame = self._prepare(request)
+        return evaluator.evaluate(market_frame, request.plan)
+
+    def execute_native(self, request: IndicatorRangeRequest) -> NativeFeatureFrame:
+        """Internal-only: same acquisition/validation as `execute`, but
+        returns the native (non-string-boxed) computation directly --
+        for strategy evaluation, never for a public HTTP contract
+        (`compact-strategy-evaluation-boundary-v1`)."""
+
+        evaluator, market_frame = self._prepare(request)
+        return evaluator.evaluate_native(market_frame, request.plan)
+
+    def _prepare(
+        self, request: IndicatorRangeRequest
+    ) -> tuple[IndicatorEvaluator, MarketFrame]:
         request.time_range.validate_alignment(request.market.base_timeframe)
         self._validator.execute(request.plan)
         evaluator = self._registry.evaluator()
@@ -69,4 +89,4 @@ class EvaluateIndicatorRange:
                 request.time_range,
                 expected_market_data_hash=request.expected_market_data_hash,
             )
-        return evaluator.evaluate(market_frame, request.plan)
+        return evaluator, market_frame

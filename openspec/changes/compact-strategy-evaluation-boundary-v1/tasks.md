@@ -61,36 +61,56 @@
       `evaluate_execution()`'s for the same request —
       `test_execution_and_diagnostic_provenance_agree_for_the_same_request`).
       NOT done: no HTTP route exposes it yet.
-- [ ] 3.3 **BLOCKED — genuine scope conflict found during implementation,
-      not resolved, needs a coordinator decision.** Attempted to change
-      `FeatureFrame.series` from `dict[str, tuple[str|None,...]]` to
-      native `float|None` (eliminating `RangeIndicatorEvaluator`'s
-      `serialize_value` call on the always-executed path). This broke 4
-      tests asserting `FeatureFrame.series` values as normalized decimal
-      strings, tracing back to `openspec/specs/ema-indicator-vertical-
-      slice-v1/spec.md`'s own requirement: "SHALL serialize values as
-      normalized decimal text or `null`." `EmaIndicatorEvaluator` (the
-      type that spec governs) is a thin wrapper directly around the same
-      `RangeIndicatorEvaluator` strategy evaluation uses — they are not
-      separate implementations. So `RangeIndicatorEvaluator`/
-      `FeatureFrame` is shared, already-spec-governed infrastructure this
-      proposal did not declare as an affected capability, and the
-      original `4.1`-style claim ("no compatibility shim, get the clean
-      target architecture") cannot be honored here without also amending
-      `ema-indicator-vertical-slice-v1` (and likely its ATR/RSI/ADX-DMI/
-      ATR-distance siblings, which share the same evaluator) — out of
-      scope for this proposal as written. Reverted the attempt; all 372
-      pre-existing tests pass again. Options for the coordinator: (a)
-      accept partial 3.3 — the *mandatory wire response* no longer
-      carries dense diagnostics (real, already achieved via 3.1/3.2's
-      type split) but `RangeIndicatorEvaluator`'s internal string-boxing
-      cost remains paid on every evaluation regardless of path; (b)
-      author a companion OpenSpec change against the indicator-vertical-
-      slice specs to relax/relocate their string-serialization
-      requirement, expanding this migration's scope; (c) a strategy-
-      internal-only fast path that duplicates range evaluation without
-      going through the shared, spec-governed evaluator (more code, but
-      leaves the public indicator contract untouched).
+- [x] 3.3 **RESOLVED — Decision: Variant 3, internal-only native fast
+      path.** Not a partial/compatibility outcome: strategy evaluation
+      never boxes to string, and the public indicator contract is
+      untouched.
+      - `NativeFeatureFrame` (`indicators/contracts.py`): same shape as
+        `FeatureFrame`, `series: dict[str, tuple[float | None, ...]]` --
+        never string-boxed, not exposed on any HTTP contract.
+      - `RangeIndicatorEvaluator.evaluate_native` is now the **single
+        source of indicator computation** -- `evaluate` (the public,
+        `ema-indicator-vertical-slice-v1`-governed contract) is a thin
+        boxing wrapper over it (`series = {... serialize_value(v) for v
+        in native.series[...]}`), not a second formula implementation.
+      - `EvaluateIndicatorRange` gained `execute_native` (same
+        market-acquisition/hash-validation as `execute`, calls
+        `evaluator.evaluate_native` instead) via a shared `_prepare`
+        helper -- no duplicated orchestration either.
+      - `FeatureFrameLike` (`Protocol`, read-only properties) lets every
+        `ema_pullback/{evaluation,contexts,direction_blockers,setups,
+        triggers,exits,potential_entries}.py` function accept either
+        `FeatureFrame` or `NativeFeatureFrame` -- one formula
+        implementation, not a native/legacy fork. `FeatureFrame` itself
+        was NOT touched/blurred with a union value type.
+      - `EmaPullbackRangeEvaluator._evaluate_frame_native` (used by
+        `evaluate_execution`/`evaluate_diagnostics`) calls
+        `execute_native`; `_evaluate_frame` (legacy `evaluate()` only)
+        still calls the boxed `execute`, unchanged.
+      - `evaluate_diagnostics` boxes `frame.series` via `serialize_value`
+        only at its own output-boundary dict construction -- the one
+        place per acceptance criterion 2 diagnostics are allowed to box.
+      - All 8 acceptance criteria proven, see `tests/test_native_fast_path.py`:
+        (1) `test_evaluate_execution_never_calls_serialize_value` --
+        monkeypatches `serialize_value` in both call-site modules,
+        asserts zero calls during `evaluate_execution()`; (2)/(3) same
+        test -- zero boxing means zero reverse-parsing too, there is
+        nothing to reparse; (4)/(5) all pre-existing indicator
+        vertical-slice tests pass unchanged (no expected-value
+        rewrites); (6) all pre-existing strategy tests pass unchanged;
+        (7) the monkeypatch spy IS the required regression guard --
+        `test_evaluate_diagnostics_boxes_only_at_the_output_boundary`
+        and `test_legacy_evaluate_still_boxes_features_when_requested`
+        are positive controls proving the spy actually fires when it
+        should, so criterion (1)'s zero-calls assertion is meaningful,
+        not vacuous; (8)
+        `test_native_and_boxed_computation_agree_numerically` --
+        native output vs boxed-then-reparsed output compared bar-for-
+        bar, series-for-series, for the same input; structurally
+        enforced by `evaluate` calling `evaluate_native` rather than
+        recomputing.
+      - Full suite: 389 passed (372 baseline + 17 new across this and
+        prior sub-tasks), ruff clean, mypy clean (89 files).
 
 ## 4. Batch adoption (only after task 2 passes)
 

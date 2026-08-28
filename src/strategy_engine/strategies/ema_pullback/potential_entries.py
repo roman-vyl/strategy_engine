@@ -9,7 +9,7 @@ from math import isfinite
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.values import normalized_decimal_text
-from strategy_engine.indicators.contracts import FeatureFrame
+from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.strategies.ema_pullback.exits import ExitPolicyEvaluation
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 from strategy_engine.strategies.ema_pullback.setups import SideSetupEvaluation
@@ -28,7 +28,7 @@ class PotentialEntry:
 
 
 def _anchor_values(
-    frame: FeatureFrame, plan: EmaPullbackFeaturePlan
+    frame: FeatureFrameLike, plan: EmaPullbackFeaturePlan
 ) -> tuple[float | None, ...]:
     output_id = plan.anchor_columns["anchor"]
     try:
@@ -113,7 +113,7 @@ def _project_side(
 
 
 def project_potential_entries(
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     setups: tuple[SideSetupEvaluation, ...],
     triggers: tuple[SideTriggerEvaluation, ...],

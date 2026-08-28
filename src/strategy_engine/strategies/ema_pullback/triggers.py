@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from strategy_engine.domain.errors import InvalidRequestError
-from strategy_engine.indicators.contracts import FeatureFrame
+from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 from strategy_engine.strategies.ema_pullback.setups import SideSetupEvaluation
 
@@ -77,7 +77,7 @@ def _mapping(value: object, path: str) -> Mapping[str, Any]:
     return value
 
 
-def _float_series(frame: FeatureFrame, output_id: str) -> tuple[float, ...]:
+def _float_series(frame: FeatureFrameLike, output_id: str) -> tuple[float, ...]:
     try:
         values = frame.series[output_id]
     except KeyError as exc:
@@ -85,14 +85,14 @@ def _float_series(frame: FeatureFrame, output_id: str) -> tuple[float, ...]:
     return tuple(float("nan") if value is None else float(value) for value in values)
 
 
-def _market_values(frame: FeatureFrame, field: str) -> tuple[float, ...]:
+def _market_values(frame: FeatureFrameLike, field: str) -> tuple[float, ...]:
     if len(frame.market_bars) != len(frame.time_ms):
         raise InvalidRequestError("market bars unavailable for trigger evaluation")
     return tuple(float(getattr(bar, field)) for bar in frame.market_bars)
 
 
 def _rolling_reclaim(
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     anchor: tuple[float, ...],
     *,
     side: str,
@@ -142,7 +142,7 @@ def _rolling_reclaim(
 
 
 def _touch_anchor(
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     anchor: tuple[float, ...],
     *,
     side: str,
@@ -183,7 +183,7 @@ def _trigger_rule(raw_spec: Mapping[str, Any]) -> Mapping[str, Any]:
 
 def evaluate_triggers(
     raw_spec: Mapping[str, Any],
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     setups: tuple[SideSetupEvaluation, ...],
 ) -> tuple[SideTriggerEvaluation, ...]:
