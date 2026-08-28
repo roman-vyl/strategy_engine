@@ -25,21 +25,109 @@ Engine has no trade-lifecycle state and cannot itself guarantee this
 value is honored across a trade's later bars; that is a Research Service
 responsibility (see `research-unified-execution-loop-v1`/companion
 capability in `research_service`). Each opportunity SHALL also carry
-initial stop and initial take information, each as `{ratio, rule_id,
-component_id}` — never a bare ratio with no attribution.
+`initial_stop` and `initial_take`, each `{ratio, attribution:
+ExitAttribution} | null` — see "Attribution shape" below for
+`ExitAttribution` and "Initial stop/take optionality" for the
+nullability rule. A non-null leg is never a bare ratio with no
+attribution.
 
 Signal-exit information SHALL be represented as **per-side, per-profile
 sparse event lists** — a caller holding a locked profile for an open
 position looks up only that profile's own event list for bars after
 entry, never a flattened current-bar-profile series. Each signal-exit
-event SHALL carry one or more candidates, each with `rule_id`,
-`component_id`, and `exit_kind` attribution.
+event SHALL carry one or more candidates, each `{attribution:
+ExitAttribution}`.
+
+### Attribution shape (shared across all historical execution facts)
+
+```
+ExitAttribution
+  rule_id
+  component_id
+  exit_kind
+```
+
+Every `ExitAttribution` instance on the wire is populated in full —
+`rule_id`/`component_id` are never null on an attribution object that
+exists (a leg or candidate either has a rule that produced it, in which
+case its attribution is fully populated, or the leg/candidate does not
+exist at all — see "Initial stop/take optionality"). Canonical
+`exit_kind` values, fixed by this capability, not left to per-caller
+convention: `initial_stop → "stop_loss"`, `initial_take →
+"take_profit"`, signal-exit candidate → `"signal"`.
+
+`ExitAttribution` does **not** carry a `layer` field on the wire —
+`layer` is a canonical derived constant (`"exit_policy"` for every
+historical execution fact governed by this capability), not an
+independent per-fact Engine decision. Research Service SHALL derive
+`layer = "exit_policy"` for these facts rather than read it from the
+wire or decide it independently (see companion `research_service`
+capability for the consuming side of this rule).
+
+### Multi-rule attribution algorithm (normative, old-BBB-compatible)
 
 When multiple stop rules (or multiple take rules) are applicable at one
-entry opportunity and their distances are aggregated into a single
-`ratio`, the reported `rule_id`/`component_id` SHALL be selected by a
-documented, deterministic rule (including the tied-distance case) —
-never left ambiguous or implementation-defined per call.
+entry opportunity, the single reported `ratio`/`ExitAttribution` for
+that leg SHALL be selected by this exact procedure, matching the
+reference (old-monolith) execution model's `_compile_distance_series`/
+`_pick_distance_instance` resolution verbatim (`exits.py:152-179`,
+`exit_attribution.py:155-178`):
+
+1. Collect every applicable rule's `(rule identity, distance)` pair for
+   that leg (stop or take, independently), in the strategy config's
+   declared rule order: `always_on` exits list order first, then the
+   active profile's own exits list order — never re-sorted at any
+   stage, for either leg.
+2. The aggregate distance for that leg is `min()` over every applicable
+   rule's distance — **`min()` is used for both stop and take legs
+   identically**; there is no separate "tightest for stop, most
+   favorable for take" direction. (This corrects an earlier, incorrect
+   assumption in this document's history that the two legs might use
+   different aggregation directions.)
+3. **Attribution owner**: scan the same declared-order list from step 1
+   and select the **first** rule (by that same declared order) whose
+   own individual distance equals the aggregate `min()` value from step
+   2 (equality within a small numerical epsilon, matching the reference
+   model's own tolerance, to account for floating-point noise — not an
+   exact-bitwise-equality requirement).
+4. **On an exact tie** (two or more rules' distances equal the
+   aggregate): step 3 already resolves this — "first in declared order
+   among values equal to the minimum" inherently selects the earliest-
+   declared rule on a tie. No separate tie-break rule exists beyond
+   declared-order-first; this is explicit in the reference model
+   (`_pick_distance_instance`'s own docstring: "first in spec on tie"),
+   not an incidental side effect of iteration order.
+5. The winning rule's identity becomes the leg's
+   `ExitAttribution.rule_id`/`component_id`. (The reference model's own
+   `rule_id`/`component_id` split maps directly to this contract's
+   `ExitAttribution.rule_id`/`component_id` — same two identifiers, no
+   remapping.)
+
+This is binding on the I1 builder implementation, not a hint — an I1
+implementer SHALL NOT choose a different aggregation direction or
+tie-break without an explicit follow-up OpenSpec change.
+
+### Initial stop/take optionality (normative)
+
+`initial_stop` and `initial_take` are **independently nullable** —
+matching the reference model exactly (`exits.py::_stop_ready`: a rule
+group's readiness check only constrains on a leg if that group has at
+least one rule for that leg at all; a group with zero configured stop
+rules never blocks readiness on the stop leg, and symmetrically for
+take). A strategy configuration MAY have take-only or stop-only exit
+rules for a given `always_on`+profile combination; `protection_ready`
+(and therefore whether an executable entry opportunity exists) requires
+only that whichever leg(s) **are** configured are computable (not
+NaN/undefined from warmup) at that bar — it does NOT require both legs
+to be configured.
+
+`initial_stop: {ratio, attribution: ExitAttribution} | null` and
+`initial_take: {ratio, attribution: ExitAttribution} | null` — `null`
+means "no stop (or take) rule is configured/applicable for this
+opportunity's active profile combination," not an error or an
+unresolved value. A non-null leg is always fully populated (`ratio` and
+a complete `ExitAttribution`) — there is no partially-populated leg
+(e.g. a ratio with a null `rule_id`).
 
 The response SHALL NOT include a per-bar timestamp array; `bar_index`
 together with `market_data_hash` and `bar_count` is the join key back to
@@ -82,25 +170,48 @@ next-bar effective timing.
   particular trade actually locked it (Strategy Engine has no
   trade-lifecycle state to make that claim).
 
-#### Scenario: Initial stop/take always carry attribution
+#### Scenario: A non-null initial stop/take always carries full attribution
 
 - **WHEN** an executable entry opportunity's initial stop or initial
-  take is inspected
-- **THEN** it is a `{ratio, rule_id, component_id}` triple, never a bare
-  ratio
+  take is non-null
+- **THEN** it is a `{ratio, attribution: ExitAttribution}` pair with a
+  fully-populated `ExitAttribution` (`rule_id`, `component_id`,
+  `exit_kind`) — never a bare ratio, never a partially-populated
+  attribution
 - **AND** no separate per-bar dense ratio series exists elsewhere in the
   response.
 
-#### Scenario: Deterministic attribution under multiple applicable rules
+#### Scenario: A leg with no applicable rule is null, not a fabricated value
 
-- **WHEN** multiple stop rules or multiple take rules are applicable at
-  one entry opportunity and their distances are aggregated into a single
-  reported `ratio`
-- **THEN** the reported `rule_id`/`component_id` is selected by the same
-  deterministic resolution the reference (old-monolith) execution model
-  used, including for tied/equal distances
-- **AND** this resolution is documented, not left to incidental
-  implementation order.
+- **WHEN** a strategy configuration has no stop rule (or no take rule)
+  applicable to an entry opportunity's active `always_on`+locked-profile
+  combination
+- **THEN** the corresponding `initial_stop` (or `initial_take`) is
+  `null`
+- **AND** this alone does not prevent the entry opportunity from
+  existing, provided `protection_ready` holds for whichever leg(s) are
+  actually configured.
+
+#### Scenario: Aggregation uses min() identically for stop and take legs
+
+- **WHEN** multiple stop rules, or multiple take rules, are applicable
+  at one entry opportunity
+- **THEN** the reported `ratio` for that leg is the minimum distance
+  across all applicable rules for that leg — the same `min()` rule for
+  both stop and take, no separate "tightest"/"most favorable" direction
+  per leg.
+
+#### Scenario: Attribution owner is the first-declared rule matching the aggregate value
+
+- **WHEN** the aggregate `ratio` for a leg is computed
+- **THEN** the reported `ExitAttribution` identifies whichever
+  applicable rule's own individual distance equals that aggregate value
+  and appears first in the strategy config's declared rule order
+  (`always_on` exits list, then the active profile's own exits list,
+  never re-sorted)
+- **AND**, on an exact tie between two or more rules' distances, the
+  same first-in-declared-order selection resolves it — no separate
+  tie-break exists.
 
 #### Scenario: Signal-exit events are indexed per side and per profile
 
@@ -109,8 +220,8 @@ next-bar effective timing.
   pair
 - **AND** no flattened current-bar-profile `signal_exit[side][bar]`
   series exists in the response
-- **AND** each event's candidates carry `rule_id`/`component_id`/
-  `exit_kind` attribution.
+- **AND** each event's candidates carry a fully-populated
+  `ExitAttribution` (`rule_id`/`component_id`/`exit_kind`).
 
 #### Scenario: Simultaneous long and short on one bar fails loudly
 

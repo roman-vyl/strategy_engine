@@ -83,11 +83,23 @@ this revision is based on:
   an asymmetry between the two old paths this change's attribution must
   be correct against, regardless of which old-path behavior is the
   reference for a given exit type.
-- **Multi-rule aggregation**: when multiple stop (or take) rules are
-  applicable and their distances aggregate into one effective ratio, old
-  BBB's `_agg_sl_tp_at_entry`/`exit_attribution.py` deterministically
-  resolves which rule's identity is reported — this change must match
-  that resolution, not invent a new tie-break.
+- **Multi-rule aggregation**: `_compile_distance_series`
+  (`exits.py:152-179`) aggregates every applicable rule's distance for a
+  leg via `min()` — identically for stop and take, no separate
+  direction per leg. `_pick_distance_instance`
+  (`exit_attribution.py:155-178`) selects the attribution owner: the
+  applicable rule whose own distance equals the aggregate, first in the
+  strategy config's declared rule order on a tie (`always_on` list then
+  active profile's list, never re-sorted) — the reference model's own
+  docstring states this explicitly ("first in spec on tie"), it is not
+  an incidental side effect of iteration order this change is inferring.
+  See the normative algorithm in the spec delta.
+- **SL/TP legs are independently nullable** — `_stop_ready`
+  (`exits.py:196-207`) only constrains readiness on a leg if that
+  rule group has at least one configured rule for it; a group with zero
+  stop rules never blocks readiness on the stop leg, and symmetrically
+  for take. A strategy MAY be take-only or stop-only for a given
+  `always_on`+profile combination.
 - **`stop_ready` was never a standalone old-BBB concept** — it is
   effectively `entry_allowed AND protection_ready`, collapsed into
   whether an executable entry opportunity exists; old BBB never exposed
@@ -118,8 +130,22 @@ ExecutableEntryOpportunity
                               # no trade-lifecycle state; it cannot
                               # itself prove this stays "locked" across
                               # a trade's life -- see I2 scope note)
-  initial_stop: {ratio, rule_id, component_id}
-  initial_take: {ratio, rule_id, component_id}
+  initial_stop: {ratio, attribution: ExitAttribution} | null   # null: no
+                              # stop rule configured/applicable for this
+                              # opportunity's profile -- independently
+                              # nullable, matching the reference model
+                              # exactly (`_stop_ready`: a leg with zero
+                              # configured rules never blocks readiness)
+  initial_take: {ratio, attribution: ExitAttribution} | null   # same,
+                              # independently of initial_stop
+
+ExitAttribution               # shared shape, every historical execution fact
+  rule_id
+  component_id
+  exit_kind                   # canonical: "stop_loss" | "take_profit" | "signal"
+                              # no `layer` field -- Research derives the
+                              # canonical constant "exit_policy", see
+                              # companion research_service capability
 
 SignalExitProjection   # per side, per profile, sparse event list
   long:  {aligned: SignalExitEvent[], countertrend: [...], neutral: [...]}
@@ -127,8 +153,19 @@ SignalExitProjection   # per side, per profile, sparse event list
 
 SignalExitEvent
   bar_index
-  candidates: {rule_id, component_id, exit_kind}[]
+  candidates: {attribution: ExitAttribution}[]
 ```
+
+**Multi-rule attribution, exact algorithm** (normative, see spec delta
+for the full requirement text): aggregate distance for a leg = `min()`
+over every applicable rule's distance, identically for stop and take
+(not different directions per leg — corrects an earlier draft's
+assumption). Attribution owner = the applicable rule whose own distance
+equals that aggregate, first in the strategy config's declared rule
+order (`always_on` list, then active profile's own list) on a tie —
+matching the reference model's `_compile_distance_series`/
+`_pick_distance_instance` verbatim, including its explicit "first in
+spec on tie" behavior.
 
 **Explicitly absent from this contract** (collapsed into
 `entry_opportunities`, or moved to the diagnostic-evaluation path):
