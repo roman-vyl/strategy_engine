@@ -259,6 +259,29 @@ what strategy_engine owns:
   actual requirement, not necessarily one HTTP response for N
   evaluations).
 
+## I5 joint gate — Engine's slice (explore findings, this revision)
+
+`research_service`'s I5 end-to-end proof (companion capability
+`research-historical-execution-parity-v1`) needs one thing from Engine
+that does not exist yet: a **proof-only serializer** producing the
+exact `contract_version: "strategy_evaluation_execution.v2"` JSON
+envelope (already normatively fixed above) from real production
+computation. `strategy_serialization.py` today only serializes the
+superseded `.v1` `StrategyEvaluationExecution` shape — there is no v2
+equivalent anywhere, wired or unwired. Without it, Research's I5
+harness has no way to obtain a real Engine-computed
+`HistoricalExecutionProjection` in wire form, since `/range` is not
+cut over until I7.
+
+This is a genuinely new Engine-owned artifact (not just a Research
+concern), hence the minimal companion requirement/scenario added to
+`strategy-research-execution-contract-v1` above, and the corresponding
+task in tasks.md (`I5.Engine`) — not a new capability, since it is one
+function inside the contract this capability already governs, not new
+production behavior. It is never route-wired before I7; I5's proof
+calls it in-process (or via a thin script), the same way I2's own
+proof already calls `build_historical_execution_projection` directly.
+
 ## Parity means (revised)
 
 Because `time_ms` is dropped, byte-identical full-artifact comparison is

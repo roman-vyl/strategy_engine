@@ -83,6 +83,21 @@ computation is ~76% of wall time, not the ~4% `build_decision_events`
 step originally assumed to be the bottleneck) is an explicitly deferred,
 separate track starting only after the I5 parity harness exists.
 
+I5 is the mandatory safety gate between per-repo unit-level proof (I1–
+I4, each already gated and passed) and any change with real production
+blast radius (I6 persistence, I7 route cutover, I8 batch redesign): it
+is the first and only point in this plan where a real Engine-computed
+`HistoricalExecutionProjection`, carried through the exact v2 wire
+envelope, is executed end to end by Research's new projection path and
+compared — trade for trade, attribution for attribution — against an
+independent oracle, on real market data. I6/I7/I8 are blocked on it
+because every prior gate (I1–I4) proved its own layer correct in
+isolation; only I5 proves the layers compose correctly together, on
+data neither repo's unit tests constructed by hand. I5 is proof-only —
+it introduces a companion Engine serializer function (never route-
+wired) and a Research test/acceptance harness, not a production code
+path; `/range` stays on the `.v1` contract until I7.
+
 ## What Changes (target model, I1+ implementation)
 
 - **Replace `entries[]`+`stop_ready[]` with executable entry

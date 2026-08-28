@@ -259,6 +259,19 @@ next-bar effective timing.
   already nests it — `bar_count`/`market_data_hash` are not top-level
   siblings of `market`.
 
+#### Scenario: A proof-only serializer produces this exact envelope before any route carries it
+
+- **WHEN** `research_service`'s I5 end-to-end parity proof (`research-
+  historical-execution-parity-v1`, companion capability) needs a real
+  `HistoricalExecutionProjection` in wire form, before `/range` is cut
+  over to this contract (I7)
+- **THEN** Strategy Engine provides a pure, proof-only serializer
+  function producing this exact `contract_version:
+  "strategy_evaluation_execution.v2"` envelope from real production
+  computation (`build_historical_execution_projection`, I1)
+- **AND** this function is not wired to any HTTP route — it is callable
+  in-process only, until I7's coordinated cutover.
+
 #### Scenario: No mandatory timestamp array
 
 - **WHEN** a range evaluation response is inspected

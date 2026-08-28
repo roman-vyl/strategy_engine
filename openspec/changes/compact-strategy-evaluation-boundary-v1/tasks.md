@@ -244,6 +244,27 @@ I3/I4/I5/I6 are primarily `research_service`-owned (see that repo's
 tasks.md) — I5's end-to-end proof and I7's cutover are joint gates
 tracked in both repos' task lists.
 
+- [ ] **I5.Engine — proof-only v2 serializer (joint gate, Engine-owned
+      slice).** I5 explore found a real gap: no function anywhere
+      serializes a `HistoricalExecutionProjection` into the
+      `contract_version: "strategy_evaluation_execution.v2"` JSON
+      envelope normatively fixed in this change (`strategy-research-
+      execution-contract-v1`) — `strategy_serialization.py` only
+      serializes the superseded `.v1` `StrategyEvaluationExecution`
+      shape. `research_service`'s I5 proof needs Engine to produce this
+      exact envelope from real production computation
+      (`build_historical_execution_projection`, I1) without any `/range`
+      route change. Add ONE pure, proof-only serializer function (same
+      shape/discipline as `serialize_strategy_evaluation_execution`,
+      not route-wired, not called by any router) that Engine-side I5
+      harness code and `research_service`'s I5 harness both call
+      directly (in-process or via a thin script) to obtain the exact v2
+      JSON body `parse_historical_execution_projection` decodes. Gate:
+      round-trip identity — the serialized JSON, decoded by Research's
+      real `parse_historical_execution_projection`, reproduces the same
+      `HistoricalExecutionProjection` facts field-for-field. No route
+      change; this function is never reachable over HTTP before I7.
+
 ## Deferred, separate track: Engine internals vectorization
 
 Not part of I0-I8. Real cost is indicator computation (~76% of wall
