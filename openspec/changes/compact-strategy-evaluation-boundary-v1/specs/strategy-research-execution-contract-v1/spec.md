@@ -54,6 +54,15 @@ timing.
   sufficient for the caller to resolve each bar's timestamp from its own
   market data.
 
+#### Scenario: bar_index indexes exactly the reported range
+
+- **WHEN** a decision event's `bar_index` is inspected
+- **THEN** it is a valid zero-based position within `[0, bar_count)` for
+  the same `market_data_hash`-identified range the response itself
+  reports
+- **AND** it corresponds to the same-position candle in a Research
+  `MarketFrame` resolved for that identical `market_data_hash`.
+
 ### Requirement: Execution facts remain external
 
 Strategy Engine SHALL NOT return executed fills, completed trades, fees,
@@ -90,3 +99,29 @@ never as a side effect of an execution-contract request.
   evaluated strategy/range/market_data_hash
 - **THEN** it is obtained via a distinct diagnostic-evaluation request,
   not embedded in the execution-contract response.
+
+### Requirement: Diagnostic-evaluation entrypoint ownership and provenance
+
+Strategy Engine SHALL own computing diagnostic data on request. A
+diagnostic-evaluation request SHALL identify the target the same way an
+execution-evaluation request does — strategy identity, market
+provenance, and an expected market-data hash. A diagnostic-evaluation
+response SHALL carry `config_hash`, `market_data_hash`, and `bar_count`
+equal to what the matching execution evaluation for that same request
+would produce.
+
+#### Scenario: Diagnostic response provenance matches the execution evaluation it explains
+
+- **WHEN** a diagnostic-evaluation response is returned for a given
+  strategy/market/expected-hash request
+- **THEN** its `config_hash`, `market_data_hash`, and `bar_count` equal
+  those an execution-evaluation response for the identical request would
+  report.
+
+#### Scenario: Engine is the sole computer of diagnostic data
+
+- **WHEN** dense per-bar diagnostic data (feature series, context data,
+  component evidence, potential-entry traces) exists anywhere in the
+  system
+- **THEN** it was computed by Strategy Engine's diagnostic-evaluation
+  entrypoint, never recomputed or fabricated by Research Service.

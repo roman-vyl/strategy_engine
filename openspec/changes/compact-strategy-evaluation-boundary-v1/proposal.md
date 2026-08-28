@@ -106,13 +106,18 @@ response.
   per-bar decisions are represented on the wire.
 - No change to `/range-batch`'s shared-L0 acquisition (one market read,
   one window resolution per batch) — this change makes each variant's
-  own evaluation cheap; batch orchestration itself is the companion
-  `research_service` change's concern.
+  own evaluation payload small; whether N candidates are held
+  simultaneously during that batch call is a separate, binding follow-on
+  phase (Design's migration-order step 3 / tasks 4.2-4.3), not an
+  automatic consequence of the sparse contract alone.
 - Migration order is single-instance first: this change's acceptance
-  criteria require proven exact trade/accounting/exit-reason/provenance
-  parity between the old dense contract and the new sparse contract on a
-  real `full_available` N=1 evaluation before `/range-batch` is touched
-  at all.
+  criteria require proven parity (per "Parity means" in design.md —
+  identical `TradeRecord` sequence, exact accounting, exact exit reasons,
+  semantically-equal provenance; not a byte-identical full artifact,
+  since `time_ms` is intentionally removed) between the old dense
+  contract and the new sparse contract on a real `full_available` N=1
+  evaluation before `/range-batch` adopts the contract, and before the
+  per-candidate release phase is attempted.
 
 ## Impact
 
@@ -122,11 +127,12 @@ response.
   Service"; this change makes that contract sparse and splits out
   diagnostics, it does not introduce a new capability for the execution
   contract itself.
-- New capability: diagnostic-evaluation projection (name TBD at
-  implementation time — out of scope for this proposal to name
-  precisely since it is primarily a `research_service`-side capability
-  that calls back into an Engine diagnostic-evaluation endpoint; see the
-  companion change for the on-demand generation flow this enables).
+- Diagnostic-evaluation entrypoint: ownership and minimal cross-service
+  provenance contract are fixed by this proposal (design.md) — Strategy
+  Engine owns computing diagnostic data on request, Research owns
+  requesting/persisting it (companion change). Route/schema
+  implementation detail is deferred to task 3.2; ownership is not left
+  open.
 - Affected code (implementation deferred, not part of this proposal):
   `strategies/contracts.py` (`StrategyRangeResult` split), `strategies/
   ema_pullback/evaluator.py` (sparse event emission), `indicators/
