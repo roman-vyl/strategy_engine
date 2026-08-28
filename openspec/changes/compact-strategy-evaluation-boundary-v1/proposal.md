@@ -63,9 +63,15 @@ orchestrated.
 This change is Strategy Engine's half of a two-repo migration
 (`research_service` carries the companion change): replace the
 mandatory dense per-bar wire contract with a lossless sparse
-decision-event contract sized to O(events), not O(bars), and stop
-returning diagnostic-only data as part of the mandatory execution
-response.
+decision-event contract, and stop returning diagnostic-only data as
+part of the mandatory execution response. Measured on a real
+`full_available` BTCUSDT.P/5m evaluation (task 2.1, see design.md):
+response body shrinks 11x and peak RSS drops 54% — driven by dropping
+`time_ms`/diagnostics and by each event's small payload, not by event
+count being sparse relative to bar count (event count tracks bar count
+closely for a strategy whose `stop_ready` is true on nearly every bar
+— see design.md's correction to the original O(events)-vs-O(bars)
+framing).
 
 ## What Changes
 

@@ -31,9 +31,18 @@ StrategyDecisionEvent
 ```
 
 Only bars carrying at least one of `entry`/`signal_exit`/`stop_ready`
-are emitted — for a naked-trigger strategy over 675,887 bars with a few
-hundred trades, this is O(hundreds) events, not O(675,887) array
-elements.
+are emitted. **Measured correction** (task 2.1 parity proof, real
+`full_available` BTCUSDT.P/5m, `touch_anchor` + ATR stop/take):
+`stop_ready` is true on nearly every bar once ATR warmup completes (it
+reflects "is the ATR distance computable," not a rare condition), so
+event count (675,967) is *not* small relative to bar count (675,979)
+for this spec — this is not an O(hundreds)-vs-O(bars) reduction in
+general. The real, measured saving is **per-event payload size**: each
+event holds only a few booleans and up to two small ratio numbers,
+versus the dense contract's several full-length arrays plus
+`features`/`contexts`/`component_evidence` — an 11x response-body-size
+reduction and 54% peak-RSS reduction, measured, even though event count
+tracks bar count closely for this spec.
 
 `StrategyEvaluationExecution` (the mandatory response envelope):
 
