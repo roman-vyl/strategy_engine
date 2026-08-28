@@ -3,10 +3,10 @@
 - [x] 1.1 Define `StrategyDecisionEvent`/`StrategyEvaluationExecution`
       (plus `DecisionEntry`/`DecisionSignalExit`/`DecisionStopReady` and
       `StrategyDiagnosticEvaluation`) in `strategies/contracts.py`.
-      `StrategyRangeResult` left as-is (internal, still used by the
-      legacy `evaluate()` method) — the new types are additive, not a
-      replacement of its fields yet; actual route cutover is separate
-      remaining work (see status note below task 3.3).
+      `StrategyRangeResult`/legacy `evaluate()` remain on
+      `EmaPullbackRangeEvaluator` as a private implementation detail (no
+      route reaches them any more — see 1.4/3.1/3.2, route cutover is
+      done).
 - [x] 1.2 Implemented as `build_decision_events`
       (`strategies/decision_events.py`, pure function, unit-tested) and
       `EmaPullbackRangeEvaluator.evaluate_execution` (new method,
@@ -17,12 +17,12 @@
 - [x] 1.3 `build_decision_events` raises `EvaluationInvariantError` (500,
       fail loudly) if `entries_long[i]` and `entries_short[i]` are both
       true — unit-tested (`test_simultaneous_long_and_short_entry_fails_loudly`).
-- [ ] 1.4 NOT done — the legacy `evaluate()`/`StrategyRangeResult` HTTP
-      route (`/range`, `/range-batch`) still serves `time_ms` today. The
-      new `StrategyEvaluationExecution`/`evaluate_execution()` has no
-      `time_ms` field at all (verified by
-      `test_execution_contract_has_no_time_ms_or_diagnostic_fields`), but
-      nothing serves it over HTTP yet — route cutover is remaining work.
+- [x] 1.4 Route cutover done: `/v1/strategy-evaluations/range` and
+      `/range-batch` now serialize `StrategyEvaluationExecution` via
+      `serialize_strategy_evaluation_execution` — no `time_ms` field on
+      the wire at all. Verified by `test_range_response_exact_key_set`/
+      `test_batch_variant_outcome_result_exact_key_set` (exact key-set
+      assertions, no `time_ms`/`features`/etc present).
 - [x] 1.5 Structurally guaranteed by construction: `build_decision_events`
       only ever emits `bar_index` values from `range(bar_count)` — there
       is no code path that could emit one outside `[0, bar_count)`.
@@ -45,22 +45,20 @@
 
 ## 3. Split diagnostics out of the mandatory path
 
-- [ ] 3.1 PARTIAL — `StrategyEvaluationExecution` (mandatory contract
-      type) never has `features`/`contexts`/`component_evidence`/
-      `potential_entries` fields at all (they don't exist on that
-      dataclass); `StrategyDiagnosticEvaluation` (new, separate type)
-      carries them, built by the new `evaluate_diagnostics()` method.
-      NOT done: no HTTP route serves `evaluate_execution()`/
-      `evaluate_diagnostics()` yet — `/range`/`/range-batch` still call
-      the legacy `evaluate()`, which still returns everything combined.
-      Route cutover is remaining work, coordinated with the
-      `research_service` companion change being ready to consume it.
-- [ ] 3.2 PARTIAL — `evaluate_diagnostics()` exists as an application-
-      layer method with the right provenance shape (its
-      `config_hash`/`market_data_hash`/`bar_count` are proven equal to
-      `evaluate_execution()`'s for the same request —
-      `test_execution_and_diagnostic_provenance_agree_for_the_same_request`).
-      NOT done: no HTTP route exposes it yet.
+- [x] 3.1 Done. `/v1/strategy-evaluations/range` and `/range-batch` now
+      return only `StrategyEvaluationExecution` (no `features`/
+      `contexts`/`component_evidence`/`potential_entries`/`entries`/
+      `exit_policy`/`validity`/`state_artifact` fields exist on that
+      type at all). `EvaluateStrategyRange.execute` (application service)
+      returns it directly; the legacy dense `evaluate()`/
+      `StrategyRangeResult` path is no longer reachable from any route.
+- [x] 3.2 Done. New route `POST /v1/strategy-evaluations/range/
+      diagnostics` (`evaluate_strategy_range_diagnostics`) calls
+      `EvaluateStrategyRange.execute_diagnostics` →
+      `EmaPullbackRangeEvaluator.evaluate_diagnostics` → native
+      computation, boxed only at this route's own serialization
+      (`serialize_strategy_diagnostic_evaluation`). This is the only
+      route that returns dense per-bar diagnostic data.
 - [x] 3.3 **RESOLVED — Decision: Variant 3, internal-only native fast
       path.** Not a partial/compatibility outcome: strategy evaluation
       never boxes to string, and the public indicator contract is

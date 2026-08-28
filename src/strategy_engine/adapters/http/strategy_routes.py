@@ -23,7 +23,10 @@ from strategy_engine.adapters.http.models import (
     StrategyRangeBatchRequestModel,
     StrategyRangeRequestModel,
 )
-from strategy_engine.adapters.http.strategy_serialization import serialize_strategy_result
+from strategy_engine.adapters.http.strategy_serialization import (
+    serialize_strategy_diagnostic_evaluation,
+    serialize_strategy_evaluation_execution,
+)
 from strategy_engine.service.wiring import ApplicationServices
 from strategy_engine.strategies.ema_pullback.composer_catalog import get_component_catalog
 
@@ -180,7 +183,30 @@ def evaluate_strategy_range(
     request: StrategyRangeRequestModel,
     app: ApplicationServices = Depends(services),
 ) -> Any:
-    return serialize_strategy_result(app.evaluate_strategy_range.execute(request.to_domain()))
+    """The mandatory execution contract -- sparse decision events, no
+    dense diagnostics (`strategy-research-execution-contract-v1`,
+    `compact-strategy-evaluation-boundary-v1`). Diagnostics are a
+    separate, explicit request: `/strategy-evaluations/range/diagnostics`.
+    """
+
+    return serialize_strategy_evaluation_execution(
+        app.evaluate_strategy_range.execute(request.to_domain())
+    )
+
+
+@router.post("/strategy-evaluations/range/diagnostics")
+def evaluate_strategy_range_diagnostics(
+    request: StrategyRangeRequestModel,
+    app: ApplicationServices = Depends(services),
+) -> Any:
+    """Dense per-bar diagnostic trace, only reachable through this
+    separate, explicitly-requested entrypoint -- never a side effect of
+    `/strategy-evaluations/range` (`compact-strategy-evaluation-
+    boundary-v1`)."""
+
+    return serialize_strategy_diagnostic_evaluation(
+        app.evaluate_strategy_range.execute_diagnostics(request.to_domain())
+    )
 
 
 @router.post("/strategy-evaluations/range-batch")
@@ -194,7 +220,7 @@ def evaluate_strategy_range_batch(
             {
                 "variant_id": outcome.variant_id,
                 "result": (
-                    serialize_strategy_result(outcome.result)
+                    serialize_strategy_evaluation_execution(outcome.result)
                     if outcome.result is not None
                     else None
                 ),

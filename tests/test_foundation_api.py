@@ -207,9 +207,9 @@ def _valid_ema_pullback_raw_spec() -> dict[str, object]:
 
 
 def test_batch_variant_outcome_result_exact_key_set() -> None:
-    # Sequencing artifact for strategy-evaluation-canonical-boundary-v1:
-    # the authoritative reference for a successful range-batch variant's
-    # embedded result shape.
+    # Authoritative reference for a successful range-batch variant's
+    # embedded result shape: the sparse execution contract
+    # (compact-strategy-evaluation-boundary-v1).
     payload = {
         "market": {
             "ticker": "BTCUSDT.P",
@@ -237,14 +237,7 @@ def test_batch_variant_outcome_result_exact_key_set() -> None:
         "strategy_id",
         "config_hash",
         "market",
-        "features",
-        "contexts",
-        "entries",
-        "potential_entries",
-        "exit_policy",
-        "component_evidence",
-        "validity",
-        "state_artifact",
+        "decision_events",
         "warnings",
     }
 

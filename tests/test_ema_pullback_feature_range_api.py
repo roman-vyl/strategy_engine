@@ -117,41 +117,38 @@ def payload() -> dict[str, object]:
     }
 
 
-def test_strategy_range_builds_plan_and_features_inside_service() -> None:
+def test_strategy_range_builds_plan_inside_service() -> None:
+    # compact-strategy-evaluation-boundary-v1: /range now returns the
+    # sparse mandatory execution contract only -- no dense
+    # features/contexts/entries/component_evidence/validity. Dense-
+    # content assertions moved to
+    # test_strategy_range_diagnostics_builds_plan_and_features below,
+    # against the separate diagnostics route.
     app_services, market_data = services()
     with TestClient(create_app(services=app_services)) as client:
         response = client.post("/v1/strategy-evaluations/range", json=payload())
     assert response.status_code == 200
     body = response.json()
-    assert body["contract_version"] == "strategy_evaluation.v1"
+    assert body["contract_version"] == "strategy_evaluation_execution.v1"
     assert body["market"]["bar_count"] == 12
     assert body["market"]["market_data_hash"] == "fixture-market-hash"
-    assert body["validity"]["stage"] == "decisions_ready"
-    assert body["validity"]["contexts_ready"] is True
-    assert body["validity"]["decisions_ready"] is True
-    assert body["validity"]["entries_ready"] is True
-    assert set(body["features"]["series"]) == {
-        "ema_close_base_2",
-        "ema_close_base_3",
-        "ema_close_base_5",
-    }
-    assert body["features"]["mappings"]["anchor_columns"]["anchor"] == "ema_close_base_3"
-    assert body["features"]["market_data_hash"] == "fixture-market-hash"
-    assert body["contexts"]["items"]["trend"]["state"][-1] == "up"
-    assert set(body["entries"]) == {"long", "short"}
-    assert body["entries"]["short"] == [False] * 12
-    assert body["potential_entries"] == {}
-    assert body["validity"]["entries_ready"] is True
-    evidence = body["component_evidence"]["direction_blockers"][0]
-    assert evidence["direction"]["component_id"] == "ema_anchor_stack_trend"
+    assert len(body["decision_events"]) == 12
+    assert all(0 <= event["bar_index"] < 12 for event in body["decision_events"])
+    # matches the pre-cutover contract's guarantee for this fixture:
+    # entries["short"] == [False] * 12 -- no event ever carries a short entry.
+    assert all(
+        event["entry"] is None or event["entry"]["side"] == "long"
+        for event in body["decision_events"]
+    )
     assert market_data.calls == 1
 
 
 def test_range_response_exact_key_set() -> None:
-    # Sequencing artifact for strategy-evaluation-canonical-boundary-v1:
-    # the authoritative reference for exactly what a successful /range
-    # response top level looks like now (no strategy_version, no
-    # instance_id).
+    # Authoritative reference for exactly what a successful /range
+    # response top level looks like now: the sparse execution contract
+    # (compact-strategy-evaluation-boundary-v1) -- no dense
+    # features/contexts/entries/potential_entries/exit_policy/
+    # component_evidence/validity/state_artifact.
     app_services, _ = services()
     with TestClient(create_app(services=app_services)) as client:
         response = client.post("/v1/strategy-evaluations/range", json=payload())
@@ -161,14 +158,48 @@ def test_range_response_exact_key_set() -> None:
         "strategy_id",
         "config_hash",
         "market",
+        "decision_events",
+        "warnings",
+    }
+
+
+def test_strategy_range_diagnostics_builds_plan_and_features() -> None:
+    app_services, market_data = services()
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/range/diagnostics", json=payload())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["contract_version"] == "strategy_diagnostic_evaluation.v1"
+    assert body["market"]["bar_count"] == 12
+    assert body["market"]["market_data_hash"] == "fixture-market-hash"
+    assert set(body["features"]["series"]) == {
+        "ema_close_base_2",
+        "ema_close_base_3",
+        "ema_close_base_5",
+    }
+    assert body["features"]["mappings"]["anchor_columns"]["anchor"] == "ema_close_base_3"
+    assert body["features"]["market_data_hash"] == "fixture-market-hash"
+    assert body["contexts"]["items"]["trend"]["state"][-1] == "up"
+    assert body["potential_entries"] == {}
+    evidence = body["component_evidence"]["direction_blockers"][0]
+    assert evidence["direction"]["component_id"] == "ema_anchor_stack_trend"
+    assert market_data.calls == 1
+
+
+def test_diagnostics_response_exact_key_set() -> None:
+    app_services, _ = services()
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/range/diagnostics", json=payload())
+    assert response.status_code == 200
+    assert set(response.json()) == {
+        "contract_version",
+        "strategy_id",
+        "config_hash",
+        "market",
         "features",
         "contexts",
-        "entries",
         "potential_entries",
-        "exit_policy",
         "component_evidence",
-        "validity",
-        "state_artifact",
         "warnings",
     }
 
@@ -206,12 +237,18 @@ def test_touch_anchor_range_adds_enabled_side_potential_prices_without_recalcula
     ]
 
     with TestClient(create_app(services=app_services)) as client:
-        response = client.post("/v1/strategy-evaluations/range", json=request)
+        execution_response = client.post("/v1/strategy-evaluations/range", json=request)
+        diagnostics_response = client.post(
+            "/v1/strategy-evaluations/range/diagnostics", json=request
+        )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert set(body["potential_entries"]) == {"long"}
-    projected = body["potential_entries"]["long"]
+    assert execution_response.status_code == 200
+    assert diagnostics_response.status_code == 200
+    execution_body = execution_response.json()
+    diagnostics_body = diagnostics_response.json()
+
+    assert set(diagnostics_body["potential_entries"]) == {"long"}
+    projected = diagnostics_body["potential_entries"]["long"]
     assert set(projected) == {"entry_price", "stop_price", "take_price"}
     assert all(len(projected[key]) == 12 for key in projected)
     assert all(
@@ -223,13 +260,17 @@ def test_touch_anchor_range_adds_enabled_side_potential_prices_without_recalcula
             strict=True,
         )
     )
+    long_entry_bar_indices = {
+        event["bar_index"]
+        for event in execution_body["decision_events"]
+        if event["entry"] is not None and event["entry"]["side"] == "long"
+    }
     assert any(
-        entry and potential is not None
-        for entry, potential in zip(
-            body["entries"]["long"], projected["entry_price"], strict=True
-        )
+        bar_index in long_entry_bar_indices and projected["entry_price"][bar_index] is not None
+        for bar_index in range(12)
     )
-    assert market_data.calls == 1
+    # market data acquired once per request -- two requests here, two calls.
+    assert market_data.calls == 2
 
 
 def test_strategy_catalog_advertises_feature_stage_not_decisions() -> None:
