@@ -114,9 +114,17 @@ illustrative shape:
 
 ```
 HistoricalExecutionProjection
+  contract_version: "strategy_evaluation_execution.v2"  # next version of
+                              # the shipped .v1 sparse envelope family
+                              # (strategy_serialization.py); normative on
+                              # the wire regardless of which checkpoint
+                              # first serializes it -- see
+                              # strategy-research-execution-contract-v1
   provenance:
     strategy_id, config_hash, market_data_hash
-    market (ticker/timeframe), requested_range
+    market (ticker/base_timeframe), requested_range   # bar_count and
+                              # market_data_hash nest inside `market` on
+                              # the wire, matching the .v1 envelope
     bar_count
   entry_opportunities: ExecutableEntryOpportunity[]
   signal_exit_events: SignalExitProjection   # indexed, see below

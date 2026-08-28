@@ -9,6 +9,25 @@ attribution semantics of the reference (old-monolith) execution model.
 The range contract SHALL include strategy and market identity, aligned
 range, bar count, and market-data hash.
 
+The `HistoricalExecutionProjection` wire envelope SHALL carry
+`contract_version: "strategy_evaluation_execution.v2"` — the next
+version in the same envelope family as the already-shipped sparse
+`StrategyDecisionEvent` contract (`contract_version:
+"strategy_evaluation_execution.v1"`, `strategy_serialization.py
+::serialize_strategy_evaluation_execution`), not a new unversioned or
+differently-named contract. `market{ticker, base_timeframe, from_ms,
+to_ms, bar_count, market_data_hash}` SHALL be nested exactly as the
+`.v1` envelope already nests it — `bar_count`/`market_data_hash` live
+inside `market`, not as top-level siblings, and the timeframe key is
+`base_timeframe` — so a `.v1`-aware consumer's existing envelope-parsing
+convention (nested `market`, `base_timeframe` key) carries over
+unchanged to `.v2`; only the payload past `market`/`warnings` differs.
+This version identifier is normative on the wire regardless of which
+checkpoint (I1's pure builder, I7's route cutover) first serializes it —
+a consumer MAY bind to `"strategy_evaluation_execution.v2"` before
+Engine's route serializes it, since the contract, not the route, is
+what is versioned here.
+
 Entry decisions SHALL be represented as **executable entry
 opportunities** — a sparse list of `(bar_index, side)` positions where
 `entry_allowed AND protection_ready` both hold, one opportunity per bar
@@ -229,6 +248,16 @@ next-bar effective timing.
   long and a short executable entry opportunity on the same bar
 - **THEN** evaluation SHALL fail with an explicit error rather than
   silently emitting one side or an ambiguous opportunity.
+
+#### Scenario: Wire envelope carries the versioned contract identifier
+
+- **WHEN** a `HistoricalExecutionProjection` response is inspected
+- **THEN** its `contract_version` field is exactly
+  `"strategy_evaluation_execution.v2"`
+- **AND** `market{ticker, base_timeframe, from_ms, to_ms, bar_count,
+  market_data_hash}` is nested the same way the shipped `.v1` envelope
+  already nests it — `bar_count`/`market_data_hash` are not top-level
+  siblings of `market`.
 
 #### Scenario: No mandatory timestamp array
 
