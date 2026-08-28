@@ -197,7 +197,7 @@ do not start I1 work as a consequence of merely reading this list.
       validate --strict` green in both repos; spec deltas alone (no
       re-reading the audit report) are enough to derive I1's builder
       shape and I2/I5's parity test list.
-- [ ] **I1 — Engine: Projection Model + Pure Builder.** New domain types
+- [x] **I1 — Engine: Projection Model + Pure Builder.** New domain types
       (`HistoricalExecutionProjection`, `ExecutableEntryOpportunity`,
       `SignalExitProjection`, `SignalExitEvent`, or whatever names this
       task finalizes) plus a pure builder

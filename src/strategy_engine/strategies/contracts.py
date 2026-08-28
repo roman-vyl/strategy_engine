@@ -143,6 +143,91 @@ class StrategyDiagnosticEvaluation:
 
 
 @dataclass(frozen=True, slots=True)
+class ExitAttribution:
+    """Shared attribution shape across every historical execution fact
+    (`compact-strategy-evaluation-boundary-v1`, I0 corrective pass).
+    Canonical `exit_kind` values: `"stop_loss"` for `initial_stop`,
+    `"take_profit"` for `initial_take`, `"signal"` for a signal-exit
+    candidate. No `layer` field -- Research derives the canonical
+    constant `"exit_policy"`, this is not an independent Engine
+    decision."""
+
+    rule_id: str
+    component_id: str
+    exit_kind: Literal["stop_loss", "take_profit", "signal"]
+
+
+@dataclass(frozen=True, slots=True)
+class InitialProtectionLeg:
+    """One resolved, attributed protection leg (stop or take) at an
+    entry opportunity's bar. Non-null legs are always fully populated --
+    there is no bare ratio without attribution."""
+
+    ratio: float
+    attribution: ExitAttribution
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutableEntryOpportunity:
+    """`entry_allowed AND protection_ready`, collapsed -- `stop_ready`
+    never exists as its own field anywhere in this contract.
+    `locked_exit_profile` is the profile active at this bar (the
+    candidate lock value if a caller treats this bar as the real entry)
+    -- Engine has no trade-lifecycle state and cannot itself prove this
+    stays locked across a trade's life; that's a Research Service
+    concern. `initial_stop`/`initial_take` are independently nullable --
+    a strategy MAY be take-only or stop-only for the active
+    always_on+profile combination."""
+
+    bar_index: int
+    side: Literal["long", "short"]
+    locked_exit_profile: str
+    initial_stop: InitialProtectionLeg | None
+    initial_take: InitialProtectionLeg | None
+
+
+@dataclass(frozen=True, slots=True)
+class SignalExitCandidate:
+    attribution: ExitAttribution
+
+
+@dataclass(frozen=True, slots=True)
+class SignalExitEvent:
+    bar_index: int
+    candidates: tuple[SignalExitCandidate, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SignalExitProjection:
+    """Per-side, per-profile sparse event lists -- a caller holding a
+    locked profile for an open position looks up only that profile's
+    own event list for bars after entry, never a flattened
+    current-bar-profile series."""
+
+    long: dict[str, tuple[SignalExitEvent, ...]]
+    short: dict[str, tuple[SignalExitEvent, ...]]
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalExecutionProjection:
+    """The target mandatory execution contract
+    (`compact-strategy-evaluation-boundary-v1`), superseding
+    `StrategyEvaluationExecution`/`StrategyDecisionEvent`. Not yet wired
+    to any route -- I1 builds this as a pure, additive builder; route
+    cutover is I7."""
+
+    strategy_id: str
+    config_hash: str
+    market: MarketStream
+    requested_range: TimeRange
+    market_data_hash: str
+    bar_count: int
+    entry_opportunities: tuple[ExecutableEntryOpportunity, ...]
+    signal_exit_events: SignalExitProjection
+    warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class StrategyRangeResult:
     strategy_id: str
     config_hash: str
