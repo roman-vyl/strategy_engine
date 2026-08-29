@@ -225,15 +225,37 @@ do not start I1 work as a consequence of merely reading this list.
       state) and is deferred to `research_service`'s I4/I5. Gate: zero
       semantic diffs vs old BBB on the adversarial spec, at Engine level.
 - [ ] **I7 (Engine's share) — Coordinated Cutover, single-instance
-      only.** Switch `/range` (not `/range-batch`) to the I1/I2 model,
-      coordinated with `research_service`'s same-checkpoint work (old
-      Research cannot parse the new contract, must land together).
-      `/range-batch` may gain schema compatibility if technically
-      necessary but is NOT thereby production-approved — that's I8.
-      Mandatory regression fence: `strategy_runtime` live-entry/
-      open-trade behavioral tests green, unchanged; public indicator API
-      tests green, unchanged. Gate: N=1 production path green end to
-      end against the live stack; Runtime live regression suite green.
+      only.** Normative requirements: `strategy-research-execution-
+      contract-v1` (amended, this revision). Switch `/range` (not
+      `/range-batch`) to the I1/I2 model, coordinated with
+      `research_service`'s same-checkpoint work (old Research cannot
+      parse the new contract, must land together). `/range-batch` may
+      gain schema compatibility if technically necessary but is NOT
+      thereby production-approved — that's I8. Mandatory regression
+      fence: `strategy_runtime` live-entry/open-trade behavioral tests
+      green, unchanged; public indicator API tests green, unchanged.
+      OpenSpec-only this pass — no application code. Sub-tasks:
+  - [x] **I7.A — EXPLORE.** Confirmed via `strategy_routes.py`: `/range`
+        serves sparse `.v1` via `serialize_strategy_evaluation_execution`;
+        `/range-batch`, `/range/diagnostics`, and all live routes
+        (`/live-entry`, `/open-trade`, `/managed-replay`) are fully
+        separate application services, unaffected by construction.
+        `evaluate_range.py`/`ports.py` confirmed no existing method
+        returns `HistoricalExecutionProjection` — needs an additive
+        method.
+  - [x] **I7.B — Spec amended.** MODIFIED requirement added to
+        `strategy-research-execution-contract-v1`: `/range` serves v2
+        only after cutover, `/range-batch` explicitly unchanged, new
+        additive `StrategyEvaluator` Protocol method, legacy `.v1`/dense
+        methods stay private (not deleted), live routes explicitly
+        unaffected, coordinated-rollback note referencing
+        `research_service`'s `research-production-cutover-v1`.
+  - [ ] **I7.C — VERIFY.** Re-check against code for newly surfaced
+        ambiguity; iterate until deterministic.
+      Gate: N=1 production path green end to end against the live stack;
+      Runtime live regression suite green (deferred to actual I7
+      implementation, not this OpenSpec pass). This OpenSpec-only pass's
+      own gate: `openspec validate --strict` green, no `src`/`tests` diff.
 - [ ] **I8 (Engine's share) — Batch Lifetime Redesign.** Only after I7.
       Re-litigate `/range-batch`'s one-big-response shape — the only
       required property is shared market-frame acquisition, not

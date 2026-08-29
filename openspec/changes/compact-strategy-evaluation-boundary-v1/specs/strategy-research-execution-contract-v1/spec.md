@@ -387,3 +387,46 @@ capabilities).
   inspected
 - **THEN** its `series` values remain normalized-decimal-text strings or
   `null`, unaffected by this capability's internal native computation.
+
+## MODIFIED Requirements
+
+### Requirement: Production /range route contract (I7 cutover)
+
+After I7's coordinated cutover, `POST /strategy-evaluations/range`
+SHALL serve `contract_version: "strategy_evaluation_execution.v2"` (the
+`HistoricalExecutionProjection` envelope) as its only response shape.
+The superseded sparse `.v1` `StrategyEvaluationExecution` response
+SHALL become unreachable through this route, though `evaluate_
+execution()`/`StrategyRangeResult`/`evaluate()` SHALL NOT be deleted —
+they remain private, in-process-only methods for Engine's own test
+suite. `POST /strategy-evaluations/range-batch` SHALL remain unchanged
+— it continues to serve the legacy `.v1` shape; this route's cutover is
+explicitly out of scope for I7 (owned by I8). `POST /strategy-
+evaluations/range/diagnostics` and all live-facing routes (`/live-
+entry`, `/open-trade`, `/managed-replay`) SHALL be unaffected by this
+requirement, since none of them share code with `/range`'s serializer.
+
+`StrategyEvaluator` (`strategies/ports.py`) SHALL gain one additive
+Protocol method returning `HistoricalExecutionProjection`, wired to
+`/range`. This is additive — no existing Protocol method is removed or
+changes signature.
+
+Coordinated rollback: because a pre-I7 Research build cannot parse this
+route's post-cutover response, and a post-I7 Research build's consumer
+is not exercised against the pre-cutover response, this route's cutover
+SHALL be deployed and rolled back only together with `research_
+service`'s matching cutover, per that repo's `research-production-
+cutover-v1` capability — never independently.
+
+#### Scenario: /range serves v2 only after cutover
+
+- **WHEN** a request is sent to `POST /strategy-evaluations/range`
+  after I7
+- **THEN** the response's `contract_version` is exactly
+  `"strategy_evaluation_execution.v2"`
+
+#### Scenario: /range-batch is untouched by this cutover
+
+- **WHEN** I7 is deployed
+- **THEN** `POST /strategy-evaluations/range-batch`'s request/response
+  shapes and serializer are unchanged from before I7.
