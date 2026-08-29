@@ -278,16 +278,31 @@ do not start I1 work as a consequence of merely reading this list.
         passed — see `research_service`'s I7.G for the full chain.
         Public indicator API: this repo's own full test suite (including
         `/v1/indicator-evaluations/range` tests) ran green, unaffected.
-        `strategy_runtime` is a separate repository/service not present
-        in this workspace — its own live regression suite was not run
-        from here; the claim that it is unaffected rests on construction
-        only (`/live-entry`/`/open-trade`/`/managed-replay` share no code
-        with `/range`'s serializer or new application method, confirmed
-        in I7.A), not on an executed regression run. Flagged here rather
-        than silently assumed equivalent to "PASSED".
+  - [x] **I7.F — `strategy_runtime` live-entry/open-trade regression
+        fence (executed, correcting I7.E's earlier "not run from here"
+        note).** `strategy_runtime` is present locally
+        (`/Users/mcroma/BBB_project/strategy_runtime`, a separate repo).
+        Ran its full test suite unmodified: `tests/contract/
+        strategy_engine/test_live_entry_client.py`/`test_open_trade_
+        client.py` (91 tests, mock-transport wire-shape/behavior
+        contract for `/live-entry`/`/open-trade`) — **green**; full repo
+        suite — **1169 passed**. Additionally probed the two routes
+        directly against a fresh, current-code local Engine instance
+        (real process, current committed I7 state, not the shared
+        `bbb_stack` deployment): `POST /v1/strategy-evaluations/
+        live-entry` returned `{"desired_entry": null}` (matches
+        `DesiredEntryResponseModel`'s nullable-desired-entry contract);
+        `POST /v1/strategy-evaluations/open-trade` returned
+        `{"desired_protection": {...}, "close_signal": {...},
+        "diagnostics": {...}}` (matches `OpenTradeProjectionResponseModel`
+        exactly). No production code changed for this check —
+        read/probe-only, consistent with I7.A's by-construction finding
+        that these routes share no code with `/range`.
       Gate: N=1 production path green end to end against the live
-      stack — **PASSED**. `openspec validate --strict`/`--all --strict`
-      green; `pytest`/`ruff check`/`mypy src` green.
+      stack — **PASSED**; `strategy_runtime` live-entry/open-trade
+      regression fence — **PASSED (I7.F)**. `openspec validate
+      --strict`/`--all --strict` green; `pytest`/`ruff check`/
+      `mypy src` green (this repo and `strategy_runtime`).
 - [ ] **I8 (Engine's share) — Batch Lifetime Redesign.** Only after I7.
       Re-litigate `/range-batch`'s one-big-response shape — the only
       required property is shared market-frame acquisition, not
