@@ -473,3 +473,54 @@ cutover-v1` capability — never independently.
 - **AND** `/range-batch`'s route handler (via `EvaluateStrategyRangeBatch`)
   calls `EvaluateStrategyRange.execute()` exactly as it does today,
   never the new projection method.
+
+### Requirement: Production /range-batch route contract (I8 cutover)
+
+After I8's batch lifetime redesign, `POST /strategy-evaluations/
+range-batch` SHALL serve a streamed `.v2` sequence, not the buffered
+`.v1` `decision_events` array I7 left it on. `EvaluateStrategyRangeBatch
+.execute()` SHALL keep its existing shared-once acquisition (one
+`self._market_data.load_range(...)` call per batch request — unchanged)
+and sequential per-variant loop (unchanged), but SHALL call each
+variant's `evaluate_execution_projection()` (the same `.v2` method
+`/range` calls, I7) instead of `evaluate_execution()`, and SHALL emit
+each variant's outcome as it is produced — one `HistoricalExecution
+Projection` `.v2` envelope (or a per-variant error object) per stream
+element (newline-delimited JSON over HTTP chunked transfer, or an
+equivalent streaming transport) — rather than accumulating an
+`outcomes` list and returning one JSON array. Engine SHALL NOT hold
+more than one variant's native frame/projection resident at a time;
+each is serialized, written, and released before the next variant is
+evaluated.
+
+A terminal failure of the shared acquisition step (before any variant
+is evaluated) SHALL fail the whole request, exactly as today. A
+failure evaluating one variant SHALL be emitted as that variant's error
+element in the stream and SHALL NOT terminate the stream or prevent
+later variants from being evaluated and emitted.
+
+`EvaluateStrategyRange.execute()`/`evaluate_execution()`/
+`serialize_strategy_evaluation_execution` remain unmodified and
+unrouted after this cutover — nothing else reaches them once
+`/range-batch` no longer calls `execute()`; they are retained as
+private, in-process-only code (Engine's own test suite, any future
+regression comparison), exactly like `evaluate()`/`StrategyRangeResult`
+already are.
+
+#### Scenario: /range-batch streams .v2, one shared acquisition, no N-aggregate
+
+- **WHEN** a real batch request with N variants is sent to `POST
+  /strategy-evaluations/range-batch` after I8
+- **THEN** Strategy Engine's market-data port is called exactly once
+  for the whole request
+- **AND** the response is a streamed sequence of N `.v2` elements, not
+  one JSON array containing all N results
+- **AND** at no point does the Engine process hold more than one
+  variant's projection resident.
+
+#### Scenario: One variant's failure does not stop the stream
+
+- **WHEN** one variant fails evaluation after shared acquisition
+  succeeded
+- **THEN** that variant's stream element reports the error
+- **AND** every subsequent variant is still evaluated and emitted.

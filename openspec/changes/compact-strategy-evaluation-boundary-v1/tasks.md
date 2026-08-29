@@ -309,19 +309,28 @@ do not start I1 work as a consequence of merely reading this list.
       necessarily one HTTP response for N evaluations. Gate: N=1/2/4/11
       benchmark, peak RSS approximately constant in N.
       **I8.Engine-note (recorded jointly with `research_service`'s
-      I8.A EXPLORE, not yet a spec change):** confirmed against the
-      real running Engine that `/range-batch` still serves
-      `contract_version: "strategy_evaluation_execution.v1"` (sparse
-      `decision_events`) — a real, pre-existing incompatibility with
-      Research's dense-shape parser, unrelated to memory. `research_
-      service`'s I8 draft (`research-batch-lifecycle-v1`) resolves this
-      by dropping Research's dependency on `/range-batch` entirely — N
-      per-candidate real `/range` (`.v2`) calls instead, sharing only
-      market-data acquisition. Under that design, Engine needs no route
-      change for I8: `/range-batch` may remain present, unmodified, and
-      simply unused by Research — its retirement (if any) is a separate
-      decision for this repo's own I8 spec pass, not required by
-      `research_service`'s I8.
+      I8.A EXPLORE, corrected after I8.C):** confirmed against the real
+      running Engine that `/range-batch` still serves `contract_version:
+      "strategy_evaluation_execution.v1"` (sparse `decision_events`) —
+      a real, pre-existing incompatibility with Research's dense-shape
+      parser, unrelated to memory. First draft assumed Engine needed no
+      change (Research would call `/range` N times instead). That was
+      blocked: `EvaluateIndicatorRange._prepare()` always re-fetches via
+      `self._market_data.load_range(...)` when `request.market_frame is
+      None`, so `/range` has no shared-acquisition transport — N calls
+      to it would mean N separate Engine-side MDS reads, violating the
+      Master Plan's shared-L0 invariant. Corrected design (`research_
+      service`'s `research-batch-lifecycle-v1`, "Streamed shared-once
+      acquisition"): `EvaluateStrategyRangeBatch.execute()` already
+      fetches the shared `MarketFrame` once and reuses it across a
+      sequential per-variant loop, in-process (confirmed by reading it)
+      — this repo's I8 work is cutting that loop over from the old
+      `.execute()` (`.v1`) to the `.v2` projection path, and changing
+      `/range-batch`'s response from one buffered JSON array to a
+      streamed (NDJSON/chunked) sequence so Engine never holds more than
+      one variant's projection resident. This IS Engine-side I8 work,
+      not a no-op — see this repo's own I8 spec pass for the normative
+      requirement.
 
 I3/I4/I5/I6 are primarily `research_service`-owned (see that repo's
 tasks.md) — I5's end-to-end proof and I7's cutover are joint gates
