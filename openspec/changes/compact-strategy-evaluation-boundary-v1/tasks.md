@@ -224,7 +224,7 @@ do not start I1 work as a consequence of merely reading this list.
       real trade" is explicitly NOT provable by Engine alone (no trade
       state) and is deferred to `research_service`'s I4/I5. Gate: zero
       semantic diffs vs old BBB on the adversarial spec, at Engine level.
-- [ ] **I7 (Engine's share) — Coordinated Cutover, single-instance
+- [x] **I7 (Engine's share) — Coordinated Cutover, single-instance
       only.** Normative requirements: `strategy-research-execution-
       contract-v1` (amended, this revision). Switch `/range` (not
       `/range-batch`) to the I1/I2 model, coordinated with
@@ -234,7 +234,7 @@ do not start I1 work as a consequence of merely reading this list.
       thereby production-approved — that's I8. Mandatory regression
       fence: `strategy_runtime` live-entry/open-trade behavioral tests
       green, unchanged; public indicator API tests green, unchanged.
-      OpenSpec-only this pass — no application code. Sub-tasks:
+      **I7_GATE_PASSED.** Sub-tasks:
   - [x] **I7.A — EXPLORE.** Confirmed via `strategy_routes.py`: `/range`
         serves sparse `.v1` via `serialize_strategy_evaluation_execution`;
         `/range-batch`, `/range/diagnostics`, and all live routes
@@ -250,12 +250,44 @@ do not start I1 work as a consequence of merely reading this list.
         methods stay private (not deleted), live routes explicitly
         unaffected, coordinated-rollback note referencing
         `research_service`'s `research-production-cutover-v1`.
-  - [ ] **I7.C — VERIFY.** Re-check against code for newly surfaced
-        ambiguity; iterate until deterministic.
-      Gate: N=1 production path green end to end against the live stack;
-      Runtime live regression suite green (deferred to actual I7
-      implementation, not this OpenSpec pass). This OpenSpec-only pass's
-      own gate: `openspec validate --strict` green, no `src`/`tests` diff.
+  - [x] **I7.C — VERIFY.** Re-checked against code; found and fixed one
+        real blocker (shared with `research_service`'s I7.D):
+        `EvaluateStrategyRangeBatch` shares `EvaluateStrategyRange
+        .execute()` with `/range` — repurposing it for `.v2` would have
+        silently switched `/range-batch` too. Corrected via a new,
+        separate `execute_projection()` method.
+  - [x] **I7.D — Real cutover implementation.**
+        `EmaPullbackRangeEvaluator.evaluate_execution_projection()`
+        (native computation + I1's `build_historical_execution_
+        projection`), `StrategyEvaluator.evaluate_execution_projection`
+        (additive Protocol method), `EvaluateStrategyRange
+        .execute_projection()`, `serialize_historical_execution_
+        projection()` (promoted from the I5 proof-only script), and
+        `/strategy-evaluations/range` wired to all of it. `execute()`/
+        `evaluate_execution()`/`serialize_strategy_evaluation_execution`
+        completely unmodified, still the path `/range-batch` reaches.
+        Updated the 3 `/range` API tests asserting the superseded `.v1`
+        shape. `ruff`/`mypy src` green; full test suite green.
+  - [x] **I7.E — Live N=1 E2E gate (joint with `research_service`).**
+        Fresh local Engine process (current code, not the shared
+        `bbb_stack` docker deployment) against the real, already-running
+        Market Data Service: confirmed `/range` serves
+        `contract_version: "strategy_evaluation_execution.v2"` on a real
+        request. Full joint gate (real Research → this Engine → real
+        execution/persistence/BFF-readback/diagnostics) executed and
+        passed — see `research_service`'s I7.G for the full chain.
+        Public indicator API: this repo's own full test suite (including
+        `/v1/indicator-evaluations/range` tests) ran green, unaffected.
+        `strategy_runtime` is a separate repository/service not present
+        in this workspace — its own live regression suite was not run
+        from here; the claim that it is unaffected rests on construction
+        only (`/live-entry`/`/open-trade`/`/managed-replay` share no code
+        with `/range`'s serializer or new application method, confirmed
+        in I7.A), not on an executed regression run. Flagged here rather
+        than silently assumed equivalent to "PASSED".
+      Gate: N=1 production path green end to end against the live
+      stack — **PASSED**. `openspec validate --strict`/`--all --strict`
+      green; `pytest`/`ruff check`/`mypy src` green.
 - [ ] **I8 (Engine's share) — Batch Lifetime Redesign.** Only after I7.
       Re-litigate `/range-batch`'s one-big-response shape — the only
       required property is shared market-frame acquisition, not
