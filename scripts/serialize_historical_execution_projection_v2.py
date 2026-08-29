@@ -28,7 +28,7 @@ Pipeline -- real production computation, nothing reimplemented:
                           # contract_version = "strategy_evaluation_execution.v2"
 
 Usage:
-    python scripts/i5_serialize_projection_v2.py \
+    python scripts/serialize_historical_execution_projection_v2.py \
         --spec path/to/raw_spec.json \
         --strategy-id ema_pullback \
         --ticker BTCUSDT.P --timeframe 5m \
