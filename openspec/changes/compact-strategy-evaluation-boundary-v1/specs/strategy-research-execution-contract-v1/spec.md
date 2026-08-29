@@ -395,21 +395,51 @@ capabilities).
 After I7's coordinated cutover, `POST /strategy-evaluations/range`
 SHALL serve `contract_version: "strategy_evaluation_execution.v2"` (the
 `HistoricalExecutionProjection` envelope) as its only response shape.
-The superseded sparse `.v1` `StrategyEvaluationExecution` response
-SHALL become unreachable through this route, though `evaluate_
-execution()`/`StrategyRangeResult`/`evaluate()` SHALL NOT be deleted —
-they remain private, in-process-only methods for Engine's own test
-suite. `POST /strategy-evaluations/range-batch` SHALL remain unchanged
-— it continues to serve the legacy `.v1` shape; this route's cutover is
-explicitly out of scope for I7 (owned by I8). `POST /strategy-
-evaluations/range/diagnostics` and all live-facing routes (`/live-
-entry`, `/open-trade`, `/managed-replay`) SHALL be unaffected by this
-requirement, since none of them share code with `/range`'s serializer.
+
+**`EvaluateStrategyRange.execute()` SHALL NOT be repurposed to return
+this shape.** Confirmed via code: `EvaluateStrategyRangeBatch`
+(`strategies/application/evaluate_range_batch.py`) holds an
+`EvaluateStrategyRange` instance and calls this exact same
+`.execute()` method, per candidate, inside its own loop
+(`self._evaluator.execute(...)`), and `/strategy-evaluations/range-
+batch`'s route serializes its outcomes with the unchanged
+`serialize_strategy_evaluation_execution` (sparse `.v1`). Switching
+`EvaluateStrategyRange.execute()`'s return shape would therefore
+silently switch `/range-batch` to `.v2` too, violating I7's core
+invariant that batch is untouched. Instead:
+
+- The Engine application layer SHALL gain a NEW, separate application-
+  service method (e.g. `EvaluateStrategyRange.execute_projection()`, or
+  an equivalent new class) that calls a new evaluator method (e.g.
+  `evaluate_execution_projection()`) built on
+  `build_historical_execution_projection` (I1). `POST /strategy-
+  evaluations/range`'s route handler SHALL call this new method, not
+  `execute()`.
+- `EvaluateStrategyRange.execute()` and everything it currently calls
+  (`evaluator.evaluate_execution()`, `StrategyEvaluationExecution`,
+  `serialize_strategy_evaluation_execution`) SHALL remain completely
+  unmodified, and SHALL continue to be the method `/strategy-
+  evaluations/range-batch` (via `EvaluateStrategyRangeBatch`) calls —
+  this method stays reachable via HTTP, through `/range-batch`, not
+  merely retained as a private in-process fallback.
+- `evaluate()`/`StrategyRangeResult` (the original dense contract) SHALL
+  remain private/unrouted, as they already are today — unaffected by
+  I7 either way.
+
+`POST /strategy-evaluations/range-batch` SHALL remain unchanged in
+route, application-service call target, and serializer — this route's
+cutover is explicitly out of scope for I7 (owned by I8). `POST
+/strategy-evaluations/range/diagnostics` and all live-facing routes
+(`/live-entry`, `/open-trade`, `/managed-replay`) SHALL be unaffected by
+this requirement, since none of them share code with `/range`'s new
+projection method or with `EvaluateStrategyRange.execute()`.
 
 `StrategyEvaluator` (`strategies/ports.py`) SHALL gain one additive
-Protocol method returning `HistoricalExecutionProjection`, wired to
-`/range`. This is additive — no existing Protocol method is removed or
-changes signature.
+Protocol method returning `HistoricalExecutionProjection` (e.g.
+`evaluate_execution_projection`), wired only to `/range`'s new
+application-service method. This is additive — no existing Protocol
+method (`evaluate`, `evaluate_execution`, `evaluate_diagnostics`) is
+removed, renamed, or changes signature or return shape.
 
 Coordinated rollback: because a pre-I7 Research build cannot parse this
 route's post-cutover response, and a post-I7 Research build's consumer
@@ -429,4 +459,17 @@ cutover-v1` capability — never independently.
 
 - **WHEN** I7 is deployed
 - **THEN** `POST /strategy-evaluations/range-batch`'s request/response
-  shapes and serializer are unchanged from before I7.
+  shapes and serializer are unchanged from before I7
+- **AND** it still reaches `EvaluateStrategyRange.execute()` →
+  `evaluate_execution()` → `serialize_strategy_evaluation_execution()`
+  exactly as before — this HTTP path to the sparse `.v1` shape remains
+  reachable, not merely retained as unreachable/private code.
+
+#### Scenario: /range and /range-batch call different application methods
+
+- **WHEN** I7 is deployed
+- **THEN** `/range`'s route handler calls the new projection method
+  (e.g. `execute_projection()`), never `EvaluateStrategyRange.execute()`
+- **AND** `/range-batch`'s route handler (via `EvaluateStrategyRangeBatch`)
+  calls `EvaluateStrategyRange.execute()` exactly as it does today,
+  never the new projection method.
