@@ -244,7 +244,7 @@ I3/I4/I5/I6 are primarily `research_service`-owned (see that repo's
 tasks.md) — I5's end-to-end proof and I7's cutover are joint gates
 tracked in both repos' task lists.
 
-- [ ] **I5.Engine — proof-only v2 serializer (joint gate, Engine-owned
+- [x] **I5.Engine — proof-only v2 serializer (joint gate, Engine-owned
       slice).** I5 explore found a real gap: no function anywhere
       serializes a `HistoricalExecutionProjection` into the
       `contract_version: "strategy_evaluation_execution.v2"` JSON
