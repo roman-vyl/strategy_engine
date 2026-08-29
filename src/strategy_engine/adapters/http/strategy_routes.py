@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
 from strategy_engine.adapters.http.dependencies import services
 from strategy_engine.adapters.http.models import (
@@ -24,9 +26,9 @@ from strategy_engine.adapters.http.models import (
     StrategyRangeRequestModel,
 )
 from strategy_engine.adapters.http.strategy_serialization import (
+    serialize_batch_variant_outcome,
     serialize_historical_execution_projection,
     serialize_strategy_diagnostic_evaluation,
-    serialize_strategy_evaluation_execution,
 )
 from strategy_engine.service.wiring import ApplicationServices
 from strategy_engine.strategies.ema_pullback.composer_catalog import get_component_catalog
@@ -220,22 +222,27 @@ def evaluate_strategy_range_diagnostics(
 def evaluate_strategy_range_batch(
     request: StrategyRangeBatchRequestModel,
     app: ApplicationServices = Depends(services),
-) -> dict[str, object]:
+) -> StreamingResponse:
+    """Streamed `.v2` sequence (I8, `compact-strategy-evaluation-
+    boundary-v1`) -- one `{variant_id, result, error}` newline-delimited
+    JSON object per variant, not a buffered `.v1` array. `execute()`
+    below runs shared market-data acquisition/validation synchronously,
+    before this function returns -- a terminal failure there raises here,
+    normally, before any streaming response has begun (the not-yet-
+    started generator it returns on success is only then handed to
+    `StreamingResponse`, which is what actually drives per-variant
+    evaluation as the client reads)."""
+
     outcomes = app.evaluate_strategy_range_batch.execute(request.to_domain())
-    return {
-        "variants": [
-            {
-                "variant_id": outcome.variant_id,
-                "result": (
-                    serialize_strategy_evaluation_execution(outcome.result)
-                    if outcome.result is not None
-                    else None
-                ),
-                "error": outcome.error,
-            }
-            for outcome in outcomes
-        ]
-    }
+
+    def body() -> Any:
+        for outcome in outcomes:
+            element = serialize_batch_variant_outcome(
+                outcome.variant_id, outcome.result, outcome.error
+            )
+            yield (json.dumps(element) + "\n").encode("utf-8")
+
+    return StreamingResponse(body(), media_type="application/x-ndjson")
 
 
 @router.post(

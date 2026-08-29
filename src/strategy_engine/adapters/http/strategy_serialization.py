@@ -177,6 +177,25 @@ def serialize_historical_execution_projection(
     }
 
 
+def serialize_batch_variant_outcome(
+    variant_id: str,
+    result: HistoricalExecutionProjection | None,
+    error: dict[str, object] | None,
+) -> dict[str, object]:
+    """One `/strategy-evaluations/range-batch` streamed element (I8,
+    `compact-strategy-evaluation-boundary-v1`): `{variant_id, result,
+    error}`, `variant_id` always present, exactly one of `result`/`error`
+    non-null. `result`, when present, is the unwrapped canonical `.v2`
+    envelope -- the same shape `serialize_historical_execution_projection`
+    produces for `/range`, not a batch-specific reduction of it."""
+
+    return {
+        "variant_id": variant_id,
+        "result": serialize_historical_execution_projection(result) if result is not None else None,
+        "error": error,
+    }
+
+
 def serialize_strategy_diagnostic_evaluation(
     result: StrategyDiagnosticEvaluation,
 ) -> dict[str, object]:

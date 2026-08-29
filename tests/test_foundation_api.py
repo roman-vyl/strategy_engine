@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
@@ -177,7 +178,7 @@ def test_batch_preserves_variant_order_and_error_identity() -> None:
     with TestClient(create_app(services=_services_with_fake_market_data())) as client:
         response = client.post("/v1/strategy-evaluations/range-batch", json=payload)
         assert response.status_code == 200
-        variants = response.json()["variants"]
+        variants = [json.loads(line) for line in response.text.splitlines() if line]
         assert [item["variant_id"] for item in variants] == ["a", "b"]
         assert all(item["error"]["error"] == "invalid_request" for item in variants)
 
@@ -207,9 +208,10 @@ def _valid_ema_pullback_raw_spec() -> dict[str, object]:
 
 
 def test_batch_variant_outcome_result_exact_key_set() -> None:
-    # Authoritative reference for a successful range-batch variant's
-    # embedded result shape: the sparse execution contract
-    # (compact-strategy-evaluation-boundary-v1).
+    # Authoritative reference for a successful range-batch stream
+    # element's shape: {variant_id, result, error}, result being the
+    # canonical .v2 HistoricalExecutionProjection envelope, unwrapped
+    # (compact-strategy-evaluation-boundary-v1, I8).
     payload = {
         "market": {
             "ticker": "BTCUSDT.P",
@@ -230,14 +232,16 @@ def test_batch_variant_outcome_result_exact_key_set() -> None:
     with TestClient(create_app(services=_services_with_fake_market_data())) as client:
         response = client.post("/v1/strategy-evaluations/range-batch", json=payload)
     assert response.status_code == 200
-    variants = response.json()["variants"]
+    variants = [json.loads(line) for line in response.text.splitlines() if line]
+    assert set(variants[0]) == {"variant_id", "result", "error"}
     assert variants[0]["error"] is None
     assert set(variants[0]["result"]) == {
         "contract_version",
         "strategy_id",
         "config_hash",
         "market",
-        "decision_events",
+        "entry_opportunities",
+        "signal_exit_events",
         "warnings",
     }
 

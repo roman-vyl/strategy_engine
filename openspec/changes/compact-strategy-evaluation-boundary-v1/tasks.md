@@ -303,11 +303,10 @@ do not start I1 work as a consequence of merely reading this list.
       regression fence — **PASSED (I7.F)**. `openspec validate
       --strict`/`--all --strict` green; `pytest`/`ruff check`/
       `mypy src` green (this repo and `strategy_runtime`).
-- [ ] **I8 (Engine's share) — Batch Lifetime Redesign.** Only after I7.
+- [x] **I8 (Engine's share) — Batch Lifetime Redesign.** Only after I7.
       Re-litigate `/range-batch`'s one-big-response shape — the only
       required property is shared market-frame acquisition, not
-      necessarily one HTTP response for N evaluations. Gate: N=1/2/4/11
-      benchmark, peak RSS approximately constant in N.
+      necessarily one HTTP response for N evaluations. **I8_GATE_PASSED.**
       **I8.Engine-note (recorded jointly with `research_service`'s
       I8.A EXPLORE, corrected after I8.C):** confirmed against the real
       running Engine that `/range-batch` still serves `contract_version:
@@ -331,6 +330,45 @@ do not start I1 work as a consequence of merely reading this list.
       one variant's projection resident. This IS Engine-side I8 work,
       not a no-op — see this repo's own I8 spec pass for the normative
       requirement.
+      **I8.Engine-fixes (pre-APPLY review):** stream element shape fixed
+      to normative `{variant_id, result, error}`; `EvaluateStrategyRange
+      Batch` confirmed to call `EvaluateStrategyRange.execute_projection()`
+      (the application-layer method, not an evaluator's method directly);
+      shared acquisition/validation confirmed to complete, synchronously,
+      before the returned generator is ever iterated (a plain function
+      returning a not-yet-started generator, not a generator function
+      itself, so a failure there raises immediately, before any
+      streaming response begins).
+      **I8.Engine-implementation:** `EvaluateStrategyRangeBatch.execute()`
+      now runs shared acquisition/validation synchronously and returns
+      `self._stream_variants(request, market_frame)` (a separate
+      generator method, not itself a generator function on `execute`) —
+      the per-variant loop calls `EvaluateStrategyRange
+      .execute_projection()` and yields one `BatchVariantOutcome` per
+      variant instead of accumulating a list.
+      `serialize_batch_variant_outcome()` added
+      (`adapters/http/strategy_serialization.py`); `/strategy-
+      evaluations/range-batch`'s route rewritten to return a FastAPI
+      `StreamingResponse` (NDJSON, `application/x-ndjson`), replacing
+      the buffered `{"variants": [...]}` body. `evaluate_execution()`/
+      `serialize_strategy_evaluation_execution` remain, unmodified,
+      private/unrouted code. Test suites updated
+      (`test_evaluate_strategy_range_batch.py`'s outcome-tuple
+      assertions now wrap `execute()`'s generator; `test_foundation_api.py`'s
+      two batch tests decode NDJSON lines instead of a `variants` array).
+      `pytest`/`ruff check`/`mypy src` green.
+      **I8.Engine-live-gate:** fresh local Engine instance (current I8
+      code, not the shared `bbb_stack` docker deployment) confirmed
+      serving the streamed `.v2` NDJSON sequence on a real
+      `/range-batch` request, and exercised as part of `research_
+      service`'s joint I8.G live batch run and N=1/2/4/11 RSS benchmark
+      (peak Engine process RSS: 100928/101008/101056/101184 KB —
+      approximately constant across N).
+      Gate: N=1/2/4/11 benchmark, peak RSS approximately constant in
+      N — **PASSED**; joint real live-Engine batch run, N>1 — **PASSED**
+      (see `research_service`'s I8.G for the full chain).
+      `openspec validate --strict`/`--all --strict` green;
+      `pytest`/`ruff check`/`mypy src` green.
 
 I3/I4/I5/I6 are primarily `research_service`-owned (see that repo's
 tasks.md) — I5's end-to-end proof and I7's cutover are joint gates

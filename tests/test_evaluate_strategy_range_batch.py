@@ -189,7 +189,7 @@ def _batch_request(count: int) -> StrategyRangeBatchRequest:
 def test_batch_with_one_variant_loads_market_data_exactly_once() -> None:
     market_data = SpyMarketData()
     batch_eval, _ = _build(market_data)
-    outcomes = batch_eval.execute(_batch_request(1))
+    outcomes = tuple(batch_eval.execute(_batch_request(1)))
     assert market_data.calls == 1
     assert all(outcome.error is None for outcome in outcomes)
 
@@ -197,7 +197,7 @@ def test_batch_with_one_variant_loads_market_data_exactly_once() -> None:
 def test_batch_with_multiple_variants_loads_market_data_exactly_once() -> None:
     market_data = SpyMarketData()
     batch_eval, _ = _build(market_data)
-    outcomes = batch_eval.execute(_batch_request(5))
+    outcomes = tuple(batch_eval.execute(_batch_request(5)))
     assert market_data.calls == 1
     assert [outcome.variant_id for outcome in outcomes] == [f"variant-{i}" for i in range(5)]
     assert all(outcome.error is None for outcome in outcomes)
@@ -206,7 +206,7 @@ def test_batch_with_multiple_variants_loads_market_data_exactly_once() -> None:
 def test_all_variants_consume_the_exact_same_acquired_market_frame() -> None:
     market_data = SpyMarketData()
     batch_eval, recorder = _build_with_recording(market_data)
-    outcomes = batch_eval.execute(_batch_request(3))
+    outcomes = tuple(batch_eval.execute(_batch_request(3)))
     assert market_data.calls == 1
     assert len(recorder.seen_market_frames) == 3
     first_frame = recorder.seen_market_frames[0]
@@ -244,8 +244,10 @@ def test_per_variant_errors_still_envelope_after_successful_acquisition() -> Non
         StrategyBatchVariant("good", LiveStrategySpec("ema_pullback", minimal_spec())),
         StrategyBatchVariant("bad", LiveStrategySpec("ema_pullback", {"anchor_stack": {}})),
     )
-    outcomes = batch_eval.execute(
-        StrategyRangeBatchRequest(market=market, time_range=time_range, variants=variants)
+    outcomes = tuple(
+        batch_eval.execute(
+            StrategyRangeBatchRequest(market=market, time_range=time_range, variants=variants)
+        )
     )
     assert market_data.calls == 1
     assert outcomes[0].error is None
@@ -260,12 +262,14 @@ def test_expected_market_data_hash_is_forwarded_to_shared_acquisition() -> None:
     time_range = TimeRange(0, 3_600_000)
     variants = (StrategyBatchVariant("a", LiveStrategySpec("ema_pullback", minimal_spec())),)
 
-    outcomes = batch_eval.execute(
-        StrategyRangeBatchRequest(
-            market=market,
-            time_range=time_range,
-            variants=variants,
-            expected_market_data_hash="fixture-market-hash",
+    outcomes = tuple(
+        batch_eval.execute(
+            StrategyRangeBatchRequest(
+                market=market,
+                time_range=time_range,
+                variants=variants,
+                expected_market_data_hash="fixture-market-hash",
+            )
         )
     )
 
@@ -277,7 +281,7 @@ def test_expected_market_data_hash_is_forwarded_to_shared_acquisition() -> None:
 def test_no_expected_market_data_hash_means_no_verification_requested() -> None:
     market_data = SpyMarketData()
     batch_eval, _ = _build(market_data)
-    outcomes = batch_eval.execute(_batch_request(1))
+    outcomes = tuple(batch_eval.execute(_batch_request(1)))
     assert market_data.expected_market_data_hashes == [None]
     assert outcomes[0].error is None
 
