@@ -482,22 +482,47 @@ range-batch` SHALL serve a streamed `.v2` sequence, not the buffered
 .execute()` SHALL keep its existing shared-once acquisition (one
 `self._market_data.load_range(...)` call per batch request — unchanged)
 and sequential per-variant loop (unchanged), but SHALL call each
-variant's `evaluate_execution_projection()` (the same `.v2` method
-`/range` calls, I7) instead of `evaluate_execution()`, and SHALL emit
-each variant's outcome as it is produced — one `HistoricalExecution
-Projection` `.v2` envelope (or a per-variant error object) per stream
-element (newline-delimited JSON over HTTP chunked transfer, or an
-equivalent streaming transport) — rather than accumulating an
-`outcomes` list and returning one JSON array. Engine SHALL NOT hold
-more than one variant's native frame/projection resident at a time;
-each is serialized, written, and released before the next variant is
-evaluated.
+variant's `EvaluateStrategyRange.execute_projection()` — the same
+application-layer method `/range` calls (I7) — never the evaluator-
+level `evaluate_execution_projection()` directly. Bypassing
+`execute_projection()` would skip `EvaluateStrategyRange._prepare()`'s
+request validation/registry lookup (`request.time_range.validate_
+alignment`, spec validation, evaluator resolution) that every other
+production caller of a strategy evaluation goes through — batch SHALL
+NOT have a second, weaker path into strategy evaluation.
+`EvaluateStrategyRangeBatch` SHALL emit each variant's outcome as it is
+produced — one stream element per variant (newline-delimited JSON over
+HTTP chunked transfer, or an equivalent streaming transport) — rather
+than accumulating an `outcomes` list and returning one JSON array.
+Engine SHALL NOT hold more than one variant's native frame/projection
+resident at a time; each is serialized, written, and released before
+the next variant is evaluated.
 
-A terminal failure of the shared acquisition step (before any variant
-is evaluated) SHALL fail the whole request, exactly as today. A
-failure evaluating one variant SHALL be emitted as that variant's error
-element in the stream and SHALL NOT terminate the stream or prevent
-later variants from being evaluated and emitted.
+**Element shape (normative)**: every streamed element SHALL be a JSON
+object with exactly three keys — `variant_id`, `result`, `error`.
+`variant_id` SHALL always be present and non-null. Exactly one of
+`result`/`error` SHALL be non-null, never both, never neither. `result`,
+when present, SHALL be the canonical `HistoricalExecutionProjection`
+`.v2` payload (the same envelope shape `/range` serves via
+`serialize_historical_execution_projection`, `contract_version:
+"strategy_evaluation_execution.v2"`) — not a wrapped or reduced form of
+it. `error`, when present, SHALL carry that variant's failure detail
+(matching the existing per-variant error shape `{error, message,
+details}` this route already uses for `.v1`).
+
+**Ordering (normative)**: the shared `MarketFrame` acquisition
+(`self._market_data.load_range(...)`) and its own validation (alignment,
+`expected_market_data_hash`, etc.) SHALL complete in full BEFORE any
+part of the streaming response — headers or body — begins. A terminal
+failure of shared acquisition SHALL therefore still produce the normal
+whole-request HTTP error response (a single JSON error body, standard
+status code) with zero candidate elements streamed — not a stream that
+starts and then fails partway, and not a stream containing an
+acquisition-failure "element." Only after shared acquisition succeeds
+does the per-variant streaming loop begin. A failure evaluating one
+variant (after acquisition succeeded) SHALL be emitted as that
+variant's `error` element in the stream and SHALL NOT terminate the
+stream or prevent later variants from being evaluated and emitted.
 
 `EvaluateStrategyRange.execute()`/`evaluate_execution()`/
 `serialize_strategy_evaluation_execution` remain unmodified and
@@ -512,11 +537,39 @@ already are.
 - **WHEN** a real batch request with N variants is sent to `POST
   /strategy-evaluations/range-batch` after I8
 - **THEN** Strategy Engine's market-data port is called exactly once
-  for the whole request
-- **AND** the response is a streamed sequence of N `.v2` elements, not
-  one JSON array containing all N results
+  for the whole request, before any streaming begins
+- **AND** the response is a streamed sequence of N `{variant_id,
+  result, error}` elements, not one JSON array containing all N results
 - **AND** at no point does the Engine process hold more than one
   variant's projection resident.
+
+#### Scenario: Each stream element has exactly one of result/error
+
+- **WHEN** any element of the `/range-batch` stream is inspected after
+  I8
+- **THEN** it has a non-null `variant_id`
+- **AND** exactly one of `result`/`error` is non-null — never both,
+  never neither
+- **AND** a non-null `result` is the same canonical `.v2`
+  `HistoricalExecutionProjection` envelope `/range` serves, unwrapped.
+
+#### Scenario: Batch evaluation goes through the same application boundary as /range
+
+- **WHEN** `/range-batch` evaluates any variant after I8
+- **THEN** it does so by calling `EvaluateStrategyRange
+  .execute_projection()`, the same method `/range`'s route handler
+  calls
+- **AND** it never calls an evaluator's `evaluate_execution_projection()`
+  directly, bypassing `EvaluateStrategyRange`'s request validation.
+
+#### Scenario: Shared acquisition failure produces a normal HTTP error, not a broken stream
+
+- **WHEN** the shared `MarketFrame` acquisition or its validation fails
+- **THEN** `/range-batch` responds with a normal, single-body HTTP error
+  response (the same shape/status-code convention whole-batch failures
+  already use)
+- **AND** no streaming response has begun and zero candidate elements
+  are emitted.
 
 #### Scenario: One variant's failure does not stop the stream
 
