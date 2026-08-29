@@ -11,6 +11,7 @@ from strategy_engine.indicators.contracts import (
 from strategy_engine.indicators.implementations.frame_ops import serialize_value
 from strategy_engine.strategies.application.build_feature_plan import BuildStrategyFeaturePlan
 from strategy_engine.strategies.contracts import (
+    HistoricalExecutionProjection,
     StrategyDiagnosticEvaluation,
     StrategyEvaluationExecution,
     StrategyRangeRequest,
@@ -23,6 +24,9 @@ from strategy_engine.strategies.ema_pullback.evaluation import (
     evaluate_ema_pullback_frame,
 )
 from strategy_engine.strategies.ema_pullback.potential_entries import potential_entries_to_wire
+from strategy_engine.strategies.historical_execution_projection import (
+    build_historical_execution_projection,
+)
 
 
 class EmaPullbackRangeEvaluator:
@@ -119,6 +123,28 @@ class EmaPullbackRangeEvaluator:
             warnings=(
                 "managed exit policy is available through /v1/strategy-evaluations/managed-replay",
             ),
+        )
+
+    def evaluate_execution_projection(
+        self, request: StrategyRangeRequest
+    ) -> HistoricalExecutionProjection:
+        """`compact-strategy-evaluation-boundary-v1` I7: the production
+        `HistoricalExecutionProjection` path (`v2`), wired only to
+        `/strategy-evaluations/range`'s new application-service method
+        -- never to `execute()`/`evaluate_execution()`, which stays the
+        HTTP path `/strategy-evaluations/range-batch` reaches. Same
+        native computation `evaluate_execution` uses; I1's pure
+        builder produces the v2 shape from it."""
+
+        frame, evaluation = self._evaluate_frame_native(request)
+        return build_historical_execution_projection(
+            strategy_id=request.strategy.strategy_id,
+            config_hash=strategy_config_hash(request.strategy),
+            market=request.market,
+            requested_range=request.time_range,
+            market_data_hash=frame.market_data_hash,
+            bar_count=len(frame.time_ms),
+            evaluation=evaluation,
         )
 
     def evaluate_diagnostics(self, request: StrategyRangeRequest) -> StrategyDiagnosticEvaluation:

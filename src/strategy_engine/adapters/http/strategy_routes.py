@@ -24,6 +24,7 @@ from strategy_engine.adapters.http.models import (
     StrategyRangeRequestModel,
 )
 from strategy_engine.adapters.http.strategy_serialization import (
+    serialize_historical_execution_projection,
     serialize_strategy_diagnostic_evaluation,
     serialize_strategy_evaluation_execution,
 )
@@ -183,14 +184,20 @@ def evaluate_strategy_range(
     request: StrategyRangeRequestModel,
     app: ApplicationServices = Depends(services),
 ) -> Any:
-    """The mandatory execution contract -- sparse decision events, no
-    dense diagnostics (`strategy-research-execution-contract-v1`,
-    `compact-strategy-evaluation-boundary-v1`). Diagnostics are a
-    separate, explicit request: `/strategy-evaluations/range/diagnostics`.
-    """
+    """The production execution contract, `.v2`
+    (`strategy-research-execution-contract-v1`'s "Production /range
+    route contract (I7 cutover)", `compact-strategy-evaluation-
+    boundary-v1`) -- `HistoricalExecutionProjection`: executable entry
+    opportunities with locked exit profile and attributed initial
+    stop/take, per-profile-indexed signal-exit events with attribution.
+    Diagnostics are a separate, explicit request:
+    `/strategy-evaluations/range/diagnostics`. NOT wired to
+    `execute()` -- `/strategy-evaluations/range-batch` still uses that
+    method for the unchanged sparse `.v1` shape; see `execute_projection`
+    docstring."""
 
-    return serialize_strategy_evaluation_execution(
-        app.evaluate_strategy_range.execute(request.to_domain())
+    return serialize_historical_execution_projection(
+        app.evaluate_strategy_range.execute_projection(request.to_domain())
     )
 
 

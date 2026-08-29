@@ -118,10 +118,10 @@ def payload() -> dict[str, object]:
 
 
 def test_strategy_range_builds_plan_inside_service() -> None:
-    # compact-strategy-evaluation-boundary-v1: /range now returns the
-    # sparse mandatory execution contract only -- no dense
-    # features/contexts/entries/component_evidence/validity. Dense-
-    # content assertions moved to
+    # compact-strategy-evaluation-boundary-v1 I7: /range now returns the
+    # production HistoricalExecutionProjection (.v2) -- executable entry
+    # opportunities, no dense features/contexts/decision_events/
+    # component_evidence/validity. Dense-content assertions live in
     # test_strategy_range_diagnostics_builds_plan_and_features below,
     # against the separate diagnostics route.
     app_services, market_data = services()
@@ -129,26 +129,23 @@ def test_strategy_range_builds_plan_inside_service() -> None:
         response = client.post("/v1/strategy-evaluations/range", json=payload())
     assert response.status_code == 200
     body = response.json()
-    assert body["contract_version"] == "strategy_evaluation_execution.v1"
+    assert body["contract_version"] == "strategy_evaluation_execution.v2"
     assert body["market"]["bar_count"] == 12
     assert body["market"]["market_data_hash"] == "fixture-market-hash"
-    assert len(body["decision_events"]) == 12
-    assert all(0 <= event["bar_index"] < 12 for event in body["decision_events"])
+    assert all(0 <= opp["bar_index"] < 12 for opp in body["entry_opportunities"])
     # matches the pre-cutover contract's guarantee for this fixture:
-    # entries["short"] == [False] * 12 -- no event ever carries a short entry.
-    assert all(
-        event["entry"] is None or event["entry"]["side"] == "long"
-        for event in body["decision_events"]
-    )
+    # entries["short"] == [False] * 12 -- no opportunity is ever short.
+    assert all(opp["side"] == "long" for opp in body["entry_opportunities"])
     assert market_data.calls == 1
 
 
 def test_range_response_exact_key_set() -> None:
     # Authoritative reference for exactly what a successful /range
-    # response top level looks like now: the sparse execution contract
-    # (compact-strategy-evaluation-boundary-v1) -- no dense
+    # response top level looks like now: the production .v2 execution
+    # contract (compact-strategy-evaluation-boundary-v1 I7) -- no dense
     # features/contexts/entries/potential_entries/exit_policy/
-    # component_evidence/validity/state_artifact.
+    # component_evidence/validity/state_artifact, and no sparse .v1
+    # decision_events either.
     app_services, _ = services()
     with TestClient(create_app(services=app_services)) as client:
         response = client.post("/v1/strategy-evaluations/range", json=payload())
@@ -158,7 +155,8 @@ def test_range_response_exact_key_set() -> None:
         "strategy_id",
         "config_hash",
         "market",
-        "decision_events",
+        "entry_opportunities",
+        "signal_exit_events",
         "warnings",
     }
 
@@ -261,9 +259,9 @@ def test_touch_anchor_range_adds_enabled_side_potential_prices_without_recalcula
         )
     )
     long_entry_bar_indices = {
-        event["bar_index"]
-        for event in execution_body["decision_events"]
-        if event["entry"] is not None and event["entry"]["side"] == "long"
+        opp["bar_index"]
+        for opp in execution_body["entry_opportunities"]
+        if opp["side"] == "long"
     }
     assert any(
         bar_index in long_entry_bar_indices and projected["entry_price"][bar_index] is not None

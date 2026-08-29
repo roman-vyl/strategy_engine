@@ -5,6 +5,7 @@ from __future__ import annotations
 from strategy_engine.domain.errors import UnsupportedCapabilityError
 from strategy_engine.strategies.application.validate_spec import ValidateStrategySpec
 from strategy_engine.strategies.contracts import (
+    HistoricalExecutionProjection,
     StrategyDiagnosticEvaluation,
     StrategyEvaluationExecution,
     StrategyRangeRequest,
@@ -29,8 +30,24 @@ class EvaluateStrategyRange:
         self._validator = validator
 
     def execute(self, request: StrategyRangeRequest) -> StrategyEvaluationExecution:
+        """Serves `/strategy-evaluations/range-batch` (via
+        `EvaluateStrategyRangeBatch`). NOT called by `/range` after I7
+        -- see `execute_projection` -- since `EvaluateStrategyRangeBatch`
+        shares this exact method, repurposing it would silently switch
+        `/range-batch` to `.v2` too."""
+
         evaluator = self._prepare(request)
         return evaluator.evaluate_execution(request)
+
+    def execute_projection(self, request: StrategyRangeRequest) -> HistoricalExecutionProjection:
+        """`compact-strategy-evaluation-boundary-v1` I7: the production
+        `/strategy-evaluations/range` path, `.v2` only. Deliberately a
+        separate method from `execute()` -- see that method's docstring
+        and `strategy-research-execution-contract-v1`'s "Production
+        /range route contract (I7 cutover)" requirement."""
+
+        evaluator = self._prepare(request)
+        return evaluator.evaluate_execution_projection(request)
 
     def execute_diagnostics(self, request: StrategyRangeRequest) -> StrategyDiagnosticEvaluation:
         evaluator = self._prepare(request)
