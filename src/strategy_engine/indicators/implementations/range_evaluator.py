@@ -8,7 +8,12 @@ from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.market import MarketFrame
 from strategy_engine.domain.ranges import timeframe_duration_ms
 from strategy_engine.domain.validity import Validity
-from strategy_engine.indicators.contracts import FeatureFrame, IndicatorPlan, PlannedFeature
+from strategy_engine.indicators.contracts import (
+    FeatureFrame,
+    IndicatorPlan,
+    NativeFeatureFrame,
+    PlannedFeature,
+)
 from strategy_engine.indicators.implementations.adx_dmi import (
     compute_adx_dmi,
     validate_adx_dmi_feature,
@@ -85,13 +90,25 @@ def _atr_values(frame: pd.DataFrame, feature: PlannedFeature) -> pd.Series:
 
 
 class RangeIndicatorEvaluator:
-    """Evaluate registered indicator features over one complete market range."""
+    """Evaluate registered indicator features over one complete market range.
 
-    def evaluate(self, market_frame: MarketFrame, plan: IndicatorPlan) -> FeatureFrame:
+    `evaluate_native` is the single source of indicator computation
+    semantics -- `evaluate` (the public, wire-facing contract) is a thin
+    boxing wrapper over it, not a second implementation
+    (`compact-strategy-evaluation-boundary-v1`, "shared native
+    computation, no duplicated formulas"). Internal callers that only
+    need numeric values (strategy evaluation) use `evaluate_native`
+    directly and never pay the `Decimal`/normalized-text boxing cost;
+    the public `/indicator-evaluations/range` contract and its
+    `ema-indicator-vertical-slice-v1`-family serialization semantics are
+    unchanged.
+    """
+
+    def evaluate_native(self, market_frame: MarketFrame, plan: IndicatorPlan) -> NativeFeatureFrame:
         base_timeframe = market_frame.market.base_timeframe
         frame = market_frame_to_dataframe(market_frame)
         cached_frames: dict[str, pd.DataFrame] = {base_timeframe: frame, "base": frame}
-        series: dict[str, tuple[str | None, ...]] = {}
+        series: dict[str, tuple[float | None, ...]] = {}
         validity: dict[str, Validity] = {}
         adx_dmi_cache: dict[tuple[str, int], dict[str, pd.Series]] = {}
 
@@ -121,7 +138,7 @@ class RangeIndicatorEvaluator:
                     )
                 multiplier = float(feature.parameters["multiplier"])
                 output = tuple(
-                    None if value is None else serialize_value(float(value) * multiplier)
+                    None if value is None else float(value) * multiplier
                     for value in dependency_values
                 )
                 series[feature.output_id] = output
@@ -164,7 +181,9 @@ class RangeIndicatorEvaluator:
                     base_index=frame.index,
                 )
 
-            output = tuple(serialize_value(float(value)) for value in values.to_numpy())
+            output = tuple(
+                None if pd.isna(value) else float(value) for value in values.to_numpy()
+            )
             series[feature.output_id] = output
             first_valid_index = next(
                 (index for index, value in enumerate(output) if value is not None),
@@ -181,7 +200,7 @@ class RangeIndicatorEvaluator:
                 reason=(None if first_valid_index is not None else "no_completed_feature_value"),
             )
 
-        return FeatureFrame(
+        return NativeFeatureFrame(
             market=market_frame.market,
             requested_range=market_frame.requested_range,
             time_ms=tuple(bar.open_time_ms for bar in market_frame.bars),
@@ -190,4 +209,22 @@ class RangeIndicatorEvaluator:
             plan_hash=plan.plan_hash,
             market_data_hash=market_frame.market_data_hash,
             market_bars=market_frame.bars,
+        )
+
+    def evaluate(self, market_frame: MarketFrame, plan: IndicatorPlan) -> FeatureFrame:
+        native = self.evaluate_native(market_frame, plan)
+        return FeatureFrame(
+            market=native.market,
+            requested_range=native.requested_range,
+            time_ms=native.time_ms,
+            series={
+                output_id: tuple(
+                    None if value is None else serialize_value(value) for value in values
+                )
+                for output_id, values in native.series.items()
+            },
+            validity=native.validity,
+            plan_hash=native.plan_hash,
+            market_data_hash=native.market_data_hash,
+            market_bars=native.market_bars,
         )

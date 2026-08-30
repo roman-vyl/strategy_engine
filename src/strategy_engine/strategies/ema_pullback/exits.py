@@ -13,7 +13,7 @@ import pandas as pd
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.values import normalized_decimal_text
-from strategy_engine.indicators.contracts import FeatureFrame
+from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
 )
@@ -163,7 +163,7 @@ def _enabled_sides(raw_spec: Mapping[str, Any]) -> tuple[str, ...]:
     return sides
 
 
-def _frame_dataframe(frame: FeatureFrame) -> pd.DataFrame:
+def _frame_dataframe(frame: FeatureFrameLike) -> pd.DataFrame:
     if len(frame.market_bars) != len(frame.time_ms):
         raise InvalidRequestError("market bars unavailable for exit policy")
     index = pd.to_datetime(frame.time_ms, unit="ms", utc=True)
@@ -369,7 +369,7 @@ def _optional_floats(series: pd.Series) -> tuple[float | None, ...]:
 
 def evaluate_exit_policy(
     raw_spec: Mapping[str, Any],
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     consumption: tuple[ContextConsumptionRecord, ...],
 ) -> ExitPolicyEvaluation:

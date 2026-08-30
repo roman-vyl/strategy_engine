@@ -1,9 +1,5 @@
-# Strategy Research Execution Contract v1 Specification
+## MODIFIED Requirements
 
-## Purpose
-
-Define the versioned per-bar decision contract consumed by Research Service and the boundary that keeps execution and accounting facts outside Strategy Engine.
-## Requirements
 ### Requirement: Versioned per-bar decision contract
 
 Strategy Engine SHALL expose a versioned decision contract sufficient for
@@ -308,6 +304,8 @@ Strategy Engine's role in this architecture.
 - **THEN** the response SHALL contain no fabricated fill, completed-
   trade, fee, or PnL facts.
 
+## ADDED Requirements
+
 ### Requirement: Diagnostic data is not part of the mandatory execution contract
 
 The mandatory range-evaluation response (the decision contract above)
@@ -577,4 +575,3 @@ already are.
   succeeded
 - **THEN** that variant's stream element reports the error
 - **AND** every subsequent variant is still evaluated and emitted.
-

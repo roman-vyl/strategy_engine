@@ -1,0 +1,83 @@
+{
+  "trade_sides": ["long", "short"],
+  "anchor_stack": {
+    "fast": {"source": "close", "timeframe": "base", "period": 50},
+    "anchor": {"source": "close", "timeframe": "base", "period": 200},
+    "slow": {"source": "close", "timeframe": "base", "period": 500}
+  },
+  "components": {
+    "blockers": [],
+    "trigger": {"component_id": "touch_anchor"}
+  },
+  "setups": [
+    {
+      "instance_id": "bounce",
+      "component_id": "ema_bounce_counter_setup",
+      "params": {
+        "max_bounces": 2,
+        "raw_touch_mode": "range_cross",
+        "touch_lookback_bars": 20,
+        "trend_start_confirmation_bars": 1,
+        "trend_break_confirmation_bars": 1
+      }
+    },
+    {
+      "instance_id": "width",
+      "component_id": "anchor_stack_width_setup",
+      "params": {
+        "atr_timeframe": "base",
+        "atr_period": 14,
+        "min_current_width_atr": 1.0,
+        "min_recent_width_atr": 1.0,
+        "width_lookback_bars": 80
+      }
+    }
+  ],
+  "contexts": {
+    "htf": {
+      "component_id": "htf_context",
+      "timeframe": "4h",
+      "source": "close",
+      "fast_period": 20,
+      "anchor_period": 50,
+      "slow_period": 200
+    }
+  },
+  "trade_management": {
+    "exit_policy": {
+      "context_consumption": {
+        "context_ref": "htf",
+        "policy": {"policy_id": "exit_profile_by_htf_state"}
+      },
+      "always_on": {
+        "exits": [
+          {
+            "instance_id": "sl_always",
+            "component_id": "atr_stop_loss",
+            "exit_kind": "stop_loss",
+            "distance": {"timeframe": "base", "period": 14, "multiplier": 2.15}
+          },
+          {
+            "instance_id": "tp_always",
+            "component_id": "atr_take_profit",
+            "exit_kind": "take_profit",
+            "distance": {"timeframe": "base", "period": 14, "multiplier": 3.0}
+          },
+          {
+            "instance_id": "sig_always",
+            "component_id": "ema_close_loss_exit",
+            "exit_kind": "signal",
+            "ema": {"timeframe": "base", "period": 50},
+            "confirm_bars": 1
+          }
+        ]
+      },
+      "profiles": {
+        "aligned": {"exits": []},
+        "countertrend": {"exits": []},
+        "neutral": {"exits": []}
+      }
+    },
+    "exit_management": {}
+  }
+}

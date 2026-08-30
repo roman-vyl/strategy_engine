@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from strategy_engine.domain.errors import InvalidRequestError
-from strategy_engine.indicators.contracts import FeatureFrame
+from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
 )
@@ -92,7 +92,7 @@ def _enabled_sides(raw_spec: Mapping[str, Any]) -> tuple[str, ...]:
     return sides
 
 
-def _float_series(frame: FeatureFrame, output_id: str) -> tuple[float, ...]:
+def _float_series(frame: FeatureFrameLike, output_id: str) -> tuple[float, ...]:
     try:
         values = frame.series[output_id]
     except KeyError as exc:
@@ -123,7 +123,7 @@ def _apply_gate(intrinsic: tuple[bool, ...], gate: tuple[bool, ...] | None) -> t
 
 def _direction(
     raw_spec: Mapping[str, Any],
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     side: str,
 ) -> ComponentMask:
@@ -154,7 +154,7 @@ def _direction(
 
 
 def _rsi_blocker(
-    item: Mapping[str, Any], frame: FeatureFrame, plan: EmaPullbackFeaturePlan, side: str
+    item: Mapping[str, Any], frame: FeatureFrameLike, plan: EmaPullbackFeaturePlan, side: str
 ) -> tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]:
     rsi_spec = _mapping(item.get("rsi"), "blocker.rsi")
     timeframe = str(rsi_spec.get("timeframe", "base"))
@@ -190,7 +190,7 @@ def _rsi_blocker(
 
 
 def _trend_strength_blocker(
-    item: Mapping[str, Any], frame: FeatureFrame, plan: EmaPullbackFeaturePlan, side: str
+    item: Mapping[str, Any], frame: FeatureFrameLike, plan: EmaPullbackFeaturePlan, side: str
 ) -> tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]:
     params = _mapping(item.get("trend_strength"), "blocker.trend_strength")
     timeframe = str(params.get("timeframe", "base"))
@@ -293,7 +293,7 @@ def _trend_strength_blocker(
 
 def _blocker(
     item: Mapping[str, Any],
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     side: str,
     records: tuple[ContextConsumptionRecord, ...],
@@ -350,7 +350,7 @@ def _combine_blocker_masks(
 
 def evaluate_direction_and_blockers(
     raw_spec: Mapping[str, Any],
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     context_records: tuple[ContextConsumptionRecord, ...],
 ) -> tuple[SideDirectionBlockers, ...]:

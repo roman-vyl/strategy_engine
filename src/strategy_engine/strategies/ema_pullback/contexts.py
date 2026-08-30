@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from strategy_engine.domain.errors import InvalidRequestError
-from strategy_engine.indicators.contracts import FeatureFrame
+from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 
 
@@ -89,7 +89,7 @@ def _evaluate_stack(
 
 def build_context_bundle(
     raw_spec: Mapping[str, Any],
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
 ) -> ContextBundle:
     """Evaluate canonical BBB context providers from the enriched feature frame."""

@@ -170,7 +170,7 @@ def test_live_entry_matches_target_index_range_projection() -> None:
     live_result = live.execute(
         LiveEntryProjectionRequest(live_strategy, market, 3_300_000)
     )
-    range_result = range_eval.execute(
+    range_result = range_eval.execute_diagnostics(
         StrategyRangeRequest(strategy, market, TimeRange(0, 3_600_000))
     )
     target = -1
@@ -180,7 +180,8 @@ def test_live_entry_matches_target_index_range_projection() -> None:
     assert plan.planned_entry_price == projected["entry_price"][target]
     assert plan.initial_stop_price == projected["stop_price"][target]
     assert plan.initial_take_price == projected["take_price"][target]
-    assert plan.locked_exit_profile == range_result.exit_policy["profile_long"][target]
+    exit_policy = range_result.component_evidence["exit_policy"]
+    assert plan.locked_exit_profile == exit_policy["profile_long"][target]
 
 
 def _adapter_plan(side: str) -> LiveEntryPlan:

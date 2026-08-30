@@ -4,11 +4,27 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from strategy_engine.strategies.contracts import StrategyRangeRequest, StrategyRangeResult
+from strategy_engine.strategies.contracts import (
+    HistoricalExecutionProjection,
+    StrategyDiagnosticEvaluation,
+    StrategyEvaluationExecution,
+    StrategyRangeRequest,
+    StrategyRangeResult,
+)
 
 
 class StrategyEvaluator(Protocol):
     def evaluate(self, request: StrategyRangeRequest) -> StrategyRangeResult: ...
+
+    def evaluate_execution(self, request: StrategyRangeRequest) -> StrategyEvaluationExecution: ...
+
+    def evaluate_execution_projection(
+        self, request: StrategyRangeRequest
+    ) -> HistoricalExecutionProjection: ...
+
+    def evaluate_diagnostics(
+        self, request: StrategyRangeRequest
+    ) -> StrategyDiagnosticEvaluation: ...
 
 
 class StrategyRegistryPort(Protocol):

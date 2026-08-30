@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
 from strategy_engine.adapters.http.dependencies import services
 from strategy_engine.adapters.http.models import (
@@ -23,7 +25,11 @@ from strategy_engine.adapters.http.models import (
     StrategyRangeBatchRequestModel,
     StrategyRangeRequestModel,
 )
-from strategy_engine.adapters.http.strategy_serialization import serialize_strategy_result
+from strategy_engine.adapters.http.strategy_serialization import (
+    serialize_batch_variant_outcome,
+    serialize_historical_execution_projection,
+    serialize_strategy_diagnostic_evaluation,
+)
 from strategy_engine.service.wiring import ApplicationServices
 from strategy_engine.strategies.ema_pullback.composer_catalog import get_component_catalog
 
@@ -180,29 +186,66 @@ def evaluate_strategy_range(
     request: StrategyRangeRequestModel,
     app: ApplicationServices = Depends(services),
 ) -> Any:
-    return serialize_strategy_result(app.evaluate_strategy_range.execute(request.to_domain()))
+    """The production execution contract, `.v2`
+    (`strategy-research-execution-contract-v1`'s "Production /range
+    route contract (I7 cutover)", `compact-strategy-evaluation-
+    boundary-v1`) -- `HistoricalExecutionProjection`: executable entry
+    opportunities with locked exit profile and attributed initial
+    stop/take, per-profile-indexed signal-exit events with attribution.
+    Diagnostics are a separate, explicit request:
+    `/strategy-evaluations/range/diagnostics`. Calls
+    `execute_projection()`, not `execute()` -- `/strategy-evaluations/
+    range-batch` also calls `execute_projection()` (per variant) since
+    I8; `execute()`/the sparse `.v1` shape are private, unrouted legacy/
+    regression code (see `EvaluateStrategyRange.execute` docstring)."""
+
+    return serialize_historical_execution_projection(
+        app.evaluate_strategy_range.execute_projection(request.to_domain())
+    )
+
+
+@router.post("/strategy-evaluations/range/diagnostics")
+def evaluate_strategy_range_diagnostics(
+    request: StrategyRangeRequestModel,
+    app: ApplicationServices = Depends(services),
+) -> Any:
+    """Dense per-bar diagnostic trace, only reachable through this
+    separate, explicitly-requested entrypoint -- never a side effect of
+    `/strategy-evaluations/range` (`compact-strategy-evaluation-
+    boundary-v1`)."""
+
+    return serialize_strategy_diagnostic_evaluation(
+        app.evaluate_strategy_range.execute_diagnostics(request.to_domain())
+    )
 
 
 @router.post("/strategy-evaluations/range-batch")
 def evaluate_strategy_range_batch(
     request: StrategyRangeBatchRequestModel,
     app: ApplicationServices = Depends(services),
-) -> dict[str, object]:
+) -> StreamingResponse:
+    """Streamed `.v2` sequence (I8, `compact-strategy-evaluation-
+    boundary-v1`) -- one `{variant_id, result, error}` newline-delimited
+    JSON object per variant (`execute_projection()` called per variant,
+    same method `/range` calls), not a buffered `.v1` array.
+    `app.evaluate_strategy_range_batch.execute()` below runs shared
+    market-data acquisition/validation synchronously, before this
+    function returns -- a terminal failure there raises here, normally,
+    before any streaming response has begun (the not-yet-started
+    generator it returns on success is only then handed to
+    `StreamingResponse`, which is what actually drives per-variant
+    evaluation as the client reads)."""
+
     outcomes = app.evaluate_strategy_range_batch.execute(request.to_domain())
-    return {
-        "variants": [
-            {
-                "variant_id": outcome.variant_id,
-                "result": (
-                    serialize_strategy_result(outcome.result)
-                    if outcome.result is not None
-                    else None
-                ),
-                "error": outcome.error,
-            }
-            for outcome in outcomes
-        ]
-    }
+
+    def body() -> Any:
+        for outcome in outcomes:
+            element = serialize_batch_variant_outcome(
+                outcome.variant_id, outcome.result, outcome.error
+            )
+            yield (json.dumps(element) + "\n").encode("utf-8")
+
+    return StreamingResponse(body(), media_type="application/x-ndjson")
 
 
 @router.post(
