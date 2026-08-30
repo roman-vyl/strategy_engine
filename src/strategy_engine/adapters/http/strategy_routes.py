@@ -193,10 +193,11 @@ def evaluate_strategy_range(
     opportunities with locked exit profile and attributed initial
     stop/take, per-profile-indexed signal-exit events with attribution.
     Diagnostics are a separate, explicit request:
-    `/strategy-evaluations/range/diagnostics`. NOT wired to
-    `execute()` -- `/strategy-evaluations/range-batch` still uses that
-    method for the unchanged sparse `.v1` shape; see `execute_projection`
-    docstring."""
+    `/strategy-evaluations/range/diagnostics`. Calls
+    `execute_projection()`, not `execute()` -- `/strategy-evaluations/
+    range-batch` also calls `execute_projection()` (per variant) since
+    I8; `execute()`/the sparse `.v1` shape are private, unrouted legacy/
+    regression code (see `EvaluateStrategyRange.execute` docstring)."""
 
     return serialize_historical_execution_projection(
         app.evaluate_strategy_range.execute_projection(request.to_domain())
@@ -225,11 +226,13 @@ def evaluate_strategy_range_batch(
 ) -> StreamingResponse:
     """Streamed `.v2` sequence (I8, `compact-strategy-evaluation-
     boundary-v1`) -- one `{variant_id, result, error}` newline-delimited
-    JSON object per variant, not a buffered `.v1` array. `execute()`
-    below runs shared market-data acquisition/validation synchronously,
-    before this function returns -- a terminal failure there raises here,
-    normally, before any streaming response has begun (the not-yet-
-    started generator it returns on success is only then handed to
+    JSON object per variant (`execute_projection()` called per variant,
+    same method `/range` calls), not a buffered `.v1` array.
+    `app.evaluate_strategy_range_batch.execute()` below runs shared
+    market-data acquisition/validation synchronously, before this
+    function returns -- a terminal failure there raises here, normally,
+    before any streaming response has begun (the not-yet-started
+    generator it returns on success is only then handed to
     `StreamingResponse`, which is what actually drives per-variant
     evaluation as the client reads)."""
 

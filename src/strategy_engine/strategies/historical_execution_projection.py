@@ -1,8 +1,12 @@
 """Pure builder: `EmaPullbackEvaluation -> HistoricalExecutionProjection`.
 
-I1 of `compact-strategy-evaluation-boundary-v1` (Master Plan). Additive
-only -- not wired to any route or application service yet (that's I7).
-Built entirely from already-computed native outputs on
+Originally added in I1 of `compact-strategy-evaluation-boundary-v1`
+(Master Plan); wired into production by I7/I8 --
+`EmaPullbackRangeEvaluator.evaluate_execution_projection` calls this
+builder, and both `/strategy-evaluations/range` (I7) and the streamed
+`/strategy-evaluations/range-batch` (I8) reach it via
+`EvaluateStrategyRange.execute_projection`. Built entirely from
+already-computed native outputs on
 `EmaPullbackEvaluation`/`ExitPolicyEvaluation`; no string-boxing, no
 recomputation of strategy semantics.
 

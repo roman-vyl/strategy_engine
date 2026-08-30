@@ -128,12 +128,13 @@ class EmaPullbackRangeEvaluator:
     def evaluate_execution_projection(
         self, request: StrategyRangeRequest
     ) -> HistoricalExecutionProjection:
-        """`compact-strategy-evaluation-boundary-v1` I7: the production
-        `HistoricalExecutionProjection` path (`v2`), wired only to
-        `/strategy-evaluations/range`'s new application-service method
-        -- never to `execute()`/`evaluate_execution()`, which stays the
-        HTTP path `/strategy-evaluations/range-batch` reaches. Same
-        native computation `evaluate_execution` uses; I1's pure
+        """`compact-strategy-evaluation-boundary-v1` I7/I8: the
+        production `HistoricalExecutionProjection` path (`v2`), reached
+        via `EvaluateStrategyRange.execute_projection` -- called by both
+        `/strategy-evaluations/range` (I7) and `/strategy-evaluations/
+        range-batch` (per variant, I8), never by `execute()`/
+        `evaluate_execution()` (private, unrouted legacy `.v1` code).
+        Same native computation `evaluate_execution` uses; I1's pure
         builder produces the v2 shape from it."""
 
         frame, evaluation = self._evaluate_frame_native(request)

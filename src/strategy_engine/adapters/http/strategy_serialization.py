@@ -151,11 +151,14 @@ def serialize_historical_execution_projection(
 ) -> dict[str, object]:
     """The production `.v2` execution contract
     (`strategy-research-execution-contract-v1`,
-    `compact-strategy-evaluation-boundary-v1` I7) -- executable entry
+    `compact-strategy-evaluation-boundary-v1` I7/I8) -- executable entry
     opportunities with locked exit profile and attributed initial
     stop/take, per-profile-indexed signal-exit events with attribution.
-    Only reachable via `/strategy-evaluations/range`'s new
-    `execute_projection` path, never via `/range-batch`."""
+    Used by both `/strategy-evaluations/range` (I7, one envelope per
+    response) and the streamed `/strategy-evaluations/range-batch`
+    (I8, one envelope per `result` field in each streamed element) --
+    both routes reach it via `EvaluateStrategyRange.execute_projection`,
+    never via the legacy `execute()`/sparse `.v1` path."""
 
     return {
         "contract_version": "strategy_evaluation_execution.v2",
