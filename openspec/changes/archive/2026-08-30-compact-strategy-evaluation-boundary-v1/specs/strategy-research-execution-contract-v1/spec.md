@@ -57,7 +57,7 @@ entry, never a flattened current-bar-profile series. Each signal-exit
 event SHALL carry one or more candidates, each `{attribution:
 ExitAttribution}`.
 
-### Attribution shape (shared across all historical execution facts)
+**Attribution shape (shared across all historical execution facts):**
 
 ```
 ExitAttribution
@@ -83,7 +83,7 @@ independent per-fact Engine decision. Research Service SHALL derive
 wire or decide it independently (see companion `research_service`
 capability for the consuming side of this rule).
 
-### Multi-rule attribution algorithm (normative, old-BBB-compatible)
+**Multi-rule attribution algorithm (normative, old-BBB-compatible):**
 
 When multiple stop rules (or multiple take rules) are applicable at one
 entry opportunity, the single reported `ratio`/`ExitAttribution` for
@@ -126,7 +126,7 @@ This is binding on the I1 builder implementation, not a hint — an I1
 implementer SHALL NOT choose a different aggregation direction or
 tie-break without an explicit follow-up OpenSpec change.
 
-### Initial stop/take optionality (normative)
+**Initial stop/take optionality (normative):**
 
 `initial_stop` and `initial_take` are **independently nullable** —
 matching the reference model exactly (`exits.py::_stop_ready`: a rule
@@ -387,8 +387,6 @@ capabilities).
   inspected
 - **THEN** its `series` values remain normalized-decimal-text strings or
   `null`, unaffected by this capability's internal native computation.
-
-## MODIFIED Requirements
 
 ### Requirement: Production /range route contract (I7 cutover)
 
