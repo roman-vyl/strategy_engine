@@ -85,6 +85,45 @@ def test_returns_path_for_semantically_invalid_instance() -> None:
     assert body["errors"][0]["path"] == "instances[0]"
 
 
+def _atr_exit_rule(*, instance_id: str | None) -> dict[str, object]:
+    rule: dict[str, object] = {
+        "component_id": "atr_stop_setup",
+        "exit_kind": "stop",
+        "distance": {"timeframe": "base", "period": 14, "multiplier": 1.5},
+    }
+    if instance_id is not None:
+        rule["instance_id"] = instance_id
+    return rule
+
+
+def test_atr_exit_rule_without_instance_id_is_rejected() -> None:
+    item = canonical_instance()
+    exit_policy = item["raw_spec"]["trade_management"]["exit_policy"]  # type: ignore[index]
+    exit_policy["always_on"]["exits"] = [_atr_exit_rule(instance_id=None)]
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/v1/strategies/ema_pullback/authoring-config/validate", json={"instances": [item]}
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["valid"] is False
+    assert body["errors"][0]["path"] == "instances[0]"
+
+
+def test_atr_exit_rule_with_instance_id_is_accepted() -> None:
+    item = canonical_instance()
+    exit_policy = item["raw_spec"]["trade_management"]["exit_policy"]  # type: ignore[index]
+    exit_policy["always_on"]["exits"] = [_atr_exit_rule(instance_id="atr_stop_1")]
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/v1/strategies/ema_pullback/authoring-config/validate", json={"instances": [item]}
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["valid"] is True
+    assert body["errors"] == []
+
+
 def test_legacy_instance_id_field_is_rejected() -> None:
     item = canonical_instance()
     item["instance_id"] = "legacy"

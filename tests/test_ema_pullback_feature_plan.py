@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+
+from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.strategies.ema_pullback import build_feature_plan_from_canonical_spec
 
 
@@ -121,6 +124,22 @@ def test_builds_ordered_deduplicated_indicator_plan_and_mappings() -> None:
     assert plan.htf_context_columns_by_ref["htf"]["anchor"] == "ema_close_4h_50"
     assert plan.adx_dmi_columns[("base", 14)]["adx"] == "adx_close_base_14"
     assert plan.ema_columns[("1h", 9)] == "ema_close_1h_9"
+
+
+def test_exit_rule_without_instance_id_is_rejected() -> None:
+    spec = canonical_spec()
+    exits = spec["trade_management"]["exit_policy"]["always_on"]["exits"]  # type: ignore[index]
+    del exits[0]["instance_id"]
+    with pytest.raises(InvalidRequestError, match="exits\\[0\\].instance_id"):
+        build_feature_plan_from_canonical_spec(spec)
+
+
+def test_exit_rule_with_empty_instance_id_is_rejected() -> None:
+    spec = canonical_spec()
+    exits = spec["trade_management"]["exit_policy"]["always_on"]["exits"]  # type: ignore[index]
+    exits[0]["instance_id"] = ""
+    with pytest.raises(InvalidRequestError, match="exits\\[0\\].instance_id"):
+        build_feature_plan_from_canonical_spec(spec)
 
 
 def test_wire_format_uses_stable_string_keys() -> None:

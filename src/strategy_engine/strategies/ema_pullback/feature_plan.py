@@ -65,6 +65,12 @@ def _positive_int(value: Any, path: str) -> int:
     return cast(int, value)
 
 
+def _required_instance_id(value: Any, path: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise InvalidRequestError(f"{path} must be a non-empty string")
+    return value
+
+
 def _ema_id(timeframe: str, period: int) -> str:
     return f"ema_close_{timeframe}_{period}"
 
@@ -217,6 +223,7 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
     adx_dmi_columns: dict[tuple[str, int], dict[str, str]] = {}
 
     for index, rule in enumerate(all_exits):
+        _required_instance_id(rule.get("instance_id"), f"exits[{index}].instance_id")
         distance = rule.get("distance")
         if distance is None:
             continue
@@ -236,7 +243,7 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
                 (base_id,),
             )
         )
-        instance_id = str(rule.get("instance_id", ""))
+        instance_id = str(rule.get("instance_id"))
         exit_kind = str(rule.get("exit_kind", ""))
         exit_columns[instance_id] = distance_id
         exit_columns.setdefault(exit_kind, distance_id)
