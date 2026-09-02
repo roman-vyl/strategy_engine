@@ -18,6 +18,9 @@ from strategy_engine.strategies.application.build_live_strategy_feature_plan imp
     BuildLiveStrategyFeaturePlan,
 )
 from strategy_engine.strategies.application.catalog import StrategyCatalog
+from strategy_engine.strategies.application.check_static_semantics import (
+    CheckStrategyStaticSemantics,
+)
 from strategy_engine.strategies.application.evaluate_live_entry_projection import (
     EvaluateLiveEntryProjection,
 )
@@ -162,10 +165,13 @@ def _services(
     planner = BuildStrategyFeaturePlan()
     evaluator = EmaPullbackRangeEvaluator(planner, indicator_eval)
     registry = StrategyRegistry(evaluator)
-    validate_strategy = ValidateStrategySpec(registry, planner)
+    static_semantics_checker = CheckStrategyStaticSemantics()
+    validate_strategy = ValidateStrategySpec(registry, planner, static_semantics_checker)
     range_eval = EvaluateStrategyRange(registry, validate_strategy)
     live_planner = BuildLiveStrategyFeaturePlan()
-    validate_live_strategy = ValidateLiveStrategySpec(registry, live_planner)
+    validate_live_strategy = ValidateLiveStrategySpec(
+        registry, live_planner, static_semantics_checker
+    )
     window_planner = PlanLiveHistoryStart(
         strategy_requirements=EmaPullbackLiveCalculationRequirements()
     )
@@ -339,6 +345,26 @@ def test_live_entry_http_preserves_typed_not_ready_error() -> None:
     assert response.status_code == 409
     assert response.json()["error"] == "market_stream_not_ready"
     assert market_data.bounds_calls == 1
+    assert market_data.range_calls == 0
+
+
+def test_live_entry_http_rejects_duplicate_exit_instance_id() -> None:
+    # Proof that the live-entry path -- ValidateLiveStrategySpec via
+    # LoadLiveFeatureFrame, not ValidateStrategySpec/authoring-config
+    # validation -- also enforces the restored old-BBB static semantic
+    # invariants (here: exit-rule instance_id uniqueness), not just the
+    # historical/authoring boundary.
+    app_services, market_data = _services()
+    payload = _payload()
+    exits = payload["raw_spec"]["trade_management"]["exit_policy"]["always_on"]["exits"]  # type: ignore[index]
+    exits[1]["instance_id"] = exits[0]["instance_id"]
+
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/live-entry", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_request"
+    assert market_data.bounds_calls == 0
     assert market_data.range_calls == 0
 
 

@@ -135,10 +135,15 @@ old-BBB-canonical invariant class, not a new one.
   reflect the now-stricter Engine contract, tracked separately, not as
   part of this change's tasks.
 - No change to Runtime (`strategy_runtime`). Runtime's deployment-
-  catalog envelope validation and its live-entry/open-trade call path
-  are unaffected; whether/where Runtime should call authoring
-  validation at discovery time is a separate, larger lifecycle
-  question explicitly out of scope here.
+  catalog envelope validation and the HTTP shape of its live-entry/
+  open-trade calls are unaffected; whether/where Runtime should call
+  authoring validation at discovery time is a separate, larger
+  lifecycle question explicitly out of scope here. This is distinct
+  from Engine's *own* internal live-entry/open-trade validation depth
+  (`ValidateLiveStrategySpec`, Engine-side code Runtime calls into) —
+  that gate is in scope and covered by this change, since it is the
+  same class of static-semantic gap on a second Engine entrypoint, not
+  a Runtime change.
 - No attempt to validate market-data availability, runtime/position
   state, external service availability, or the numeric result of
   strategy evaluation. Authoring validation stays a static, data-free

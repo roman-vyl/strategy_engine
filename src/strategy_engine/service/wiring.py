@@ -94,6 +94,7 @@ def build_services(settings: Settings) -> ApplicationServices:
     validate_live_strategy_spec = ValidateLiveStrategySpec(
         strategy_registry,
         build_live_strategy_feature_plan,
+        check_strategy_static_semantics,
     )
     window_planner = PlanLiveHistoryStart(
         strategy_requirements=EmaPullbackLiveCalculationRequirements()

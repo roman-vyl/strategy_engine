@@ -10,6 +10,30 @@ stays the single call site both authoring-config validation
 exactly one thing after registry/capability checks:
 `self._feature_plan_builder.execute(strategy)`.
 
+**Caught in review, fixed before completion**: `ValidateStrategySpec`
+is not the only production entrypoint that calls a feature-plan
+builder before evaluation. Runtime-facing live-entry/open-trade
+(`EvaluateLiveEntryProjection`/`EvaluateOpenTradeProjection` →
+`LoadLiveFeatureFrame.execute` → `ValidateLiveStrategySpec.execute`)
+is a second, independent gate that only did registry checks +
+`BuildLiveStrategyFeaturePlan.execute(strategy)` — no static semantics
+call at all. A `raw_spec` with, say, a duplicate exit-rule
+`instance_id` (an invariant that lives solely in
+`check_ema_pullback_static_semantics`, nowhere in `feature_plan.py` or
+any evaluator module) could reach live evaluation ungated even after
+this change, while being correctly rejected on the historical/
+authoring boundary — reproducing the exact class of decomposition gap
+this proposal exists to close, just moved one boundary over.
+`ValidateLiveStrategySpec` now takes the same
+`static_semantics_checker: CheckStrategyStaticSemantics | None = None`
+parameter as `ValidateStrategySpec`, called the same way (guarded on
+`is not None`, before `feature_plan_builder.execute`), and
+`service/wiring.py` passes it the same `CheckStrategyStaticSemantics`
+instance used for the historical/authoring path — one checker
+instance, two call sites, so there is exactly one authoritative gate
+definition even though there remain two places in the call graph that
+must each invoke it.
+
 This change adds a second, parallel step to the same method — a
 strategy-dispatched **static semantic check**, mirroring the existing
 `BuildStrategyFeaturePlan` dispatch pattern:

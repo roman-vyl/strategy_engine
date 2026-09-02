@@ -158,7 +158,38 @@
       `triggers.py`/`risk.py`/`static_semantics.py` — guards the
       no-cycle property going forward.
 
-## 5. Verification
+## 5. Live-entry/open-trade boundary drift fix (post-review)
+
+- [x] **Found by review**: `ValidateStrategySpec` is not the only
+      production entrypoint that gates evaluation with a feature-plan
+      builder. `EvaluateLiveEntryProjection`/`EvaluateOpenTradeProjection`
+      → `LoadLiveFeatureFrame.execute` → `ValidateLiveStrategySpec.execute`
+      is a second, independent gate (Runtime-facing live-entry/
+      open-trade) that only did registry checks +
+      `BuildLiveStrategyFeaturePlan.execute(strategy)` — the new static
+      semantics checker was never called there, so old-BBB invariants
+      that live solely in `check_ema_pullback_static_semantics` (e.g.
+      duplicate exit-rule `instance_id`) could still reach live
+      evaluation ungated.
+- [x] Added `static_semantics_checker: CheckStrategyStaticSemantics |
+      None = None` to `ValidateLiveStrategySpec.__init__`, called the
+      same way as `ValidateStrategySpec` (guarded on `is not None`,
+      before `feature_plan_builder.execute`).
+- [x] `service/wiring.py`: pass the same `CheckStrategyStaticSemantics`
+      instance already constructed for `ValidateStrategySpec` into
+      `ValidateLiveStrategySpec` too — one checker, two call sites.
+- [x] Regression: `test_live_entry_projection_api.py::_services` now
+      wires the checker into both validators; added
+      `test_live_entry_http_rejects_duplicate_exit_instance_id`
+      proving `/v1/strategy-evaluations/live-entry` rejects a spec with
+      duplicate exit-rule `instance_id` (422, `invalid_request`,
+      zero market-data calls) — the same invariant class already
+      proven on the authoring/historical boundary, now proven on the
+      live boundary too.
+- [x] `make verify` green (476 tests), no behavior change to any
+      already-valid spec.
+
+## 6. Verification
 
 - [x] `make verify` (lint, typecheck, full test suite, release-check)
       green.
