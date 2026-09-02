@@ -13,6 +13,7 @@ from typing import Any
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     BLOCKER_SUPPORTED,
+    DIRECTION_SUPPORTED,
     EXIT_DISTANCE_SUPPORTED,
     EXIT_SIGNAL_SUPPORTED,
     RISK_SUPPORTED,
@@ -47,7 +48,7 @@ def check_ema_pullback_static_semantics(raw_spec: Mapping[str, Any]) -> None:
     resolve_enabled_sides(raw_spec)
 
     direction_component_id = resolve_direction_component_id(raw_spec)
-    if direction_component_id != "ema_anchor_stack_trend":
+    if direction_component_id not in DIRECTION_SUPPORTED:
         raise InvalidRequestError(
             "unsupported direction component", component_id=direction_component_id
         )

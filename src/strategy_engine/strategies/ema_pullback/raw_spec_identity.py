@@ -41,6 +41,7 @@ BLOCKER_SUPPORTED = frozenset(
 SETUP_SUPPORTED = frozenset(
     {"untouched_anchor_setup", "ema_bounce_counter_setup", "anchor_stack_width_setup"}
 )
+DIRECTION_SUPPORTED = frozenset({"ema_anchor_stack_trend"})
 
 
 def _mapping(value: object, path: str) -> Mapping[str, Any]:

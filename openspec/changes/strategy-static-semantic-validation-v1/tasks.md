@@ -95,6 +95,20 @@
       `from strategy_engine...` import edges back to any family module
       or `feature_plan.py`/`static_semantics.py` — the DAG `design.md`
       specifies. `mypy src` and full test suite both green.
+- [x] **Drift fix (post-review)**: `direction_blockers.py` and
+      `setups.py` still had their own literal `if component_id ==
+      ...`/`else: raise "unsupported"` chains duplicating the
+      allowlist independently of `raw_spec_identity.py`'s
+      `BLOCKER_SUPPORTED`/`SETUP_SUPPORTED`/`DIRECTION_SUPPORTED`
+      (only `risk.py`/`triggers.py`/`exits.py` were already shaped
+      this way). Added `DIRECTION_SUPPORTED` to `raw_spec_identity.py`
+      and repointed all three evaluator dispatch sites
+      (`_direction`, the blocker-dispatch function, `_setup`) and
+      `static_semantics.py` to do `if component_id not in <SET>:
+      raise` as the sole legitimacy check, with the following
+      `if`/`elif` chain used only for behavior selection (no
+      remaining `else: raise "unsupported"` anywhere) — `make verify`
+      confirmed no behavior change (475 tests, unchanged pass count).
 
 ## 4. Regression coverage
 

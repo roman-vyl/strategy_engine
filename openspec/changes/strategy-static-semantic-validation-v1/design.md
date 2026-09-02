@@ -151,6 +151,27 @@ modules, `feature_plan.py`, the new static-semantics module) importing
 from it rather than redefining or re-deriving it, and no import cycle
 anywhere in the dependency graph.
 
+**Caught in review, fixed before completion**: it is not enough for
+`raw_spec_identity.py` to hold the allowlist constants if the
+evaluator's own dispatch functions keep an independent `if/elif`
+enumeration of the same literal `component_id` strings alongside them
+— that is still drift, just moved one layer down (a future new
+blocker/setup `component_id` could be added to the evaluator's
+`elif`/`else` chain and the validator's allowlist would silently stay
+stale, or vice versa). The fix: `direction_blockers.py::_direction`
+and the blocker-dispatch function, and `setups.py::_setup`, now each
+do `if component_id not in {DIRECTION,BLOCKER,SETUP}_SUPPORTED: raise`
+as their *only* legitimacy check, sourced from `raw_spec_identity.py`
+— the `if`/`elif` chain that follows exists purely to select
+*behavior* for an already-known-legal `component_id`, with no
+remaining `else: raise "unsupported"` branch duplicating the
+allowlist. `risk.py`, `triggers.py`, and `exits.py` already followed
+this shape from the start (`component_id not in _SUPPORTED` guarding
+a single dispatch). Adding a new legal `component_id` for any family
+now means adding it to exactly one frozenset in
+`raw_spec_identity.py` plus one new evaluator behavior branch — never
+two independent allowlists to keep in sync.
+
 ## Role of `BuildStrategyFeaturePlan`/`BuildLiveStrategyFeaturePlan` after this change
 
 Unchanged in kind, narrowed in practice: it remains the indicator-

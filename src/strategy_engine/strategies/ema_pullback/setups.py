@@ -22,6 +22,9 @@ from strategy_engine.strategies.ema_pullback.feature_plan import (
     EmaPullbackFeaturePlan,
 )
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    SETUP_SUPPORTED,
+)
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     resolve_setup_identity as _setup_identity,
 )
 
@@ -415,6 +418,8 @@ def _setup(
     records: tuple[ContextConsumptionRecord, ...],
 ) -> SetupMask:
     component_id, instance_id = _setup_identity(item)
+    if component_id not in SETUP_SUPPORTED:
+        raise InvalidRequestError("unsupported setup component", component_id=component_id)
     params = _mapping(item.get("params", {}), f"setup[{instance_id}].params")
     if side not in _VALID_SIDES:
         raise InvalidRequestError("trade side must be long or short", side=side)
@@ -425,13 +430,11 @@ def _setup(
         if columns is None:
             raise InvalidRequestError("missing setup feature mapping", instance_id=instance_id)
         local, trace = _ema_bounce_counter(frame, columns, params, side)
-    elif component_id == "anchor_stack_width_setup":
+    else:
         columns = plan.setup_columns_by_instance_id.get(instance_id)
         if columns is None:
             raise InvalidRequestError("missing setup feature mapping", instance_id=instance_id)
         local, trace = _anchor_stack_width(frame, columns, params)
-    else:
-        raise InvalidRequestError("unsupported setup component", component_id=component_id)
     gate = _gate_for(records, instance_id=instance_id, side=side)
     return SetupMask(
         component_id=component_id,

@@ -16,6 +16,10 @@ from strategy_engine.strategies.ema_pullback.context_consumption import (
 )
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    BLOCKER_SUPPORTED,
+    DIRECTION_SUPPORTED,
+)
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     resolve_blocker_identity as _blocker_identity,
 )
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
@@ -127,7 +131,7 @@ def _direction(
     side: str,
 ) -> ComponentMask:
     component_id = _direction_component_id(raw_spec)
-    if component_id != "ema_anchor_stack_trend":
+    if component_id not in DIRECTION_SUPPORTED:
         raise InvalidRequestError("unsupported direction component", component_id=component_id)
     fast = _float_series(frame, plan.anchor_columns["fast"])
     anchor = _float_series(frame, plan.anchor_columns["anchor"])
@@ -297,6 +301,8 @@ def _blocker(
     records: tuple[ContextConsumptionRecord, ...],
 ) -> ComponentMask:
     component_id, instance_id = _blocker_identity(item)
+    if component_id not in BLOCKER_SUPPORTED:
+        raise InvalidRequestError("unsupported blocker component", component_id=component_id)
     length = len(frame.time_ms)
     trace: dict[str, tuple[object, ...]] = {}
     if component_id == "no_blockers":
@@ -310,10 +316,8 @@ def _blocker(
         )
     elif component_id == "rsi_lookback_extreme_blocker":
         intrinsic, trace = _rsi_blocker(item, frame, plan, side)
-    elif component_id == "trend_strength_episode_blocker":
-        intrinsic, trace = _trend_strength_blocker(item, frame, plan, side)
     else:
-        raise InvalidRequestError("unsupported blocker component", component_id=component_id)
+        intrinsic, trace = _trend_strength_blocker(item, frame, plan, side)
     gate = _gate_for(records, role="blocker", instance_id=instance_id, side=side)
     allowed = _apply_gate(intrinsic, gate)
     return ComponentMask(
