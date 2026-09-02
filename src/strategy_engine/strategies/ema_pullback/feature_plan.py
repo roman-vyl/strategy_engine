@@ -8,6 +8,10 @@ from typing import Any, cast
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.indicators.contracts import IndicatorPlan, PlannedFeature
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    require_non_empty_instance_id,
+    resolve_exit_rule_groups,
+)
 
 _ALLOWED_KINDS = {"ema", "atr", "atr_distance", "rsi", "adx", "di_plus", "di_minus"}
 
@@ -65,12 +69,6 @@ def _positive_int(value: Any, path: str) -> int:
     return cast(int, value)
 
 
-def _required_instance_id(value: Any, path: str) -> str:
-    if not isinstance(value, str) or not value:
-        raise InvalidRequestError(f"{path} must be a non-empty string")
-    return value
-
-
 def _ema_id(timeframe: str, period: int) -> str:
     return f"ema_close_{timeframe}_{period}"
 
@@ -115,7 +113,6 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
     stack = _mapping(root.get("anchor_stack"), "anchor_stack")
     components = _mapping(root.get("components"), "components")
     trade_management = _mapping(root.get("trade_management"), "trade_management")
-    exit_policy = _mapping(trade_management.get("exit_policy"), "trade_management.exit_policy")
 
     features: list[PlannedFeature] = []
     seen: set[str] = set()
@@ -183,18 +180,12 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
             resolved[role] = output_id
         htf_columns[str(context_ref)] = resolved
 
-    all_exits: list[Mapping[str, Any]] = []
-    always_on = _mapping(exit_policy.get("always_on"), "exit_policy.always_on")
-    all_exits.extend(
-        _mapping(item, "exit") for item in _sequence(always_on.get("exits"), "always_on.exits")
-    )
-    profiles = _mapping(exit_policy.get("profiles"), "exit_policy.profiles")
-    for profile_name in ("aligned", "countertrend", "neutral"):
-        profile = _mapping(profiles.get(profile_name), f"profiles.{profile_name}")
-        all_exits.extend(
-            _mapping(item, f"profiles.{profile_name}.exits[]")
-            for item in _sequence(profile.get("exits"), f"profiles.{profile_name}.exits")
-        )
+    exit_rule_groups = resolve_exit_rule_groups(root)
+    all_exits: list[Mapping[str, Any]] = [
+        rule
+        for group in ("always_on", "aligned", "countertrend", "neutral")
+        for rule in exit_rule_groups[group]
+    ]
 
     exit_columns: dict[str, str] = {}
     ema_columns: dict[tuple[str, int], str] = {}
@@ -223,7 +214,7 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
     adx_dmi_columns: dict[tuple[str, int], dict[str, str]] = {}
 
     for index, rule in enumerate(all_exits):
-        _required_instance_id(rule.get("instance_id"), f"exits[{index}].instance_id")
+        require_non_empty_instance_id(rule.get("instance_id"), f"exits[{index}].instance_id")
         distance = rule.get("distance")
         if distance is None:
             continue

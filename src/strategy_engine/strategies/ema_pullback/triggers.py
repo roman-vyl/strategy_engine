@@ -9,10 +9,15 @@ from typing import Any, cast
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    TRIGGER_SUPPORTED as _SUPPORTED,
+)
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    resolve_trigger_rule as _trigger_rule,
+)
 from strategy_engine.strategies.ema_pullback.setups import SideSetupEvaluation
 
 _VALID_SIDES = frozenset({"long", "short"})
-_SUPPORTED = frozenset({"reclaim_anchor", "strong_reclaim_anchor", "touch_anchor"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,12 +74,6 @@ def touch_anchor_close_ok(evaluation: SideTriggerEvaluation) -> tuple[bool, ...]
             side=evaluation.side,
         )
     return cast(tuple[bool, ...], values)
-
-
-def _mapping(value: object, path: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
-        raise InvalidRequestError(f"{path} must be an object")
-    return value
 
 
 def _float_series(frame: FeatureFrameLike, output_id: str) -> tuple[float, ...]:
@@ -171,14 +170,6 @@ def _touch_anchor(
         raise InvalidRequestError("trade side must be long or short", side=side)
     trigger = tuple(left and right for left, right in zip(touch, close_ok, strict=True))
     return trigger, {"touch": touch, "close_ok": close_ok, "trigger": trigger}
-
-
-def _trigger_rule(raw_spec: Mapping[str, Any]) -> Mapping[str, Any]:
-    components = _mapping(raw_spec.get("components", {}), "raw_spec.components")
-    raw = components.get("trigger", {"component_id": "reclaim_anchor", "lookback": 1})
-    if isinstance(raw, str):
-        return {"component_id": raw}
-    return _mapping(raw, "raw_spec.components.trigger")
 
 
 def evaluate_triggers(

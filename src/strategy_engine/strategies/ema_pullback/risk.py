@@ -7,9 +7,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from strategy_engine.domain.errors import InvalidRequestError
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    RISK_SUPPORTED as _SUPPORTED,
+)
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    resolve_risk_component_id as _risk_component_id,
+)
 from strategy_engine.strategies.ema_pullback.triggers import SideTriggerEvaluation
-
-_SUPPORTED = frozenset({"no_risk_filter"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,21 +48,6 @@ class SideEntryEvaluation:
             "entry_allowed": list(self.entry_allowed),
             "entry_count": sum(self.entry_allowed),
         }
-
-
-def _mapping(value: object, path: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
-        raise InvalidRequestError(f"{path} must be an object")
-    return value
-
-
-def _risk_component_id(raw_spec: Mapping[str, Any]) -> str:
-    components = _mapping(raw_spec.get("components", {}), "raw_spec.components")
-    raw = components.get("risk", "no_risk_filter")
-    if isinstance(raw, str):
-        return raw
-    payload = _mapping(raw, "raw_spec.components.risk")
-    return str(payload.get("component_id", "no_risk_filter"))
 
 
 def evaluate_risk_and_entries(

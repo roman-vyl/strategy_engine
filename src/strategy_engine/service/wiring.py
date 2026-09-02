@@ -15,6 +15,9 @@ from strategy_engine.strategies.application.build_live_strategy_feature_plan imp
     BuildLiveStrategyFeaturePlan,
 )
 from strategy_engine.strategies.application.catalog import StrategyCatalog
+from strategy_engine.strategies.application.check_static_semantics import (
+    CheckStrategyStaticSemantics,
+)
 from strategy_engine.strategies.application.evaluate_live_entry_projection import (
     EvaluateLiveEntryProjection,
 )
@@ -77,9 +80,11 @@ def build_services(settings: Settings) -> ApplicationServices:
         evaluate_indicator_range,
     )
     strategy_registry = StrategyRegistry(ema_pullback_evaluator)
+    check_strategy_static_semantics = CheckStrategyStaticSemantics()
     validate_strategy_spec = ValidateStrategySpec(
         strategy_registry,
         build_strategy_feature_plan,
+        check_strategy_static_semantics,
     )
     evaluate_strategy_range = EvaluateStrategyRange(
         strategy_registry,

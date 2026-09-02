@@ -81,9 +81,10 @@ dependency-neutral boundary with zero knowledge of `EmaPullbackFeaturePlan`,
 `FeatureFrame`, or any evaluator. A new module,
 `strategies/ema_pullback/raw_spec_identity.py`, holds them:
 
-- `iter_exit_rules(raw_spec) -> tuple[Mapping[str, Any], ...]` — the
-  `always_on` + all three profiles' exits gather, moved out of
-  `exits.py::_policy_rules` verbatim (pure already, no `frame`).
+- `resolve_exit_rule_groups(raw_spec) -> dict[str, tuple[Mapping[str, Any], ...]]`
+  — the `always_on` + all three profiles' exits gather, moved out of
+  `exits.py::_policy_rules` verbatim (pure already, no `frame`; kept
+  the dict-of-groups shape `exits.py`'s own dispatch needs).
 - `resolve_risk_component_id(raw_spec) -> str` — moved out of
   `risk.py::_risk_component_id` verbatim, together with the
   `_SUPPORTED` risk allowlist.
@@ -168,7 +169,7 @@ Those move to `raw_spec_identity.py` (or, for the already-shipped
 exit-rule instance_id check, are relocated there from the private
 `_required_instance_id` currently local to `feature_plan.py`).
 `feature_plan.py`'s exit-rule loop calls
-`raw_spec_identity.py::iter_exit_rules` for the always_on/profiles
+`raw_spec_identity.py::resolve_exit_rule_groups` for the always_on/profiles
 walk instead of re-implementing it, and the identity check on each
 rule becomes a call into `raw_spec_identity.py::require_non_empty_instance_id`
 rather than an inline local helper — `feature_plan.py` depends
@@ -212,9 +213,10 @@ exact file:line references):
   reused twice within the same group.
 
 No uniqueness domain is invented beyond what old BBB already enforced;
-`raw_spec_identity.py::iter_exit_rules` already gathers exactly the
-four-group flat list `require_unique_instance_ids` needs for the exit
-domain, so no separate traversal is needed for the uniqueness check.
+`raw_spec_identity.py::resolve_exit_rule_groups` already gathers
+exactly the four groups `require_unique_instance_ids` needs to flatten
+for the exit domain, so no separate traversal is needed for the
+uniqueness check.
 
 ## What this design deliberately does not do
 

@@ -21,6 +21,9 @@ from strategy_engine.strategies.ema_pullback.direction_blockers import (
 from strategy_engine.strategies.ema_pullback.feature_plan import (
     EmaPullbackFeaturePlan,
 )
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    resolve_setup_identity as _setup_identity,
+)
 
 _VALID_SIDES = frozenset({"long", "short"})
 
@@ -411,8 +414,7 @@ def _setup(
     side: str,
     records: tuple[ContextConsumptionRecord, ...],
 ) -> SetupMask:
-    component_id = str(item.get("component_id", ""))
-    instance_id = str(item.get("instance_id", component_id))
+    component_id, instance_id = _setup_identity(item)
     params = _mapping(item.get("params", {}), f"setup[{instance_id}].params")
     if side not in _VALID_SIDES:
         raise InvalidRequestError("trade side must be long or short", side=side)

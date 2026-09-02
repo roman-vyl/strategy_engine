@@ -18,21 +18,18 @@ from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
 )
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    EXIT_DISTANCE_SUPPORTED as _DISTANCE_COMPONENTS,
+)
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    EXIT_SIGNAL_SUPPORTED as _SIGNAL_COMPONENTS,
+)
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    resolve_exit_rule_groups as _policy_rules,
+)
 
 _PROFILE_ORDER = ("aligned", "countertrend", "neutral")
 _PROFILE_CODE = {name: index for index, name in enumerate(_PROFILE_ORDER)}
-_SIGNAL_COMPONENTS = {
-    "no_signal_exit",
-    "rsi_signal_exit",
-    "ema_close_loss_exit",
-    "ema_cross_loss_exit",
-}
-_DISTANCE_COMPONENTS = {
-    "atr_stop_loss",
-    "atr_take_profit",
-    "constant_usd_stop_loss",
-    "constant_usd_take_profit",
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,18 +283,6 @@ def _distance(
     if (close <= 0).any():
         raise InvalidRequestError("exit distance ratio requires positive close")
     return distance.astype(float), (distance / close).astype(float)
-
-
-def _policy_rules(raw_spec: Mapping[str, Any]) -> dict[str, tuple[Mapping[str, Any], ...]]:
-    trade_management = _mapping(raw_spec.get("trade_management", {}), "trade_management")
-    exit_policy = _mapping(trade_management.get("exit_policy", {}), "exit_policy")
-    always = _mapping(exit_policy.get("always_on", {}), "exit_policy.always_on")
-    profiles = _mapping(exit_policy.get("profiles", {}), "exit_policy.profiles")
-    result = {"always_on": _list(always.get("exits", []), "always_on.exits")}
-    for profile in _PROFILE_ORDER:
-        payload = _mapping(profiles.get(profile, {}), f"exit_policy.profiles.{profile}")
-        result[profile] = _list(payload.get("exits", []), f"profiles.{profile}.exits")
-    return result
 
 
 def _profiles(

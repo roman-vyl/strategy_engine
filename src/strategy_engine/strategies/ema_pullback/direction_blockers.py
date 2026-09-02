@@ -15,6 +15,15 @@ from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
 )
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    resolve_blocker_identity as _blocker_identity,
+)
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    resolve_direction_component_id as _direction_component_id,
+)
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    resolve_enabled_sides as _enabled_sides,
+)
 
 _VALID_SIDES = {"long", "short"}
 
@@ -82,16 +91,6 @@ def _sequence(value: object, path: str) -> tuple[object, ...]:
     return tuple(value)
 
 
-def _enabled_sides(raw_spec: Mapping[str, Any]) -> tuple[str, ...]:
-    raw: object = raw_spec.get("trade_sides", ["long"])
-    if isinstance(raw, Mapping):
-        raw = raw.get("enabled", ["long"])
-    sides = tuple(str(item) for item in _sequence(raw, "raw_spec.trade_sides"))
-    if not sides or any(side not in _VALID_SIDES for side in sides):
-        raise InvalidRequestError("raw_spec.trade_sides must contain long/short")
-    return sides
-
-
 def _float_series(frame: FeatureFrameLike, output_id: str) -> tuple[float, ...]:
     try:
         values = frame.series[output_id]
@@ -127,8 +126,7 @@ def _direction(
     plan: EmaPullbackFeaturePlan,
     side: str,
 ) -> ComponentMask:
-    components = _mapping(raw_spec.get("components", {}), "raw_spec.components")
-    component_id = str(components.get("direction", "ema_anchor_stack_trend"))
+    component_id = _direction_component_id(raw_spec)
     if component_id != "ema_anchor_stack_trend":
         raise InvalidRequestError("unsupported direction component", component_id=component_id)
     fast = _float_series(frame, plan.anchor_columns["fast"])
@@ -298,8 +296,7 @@ def _blocker(
     side: str,
     records: tuple[ContextConsumptionRecord, ...],
 ) -> ComponentMask:
-    component_id = str(item.get("component_id", ""))
-    instance_id = str(item.get("instance_id", component_id))
+    component_id, instance_id = _blocker_identity(item)
     length = len(frame.time_ms)
     trace: dict[str, tuple[object, ...]] = {}
     if component_id == "no_blockers":
