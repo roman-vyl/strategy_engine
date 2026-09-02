@@ -39,6 +39,36 @@ weaker than the spec's own words promise: it verifies "this raw_spec's
 indicator dependencies are constructible," not "this raw_spec's
 strategy semantics are valid."
 
+A separate, targeted old-BBB parity lookup (pre-decomposition
+`research/strategies/ema_pullback/spec.py`, the dataclass-based
+`EmaPullbackStrategySpec` construction-time validation that predates
+Strategy Engine) confirms this gap is a **regression**, not new scope:
+old BBB required `instance_id` to be mandatory, non-empty, and unique
+for setups, blockers, and exit rules alike, enforced fail-closed at
+spec-construction time —
+
+- `SetupRuleSpec.__post_init__` (`spec.py:313`): non-empty
+  `instance_id`; `EmaPullbackStrategySpec.__post_init__` (`spec.py:920`):
+  `_validate_unique_instance_ids("setups", self.setups)` — unique
+  across all setups in the strategy.
+- `BlockerRuleSpec.__post_init__` (`spec.py:171`): non-empty
+  `instance_id`; `ComponentStackSpec.__post_init__` (`spec.py:87`):
+  `_validate_unique_instance_ids("components.blockers", self.blockers)`
+  — unique across all blockers in the strategy.
+- `ExitRuleSpec.__post_init__` (`spec.py:435`): non-empty
+  `instance_id`; `ExitPolicySpec.__post_init__` (`spec.py:558-566`) and
+  `TradeManagementSpec.__post_init__` (`spec.py:880-893`) both enforce:
+  unique **globally across `always_on` and all three profiles
+  (`aligned`/`countertrend`/`neutral`) combined** — not per-group.
+
+Current Engine code preserves none of the uniqueness half of this:
+`setups.py:415` falls back `instance_id` to `component_id` when
+absent (silently permitting duplicate/collapsed identities instead of
+failing closed), and no module checks uniqueness for setups, blockers,
+or exits at all. Only the exit-rule non-empty check was restored by a
+prior targeted fix; this change restores the rest of the same
+old-BBB-canonical invariant class, not a new one.
+
 ## What changes
 
 - Define, precisely, what `valid=true` from authoring-config
@@ -49,10 +79,13 @@ strategy semantics are valid."
 - Extend the invariants authoring-config validation checks to cover
   the categories already proven to exist as a gap: unsupported
   `component_id` for any component family the evaluator dispatches on
-  (blocker, trigger, risk, setup, exit), and missing/empty rule or
-  component `instance_id` where the evaluator requires identity (the
-  exit-rule case, generalized to setups where the same pattern
-  applies).
+  (blocker, trigger, risk, setup, exit); missing/empty rule or
+  component `instance_id` where old BBB required identity (setups,
+  blockers, exit rules); and duplicate `instance_id` within each of
+  old BBB's three uniqueness domains (setups: unique across all
+  setups; blockers: unique across all blockers; exits: unique
+  globally across `always_on` + all three profiles combined) — see
+  "Why" above for the exact old-BBB precedent per domain.
 - Introduce a small internal mechanism inside `strategy_engine` so
   these checks are expressed once and reused by both the authoring
   validator and the evaluator that already enforces them at
@@ -81,6 +114,9 @@ strategy semantics are valid."
   invariant (`feature_plan.py`) is retained as-is; this change may
   relocate or generalize its implementation per `design.md`, but does
   not weaken or remove the invariant itself.
+- Restoring old-BBB identity invariants (mandatory non-empty
+  `instance_id`, plus uniqueness within each domain named above) for
+  setups and blockers, which never had them in Strategy Engine at all.
 
 ## Non-goals
 

@@ -1,54 +1,69 @@
 # Tasks: Strategy static semantic validation v1
 
-## 1. Extract pure component-identity checks (no behavior change yet)
+## 1. Create the dependency-neutral `raw_spec_identity.py` module
 
-- [ ] `risk.py`: confirm `_risk_component_id`/`_SUPPORTED` are
-      importable/reusable as-is from a new caller; no code change
-      expected here beyond visibility if needed.
-- [ ] `triggers.py`: confirm `_trigger_rule`/`_SUPPORTED` are
-      importable/reusable as-is; no behavior change.
-- [ ] `direction_blockers.py`: extract the `component_id` resolution
-      + `"unsupported direction component"` check out of `_direction`
-      into a small pure function; extract the per-item `component_id`/
-      `instance_id` resolution + `"unsupported blocker component"`
-      check out of the blocker dispatch function into a small pure
-      function. Evaluator call sites call the extracted functions,
-      behavior identical.
-- [ ] `setups.py`: extract the `component_id`/`instance_id`
-      resolution at the top of `_setup` (before `frame`-dependent
-      branches) into a small pure function, including the
-      `"unsupported setup component"` check. Evaluator call site
-      calls the extracted function, behavior identical.
-- [ ] `exits.py`: no extraction needed — `_policy_rules` is already
-      pure; confirm it is importable from `feature_plan.py` and from
-      the new static-semantics module.
+- [ ] Add `strategies/ema_pullback/raw_spec_identity.py` with zero
+      imports from `feature_plan.py`, `exits.py`, `setups.py`,
+      `direction_blockers.py`, `triggers.py`, or `risk.py` (only
+      stdlib/`Mapping` typing + `InvalidRequestError`).
+- [ ] Move `risk.py::_risk_component_id` + `_SUPPORTED` into it
+      verbatim as `resolve_risk_component_id`/module constant; `risk.py`
+      imports it back. No behavior change.
+- [ ] Move `triggers.py::_trigger_rule` + `_SUPPORTED` into it verbatim
+      as `resolve_trigger_rule`/module constant; `triggers.py` imports
+      it back. No behavior change.
+- [ ] Move `exits.py::_policy_rules` into it verbatim as
+      `iter_exit_rules`; `exits.py` imports it back. No behavior
+      change.
+- [ ] Extract the inline `component_id` resolution in
+      `direction_blockers.py::_direction` (line ~132) into
+      `resolve_direction_component_id(raw_spec) -> str` in the new
+      module; extract the inline `component_id`/`instance_id`
+      resolution in the blocker dispatch function (line ~319) into
+      `resolve_blocker_identity(item) -> tuple[str, str]`.
+      `direction_blockers.py` imports both back and calls them at the
+      same call sites, before its `frame`-dependent branches. No
+      behavior change.
+- [ ] Extract the inline `component_id`/`instance_id` resolution at
+      the top of `setups.py::_setup` into
+      `resolve_setup_identity(item) -> tuple[str, str]` in the new
+      module. `setups.py` imports it back and calls it before its
+      `frame`-dependent branches. No behavior change.
+- [ ] Add `require_non_empty_instance_id(instance_id, path) -> str`,
+      generalizing the private `_required_instance_id` currently local
+      to `feature_plan.py`.
+- [ ] Add `require_unique_instance_ids(scope, pairs) -> None`, modeled
+      on old BBB's `spec.py::_validate_unique_instance_ids` (raises on
+      first empty or repeated `instance_id` in the given ordered
+      `(instance_id, path)` sequence).
 - [ ] Run full existing test suite; confirm zero behavior change from
-      this section alone (pure refactor, no new checks yet).
+      this section alone (pure refactor, no new checks reachable yet).
 
-## 2. Add the shared identity-requirement utility
+## 2. Repoint the already-shipped exit-rule identity check
 
-- [ ] Add a small, non-strategy-specific utility (module-level
-      function) expressing "this rule/component requires a non-empty
-      `instance_id`" with the existing `InvalidRequestError` message/
-      path conventions — generalizing the private
-      `_required_instance_id` currently local to `feature_plan.py`.
-- [ ] Repoint `feature_plan.py`'s existing exit-rule instance_id check
-      to the shared utility (no behavior change: same error message,
-      same `exits[N].instance_id` path).
-- [ ] Add the equivalent check for `setups[N].instance_id` using the
-      same shared utility (this is new coverage — setups currently
-      fall back to `component_id` instead of failing closed).
+- [ ] `feature_plan.py`'s exit-rule loop: replace its local
+      `_required_instance_id` call with
+      `raw_spec_identity.require_non_empty_instance_id`; replace its
+      own `always_on`/profiles gather with
+      `raw_spec_identity.iter_exit_rules`. Same error message, same
+      `exits[N].instance_id` path, same behavior — confirm via
+      existing regression tests
+      (`test_ema_pullback_feature_plan.py::test_exit_rule_without_instance_id_is_rejected`,
+      `test_atr_exit_rule_without_instance_id_is_rejected`, etc.).
 
 ## 3. Build the static-semantics module and wire it into `ValidateStrategySpec`
 
 - [ ] Add `strategies/ema_pullback/static_semantics.py` with
       `check_ema_pullback_static_semantics(raw_spec) -> None`,
-      composing (in order): trade_sides structural check, direction
-      component check, blockers component/identity checks, trigger
-      component check, risk component check, setups component/
-      identity checks (using the extracted functions from Section 1
-      and the shared identity utility from Section 2), exit-rule
-      component/identity checks (reusing `exits.py::_policy_rules`).
+      composing (in order): trade_sides structural check; direction
+      component check; blockers component check + identity
+      (non-empty) + uniqueness (flat domain: all blockers); trigger
+      component check; risk component check; setups component check +
+      identity (non-empty) + uniqueness (flat domain: all setups);
+      exit-rule component check + identity (non-empty) + uniqueness
+      (flat domain: `always_on` + all three profiles combined) —
+      using `raw_spec_identity.py`'s functions exclusively, no
+      re-derived allowlists or identity logic.
 - [ ] Add `CheckStrategyStaticSemantics` (strategy-id dispatcher,
       mirrors `BuildStrategyFeaturePlan`'s shape) in
       `strategies/application/`.
@@ -57,10 +72,12 @@
       per `design.md`'s ordering.
 - [ ] Update `service/wiring.py` to construct and inject
       `CheckStrategyStaticSemantics`.
-- [ ] Update `feature_plan.py`'s exit-rule walk to call
-      `exits.py::_policy_rules` instead of re-implementing the
-      always_on/profiles gather (removes the pre-existing
-      duplication; behavior identical for valid specs).
+- [ ] Confirm (lint/mypy import-graph check or manual review) that no
+      module in `strategies/ema_pullback/` imports
+      `static_semantics.py`, and that `raw_spec_identity.py` has no
+      import edges back to `feature_plan.py`/`exits.py`/`setups.py`/
+      `direction_blockers.py`/`triggers.py`/`risk.py` — the DAG
+      `design.md` specifies.
 
 ## 4. Regression coverage
 
@@ -69,14 +86,22 @@
       → `valid=false`, stable `instances[N]` path, does not require a
       loaded `FeatureFrame`/market data to detect.
 - [ ] Authoring-config validation: missing/empty `instance_id` on a
-      setup (new coverage) and on an exit rule (existing coverage,
-      confirm still passes after relocation) → `valid=false`.
+      setup, a blocker (both new coverage), and an exit rule (existing
+      coverage, confirm still passes after relocation) →
+      `valid=false`.
+- [ ] Authoring-config validation: duplicate `instance_id` within each
+      uniqueness domain — two setups sharing one `instance_id`; two
+      blockers sharing one `instance_id`; two exit rules sharing one
+      `instance_id` where at least one pairing spans two different
+      exit groups (e.g. one in `always_on`, one in `profiles.aligned`)
+      to prove the domain is global across groups, not per-group →
+      `valid=false` in every case.
 - [ ] Authoring-config validation: malformed static structure
       (e.g. `raw_spec.trade_sides` missing/invalid, a blocker/trigger/
       risk entry that is not an object) → `valid=false`.
 - [ ] Authoring-config validation: a fully correct canonical
       `ema_pullback` raw_spec (covering setups, blockers, triggers,
-      risk, exits with valid component_ids and identities) →
+      risk, exits with valid, unique component_ids/identities) →
       `valid=true`.
 - [ ] Negative control: confirm a market-data-dependent runtime
       failure (e.g. `"market bars unavailable for setup evaluation"`)
@@ -86,17 +111,21 @@
       test asserting authoring validation does not require/accept
       market data input at all, to guard against future accidental
       coupling.
-- [ ] Direct unit tests for `check_ema_pullback_static_semantics`
-      (feature_plan/validate_spec test surface) covering each
-      extracted pure function's positive and negative case, without
-      going through HTTP.
-- [ ] Unit tests confirming the extracted pure functions in
-      `direction_blockers.py`/`setups.py` are still called correctly
-      from their original evaluator call sites (no evaluator behavior
-      regression) — reuse/extend existing evaluator test suites
-      (`test_ema_pullback_direction_blockers.py`,
+- [ ] Direct unit tests for `check_ema_pullback_static_semantics` and
+      for each `raw_spec_identity.py` function (including
+      `require_unique_instance_ids`'s three domain call sites),
+      without going through HTTP.
+- [ ] Unit tests confirming the extracted pure functions are still
+      called correctly from their original evaluator call sites (no
+      evaluator behavior regression) — reuse/extend existing evaluator
+      test suites (`test_ema_pullback_direction_blockers.py`,
       `test_ema_pullback_setups.py`, `test_ema_pullback_triggers.py`,
       `test_ema_pullback_exits.py`).
+- [ ] A static import-graph test (or documented manual check) that
+      `raw_spec_identity.py` has no import from any of
+      `feature_plan.py`/`exits.py`/`setups.py`/`direction_blockers.py`/
+      `triggers.py`/`risk.py`/`static_semantics.py` — guards the
+      no-cycle property going forward.
 
 ## 5. Verification
 

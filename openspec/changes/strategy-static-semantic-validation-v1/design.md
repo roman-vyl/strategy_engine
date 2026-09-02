@@ -51,89 +51,104 @@ route behavior (catch the first exception, report
 no new response shape, no aggregation of multiple errors, matching the
 existing "Stable invalid-instance path" requirement.
 
-## Avoiding independent copies of the same semantic rules
+## Avoiding independent copies of the same semantic rules — and the import-cycle constraint
 
 The problem this design must not create: a second, hand-written
 allowlist of legal `component_id`s that silently drifts from the one
-the evaluator actually dispatches on. Two facts from the existing code
-make this avoidable without inventing a new rule format:
+the evaluator actually dispatches on. Several evaluator modules already
+isolate their `component_id`/`instance_id` resolution as **pure
+functions of `raw_spec` alone**, with no `FeatureFrame`/market-data
+dependency (`risk.py::_risk_component_id`, `triggers.py::_trigger_rule`,
+`exits.py::_policy_rules`, and the inline-but-pure `component_id`
+resolution at the top of `direction_blockers.py::_direction`/blocker
+dispatch and `setups.py::_setup`, ahead of their `frame`-dependent
+branches) — the mechanism is to reuse these, not re-derive them.
 
-1. Several evaluator modules already isolate their `component_id`
-   resolution as a **pure function of `raw_spec` alone**, with no
-   `FeatureFrame`/market-data dependency:
-   - `risk.py::_risk_component_id(raw_spec) -> str` +
-     `component_id not in _SUPPORTED` (`_SUPPORTED` is already a
-     module-level constant).
-   - `triggers.py::_trigger_rule(raw_spec) -> Mapping` +
-     `component_id not in _SUPPORTED` (same pattern).
-   - `exits.py::_policy_rules(raw_spec) -> dict[str, tuple[Mapping, ...]]`
-     — pure, gathers `always_on` + all three profiles' exits exactly
-     like `feature_plan.py` does independently today (an existing,
-     pre-dating duplication this change also removes for exit rules).
-   - `direction_blockers.py`/`setups.py` resolve `component_id` inline
-     inside `_direction`/`_setup`, mixed with `frame`-dependent
-     branches, but the `component_id` comparison itself needs nothing
-     but the raw item.
+The naive placement — leave each pure function inside its family
+module (`exits.py`, `setups.py`, `direction_blockers.py`) and have
+`feature_plan.py` import them directly, as an earlier draft of this
+design proposed for `exits.py::_policy_rules` — creates a real import
+cycle: `exits.py`, `setups.py`, and `direction_blockers.py` each
+already import `EmaPullbackFeaturePlan` from `feature_plan.py` (for
+their `plan: EmaPullbackFeaturePlan` parameter type). If
+`feature_plan.py` then imports a pure helper back from any of them,
+that is `feature_plan.py → exits.py → feature_plan.py` (and the same
+shape for `setups.py`/`direction_blockers.py`) — a cycle, rejected.
 
-2. `_SUPPORTED`-style allowlists and inline `if component_id ==
-   ...`/`raise InvalidRequestError("unsupported ... component", ...)`
-   chains already exist once per family, at the exact point that
-   currently only fires at evaluation time.
+**Resolution**: the pure `raw_spec`-only resolution functions do not
+belong to any family's execution module at all — they belong on a
+dependency-neutral boundary with zero knowledge of `EmaPullbackFeaturePlan`,
+`FeatureFrame`, or any evaluator. A new module,
+`strategies/ema_pullback/raw_spec_identity.py`, holds them:
 
-The mechanism: extract (where not already extracted) each family's
-`component_id`-resolution-and-legitimacy-check into one small pure
-function per family, colocated in that family's existing module
-(`triggers.py`, `risk.py`, `direction_blockers.py`, `setups.py`,
-`exits.py`) so the file that owns a family's runtime dispatch also
-owns the one authoritative list of legal `component_id`s and identity
-requirements for that family. Concretely, per family:
+- `iter_exit_rules(raw_spec) -> tuple[Mapping[str, Any], ...]` — the
+  `always_on` + all three profiles' exits gather, moved out of
+  `exits.py::_policy_rules` verbatim (pure already, no `frame`).
+- `resolve_risk_component_id(raw_spec) -> str` — moved out of
+  `risk.py::_risk_component_id` verbatim, together with the
+  `_SUPPORTED` risk allowlist.
+- `resolve_trigger_rule(raw_spec) -> Mapping[str, Any]` — moved out of
+  `triggers.py::_trigger_rule` verbatim, together with the `_SUPPORTED`
+  trigger allowlist.
+- `resolve_direction_component_id(raw_spec) -> str` — extracted from
+  the inline check in `direction_blockers.py::_direction` (line ~132).
+- `resolve_blocker_identity(item) -> tuple[str, str]` (component_id,
+  instance_id) — extracted from the inline resolution in the blocker
+  dispatch function (line ~319).
+- `resolve_setup_identity(item) -> tuple[str, str]` — extracted from
+  the inline resolution at the top of `setups.py::_setup`.
+- `require_non_empty_instance_id(instance_id, path) -> str` — the
+  shared identity-non-emptiness utility (generalizes the already-
+  shipped `feature_plan.py::_required_instance_id`).
+- `require_unique_instance_ids(scope, pairs) -> None` — the shared
+  uniqueness utility, directly modeled on old BBB's
+  `spec.py::_validate_unique_instance_ids`: takes the domain's ordered
+  `(instance_id, path)` pairs and raises on the first empty or
+  repeated `instance_id`.
 
-- **risk** (`risk.py`): `_risk_component_id`/`_SUPPORTED` are already
-  exactly this — reuse as-is, call from the static-semantics module.
-- **triggers** (`triggers.py`): `_trigger_rule`/`_SUPPORTED` — same,
-  reuse as-is.
-- **direction/blockers** (`direction_blockers.py`): extract the
-  existing inline `component_id` comparisons in `_direction` (line
-  ~132) and the blocker dispatch (line ~319) into small pure
-  functions returning the resolved `component_id` (and, for blockers,
-  the per-item `instance_id`) without requiring `frame`; the
-  `raise InvalidRequestError("unsupported ... component", ...)` calls
-  move with them and are reused verbatim by both the new pure
-  functions and the existing evaluator call sites (evaluator calls the
-  pure function first, then proceeds with `frame`-dependent branches).
-- **setups** (`setups.py`): extract the `component_id`/`instance_id`
-  resolution currently inline in `_setup` (before the `frame`-using
-  branches) the same way; this is also where the setup-side instance-
-  identity requirement (see below) is enforced, generalizing the
-  exit-rule pattern.
-- **exits** (`exits.py`): `_policy_rules` is already pure and already
-  duplicated by `feature_plan.py`'s own `always_on`/profiles walk —
-  this change makes `feature_plan.py` call `_policy_rules` instead of
-  re-implementing the walk, removing that pre-existing duplication as
-  a side effect. The already-shipped non-empty-`instance_id` check
-  (currently a private `_required_instance_id` helper local to
-  `feature_plan.py`) moves to a small shared static-semantics utility
-  (module-level function, no class) used for both exit rules and
-  setups, since both are "rule/component identity the evaluator keys
-  a mapping by."
+`raw_spec_identity.py` imports nothing from `feature_plan.py`,
+`exits.py`, `setups.py`, `direction_blockers.py`, `triggers.py`, or
+`risk.py` — only stdlib/`Mapping` typing and
+`strategy_engine.domain.errors.InvalidRequestError`. Every one of
+those six modules, plus the new `static_semantics.py`, imports *from*
+`raw_spec_identity.py`, never the other way. This is a strict DAG:
+`raw_spec_identity.py` sits below everything; `feature_plan.py` and
+each family's execution module sit above it and never need to import
+each other's pure logic directly. `feature_plan.py`'s existing
+`plan: EmaPullbackFeaturePlan`-typed imports in `exits.py`/`setups.py`/
+`direction_blockers.py` are unaffected — that edge (family module →
+`feature_plan.py`, for the type) still points the same direction it
+always has; it is simply never the edge carrying the shared pure
+logic.
+
+`exits.py`, `risk.py`, `triggers.py`, `setups.py`, and
+`direction_blockers.py` each replace their local pure
+function/allowlist with an import from `raw_spec_identity.py` — same
+name, same behavior, so their own `InvalidRequestError` raises and
+messages are unchanged; only the definition site moves.
 
 A new thin module, `strategies/ema_pullback/static_semantics.py`,
-holds only `check_ema_pullback_static_semantics(raw_spec) ->
-None` — it imports and calls the small pure functions above from
-each existing module and raises the first `InvalidRequestError` it
-hits (existing exception type, existing message conventions,
-`raw_spec`-relative paths like `exits[N].instance_id`,
-`components.blockers[N]`, `components.trigger`, `components.risk`,
-`setups[N].instance_id`, matching the path conventions
-`feature_plan.py` already uses). It does not reimplement any
-allowlist or identity rule; it is pure composition/ordering.
+holds only `check_ema_pullback_static_semantics(raw_spec) -> None` —
+it imports the resolution and requirement functions from
+`raw_spec_identity.py` and calls them in sequence (trade_sides shape →
+direction → blockers component+identity+uniqueness → trigger
+component → risk component → setups component+identity+uniqueness →
+exit rules component+identity+uniqueness), raising the first
+`InvalidRequestError` it hits with the existing path conventions
+(`components.blockers[N]`, `components.trigger`, `components.risk`,
+`setups[N].instance_id`, `exits[N].instance_id`). It reimplements no
+allowlist or identity rule; it is pure composition/ordering, and it
+too imports only from `raw_spec_identity.py` — no cycle risk there
+either, since `ValidateStrategySpec` calls both
+`CheckStrategyStaticSemantics` and `BuildStrategyFeaturePlan`
+independently and neither needs to import the other.
 
-This keeps exactly one place per family that says "these are the
-legal `component_id` values and these are the identity requirements"
-— the family's own execution module — with the static-semantics
-module only sequencing calls into them, and `feature_plan.py` staying
-focused on indicator-dependency discovery (calling `_policy_rules` for
-its own walk instead of re-deriving the exit list by hand).
+This keeps exactly one place, system-wide, that says "these are the
+legal `component_id` values and these are the identity requirements
+per family" — `raw_spec_identity.py` — with every consumer (evaluator
+modules, `feature_plan.py`, the new static-semantics module) importing
+from it rather than redefining or re-deriving it, and no import cycle
+anywhere in the dependency graph.
 
 ## Role of `BuildStrategyFeaturePlan`/`BuildLiveStrategyFeaturePlan` after this change
 
@@ -149,13 +164,15 @@ discovery) — these were never semantic-legitimacy checks, they are
 
 It stops being — and this change does not make it become — the place
 where component_id legitimacy or rule identity requirements live.
-Those move to (or, for the already-shipped exit-rule instance_id
-check, are relocated to) the shared static-semantics utilities
-described above. `feature_plan.py`'s exit-rule loop calls
-`exits.py::_policy_rules` for the always_on/profiles walk instead of
-re-implementing it, and the identity check on each rule becomes a call
-into the shared static-semantics utility function rather than an
-inline `_required_instance_id` local to `feature_plan.py`.
+Those move to `raw_spec_identity.py` (or, for the already-shipped
+exit-rule instance_id check, are relocated there from the private
+`_required_instance_id` currently local to `feature_plan.py`).
+`feature_plan.py`'s exit-rule loop calls
+`raw_spec_identity.py::iter_exit_rules` for the always_on/profiles
+walk instead of re-implementing it, and the identity check on each
+rule becomes a call into `raw_spec_identity.py::require_non_empty_instance_id`
+rather than an inline local helper — `feature_plan.py` depends
+downward on `raw_spec_identity.py`, never sideways on `exits.py`.
 
 ## How this stays consistent with the evaluator (fail-closed execution preserved)
 
@@ -173,6 +190,31 @@ remain in place as the last-resort fail-closed guarantee for any
 exit-rule `instance_id` check already exists in both `feature_plan.py`
 and `exits.py`, independently, precisely for this reason). No
 evaluator code is deleted by this change.
+
+## Uniqueness domains (old-BBB parity)
+
+`require_unique_instance_ids` is called three times from
+`static_semantics.py`, each with the domain old BBB's
+`spec.py` enforced at construction time (see `proposal.md`'s "Why" for
+exact file:line references):
+
+- **setups**: one flat domain — every setup in `raw_spec.setups`, no
+  sub-grouping.
+- **blockers**: one flat domain — every blocker in
+  `raw_spec.components.blockers`, no sub-grouping.
+- **exit rules**: one flat domain spanning **all four exit groups
+  combined** — `trade_management.exit_policy.always_on.exits` +
+  `.profiles.aligned.exits` + `.profiles.countertrend.exits` +
+  `.profiles.neutral.exits` together, not per-group. This matches old
+  BBB's `ExitPolicySpec`/`TradeManagementSpec` behavior exactly: an
+  `instance_id` reused between, say, `always_on` and `aligned` was
+  already rejected pre-decomposition, not just an `instance_id`
+  reused twice within the same group.
+
+No uniqueness domain is invented beyond what old BBB already enforced;
+`raw_spec_identity.py::iter_exit_rules` already gathers exactly the
+four-group flat list `require_unique_instance_ids` needs for the exit
+domain, so no separate traversal is needed for the uniqueness check.
 
 ## What this design deliberately does not do
 
