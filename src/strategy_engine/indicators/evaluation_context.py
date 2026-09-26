@@ -16,6 +16,10 @@ frame (object identity) before consulting it, so memo entries from
 different ranges can never meet -- which is why identities themselves
 never repeat the market/range identity (design.md D2).
 
+Memoized node families: indicators (4.4) and direction / blocker /
+setup-component / trigger nodes plus the mask compositions those stages
+build (4.6). Exit nodes are not memoized.
+
 D1: this is scoped memoization *inside* the existing pipeline, not an
 executor. The evaluator keeps its execution order and control flow; each
 memo-enabled node call site resolves its identity at the point it would
@@ -155,6 +159,7 @@ class EvaluationStats:
     """Observable reuse accounting for one context (tests / benchmark)."""
 
     compute_calls: Counter[NodeSpec] = field(default_factory=Counter)
+    hit_calls: Counter[NodeSpec] = field(default_factory=Counter)
     hits: int = 0
     failure_replays: int = 0
     evictions: int = 0
@@ -313,6 +318,7 @@ class EvaluationContext:
                 del self._memo[identity]
                 self.stats.evictions += 1
             self.stats.hits += 1
+            self.stats.hit_calls[identity] += 1
             if isinstance(entry, _Failure):
                 self.stats.failure_replays += 1
                 raise entry.record.replay()
@@ -336,3 +342,19 @@ class EvaluationContext:
         self._memo[identity] = entry
         if len(self._memo) > self.stats.peak_entries:
             self.stats.peak_entries = len(self._memo)
+
+
+def compute_through[R](
+    context: EvaluationContext | None,
+    identity: NodeSpec | None,
+    compute: Callable[[], R],
+) -> R:
+    """`context.memoized(identity, compute)` when both a context and a
+    resolved identity are available; otherwise `compute()` directly, exactly
+    as before memoization existed. A node whose identity could not be
+    resolved is therefore never memoized -- its unchanged computation runs
+    and raises (or not) on its own, at its own point."""
+
+    if context is None or identity is None:
+        return compute()
+    return context.memoized(identity, compute)

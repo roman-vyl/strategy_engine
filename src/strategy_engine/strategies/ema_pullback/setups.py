@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Mapping
 from dataclasses import dataclass
 from math import isfinite
@@ -13,6 +14,7 @@ import pandas as pd
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.node_identity import NodeSpec, node_spec
 from strategy_engine.indicators.contracts import FeatureFrameLike
+from strategy_engine.indicators.evaluation_context import EvaluationContext, compute_through
 from strategy_engine.indicators.market_arrays import frame_market_arrays
 from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
@@ -22,6 +24,7 @@ from strategy_engine.strategies.ema_pullback.direction_blockers import (
     SideDirectionBlockerIdentity,
     SideDirectionBlockers,
     and_masks_node,
+    and_pair,
     gate_node_for,
     gated_mask_node,
     pairwise_and_node,
@@ -401,13 +404,25 @@ def _anchor_stack_width(
     frame: FeatureFrameLike,
     columns: Mapping[str, str],
     params: Mapping[str, Any],
+    *,
+    context: EvaluationContext | None = None,
+    prefix_id: NodeSpec | None = None,
 ) -> tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]:
+    """The width setup's threshold suffix; its side-free, threshold-free
+    prefix is computed through the evaluation context's memo under
+    `prefix_id` (batch-computation-reuse 4.6), so candidates that differ only
+    in the width thresholds share one prefix computation."""
+
     min_current, min_recent, lookback = _anchor_stack_width_params(params)
     fast = _float_series(frame, columns["fast"])
     anchor = _float_series(frame, columns["anchor"])
     slow = _float_series(frame, columns["slow"])
     atr = _float_series(frame, columns["atr"])
-    width_atr, recent_max = _anchor_stack_width_prefix(fast, slow, atr, lookback)
+    width_atr, recent_max = compute_through(
+        context,
+        prefix_id,
+        functools.partial(_anchor_stack_width_prefix, fast, slow, atr, lookback),
+    )
     allowed: list[bool] = []
     reasons: list[str] = []
     current_ok: list[bool] = []
@@ -486,25 +501,46 @@ def _setup(
     plan: EmaPullbackFeaturePlan,
     side: str,
     records: tuple[ContextConsumptionRecord, ...],
+    *,
+    context: EvaluationContext | None = None,
+    identity: SetupIdentity | None = None,
 ) -> SetupMask:
     component_id, instance_id, params = _setup_head(item, side)
+    compute: functools.partial[tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]]
     if component_id == "untouched_anchor_setup":
-        local, trace = _untouched_anchor(frame, plan.anchor_columns["anchor"], params, side)
+        compute = functools.partial(
+            _untouched_anchor, frame, plan.anchor_columns["anchor"], params, side
+        )
     elif component_id == "ema_bounce_counter_setup":
         columns = _setup_columns(plan, instance_id)
-        local, trace = _ema_bounce_counter(frame, columns, params, side)
+        compute = functools.partial(_ema_bounce_counter, frame, columns, params, side)
     else:
         columns = _setup_columns(plan, instance_id)
-        local, trace = _anchor_stack_width(frame, columns, params)
+        compute = functools.partial(
+            _anchor_stack_width,
+            frame,
+            columns,
+            params,
+            context=context,
+            prefix_id=identity.width_prefix if identity else None,
+        )
+    local, trace = compute_through(context, identity.local if identity else None, compute)
     gate = _gate_for(records, instance_id=instance_id, side=side)
+    final = compute_through(
+        context,
+        identity.final if identity else None,
+        functools.partial(_apply_gate, local, gate),
+    )
     return SetupMask(
         component_id=component_id,
         instance_id=instance_id,
         side=side,
         local_setup_allowed=local,
         context_gate_allowed=gate,
-        final_setup_allowed=_apply_gate(local, gate),
-        trace=trace,
+        final_setup_allowed=final,
+        # A private dict per consumer: a memoized trace is shared by every
+        # candidate that reads it and must never be handed out mutable.
+        trace=dict(trace),
     )
 
 
@@ -521,19 +557,49 @@ def evaluate_setups(
     plan: EmaPullbackFeaturePlan,
     context_records: tuple[ContextConsumptionRecord, ...],
     direction_blockers: tuple[SideDirectionBlockers, ...],
+    *,
+    context: EvaluationContext | None = None,
+    identities: tuple[SideSetupIdentity, ...] | None = None,
 ) -> tuple[SideSetupEvaluation, ...]:
+    """`context` + `identities` (the `resolve_setups` twin of this exact
+    call; batch-computation-reuse 4.6): every setup-component, width-prefix
+    and mask-composition node is computed through the context's memo at the
+    point it is computed today. Without them, everything computes directly."""
+
     setup_items = _setup_items(raw_spec)
+    if identities is not None and (
+        tuple(item.side for item in identities) != tuple(p.side for p in direction_blockers)
+        or any(len(item.setups) != len(setup_items) for item in identities)
+    ):
+        identities = None  # not this call's twin: never memoize on a mismatch
     outputs: list[SideSetupEvaluation] = []
-    for prior in direction_blockers:
+    for index, prior in enumerate(direction_blockers):
+        ids = identities[index] if identities is not None else None
         masks = tuple(
-            _setup(item, frame, plan, prior.side, context_records) for item in setup_items
+            _setup(
+                item,
+                frame,
+                plan,
+                prior.side,
+                context_records,
+                context=context,
+                identity=ids.setups[item_index] if ids else None,
+            )
+            for item_index, item in enumerate(setup_items)
         )
-        setups_ok = _combine_setup_masks(
-            tuple(mask.final_setup_allowed for mask in masks), len(frame.time_ms)
+        setups_ok = compute_through(
+            context,
+            ids.setups_ok if ids else None,
+            functools.partial(
+                _combine_setup_masks,
+                tuple(mask.final_setup_allowed for mask in masks),
+                len(frame.time_ms),
+            ),
         )
-        pre_trigger = tuple(
-            allowed and setup_ok
-            for allowed, setup_ok in zip(prior.pre_setup_allowed, setups_ok, strict=True)
+        pre_trigger = compute_through(
+            context,
+            ids.pre_trigger_allowed if ids else None,
+            functools.partial(and_pair, prior.pre_setup_allowed, setups_ok),
         )
         outputs.append(SideSetupEvaluation(prior.side, masks, setups_ok, pre_trigger))
     return tuple(outputs)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
@@ -9,8 +10,9 @@ from typing import Any, cast
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.node_identity import NodeSpec, node_spec
 from strategy_engine.indicators.contracts import FeatureFrameLike
+from strategy_engine.indicators.evaluation_context import EvaluationContext, compute_through
 from strategy_engine.indicators.market_arrays import frame_market_arrays
-from strategy_engine.strategies.ema_pullback.direction_blockers import pairwise_and_node
+from strategy_engine.strategies.ema_pullback.direction_blockers import and_pair, pairwise_and_node
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     TRIGGER_SUPPORTED as _SUPPORTED,
@@ -198,34 +200,52 @@ def evaluate_triggers(
     frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     setups: tuple[SideSetupEvaluation, ...],
+    *,
+    context: EvaluationContext | None = None,
+    identities: tuple[SideTriggerIdentity, ...] | None = None,
 ) -> tuple[SideTriggerEvaluation, ...]:
+    """`context` + `identities` (the `resolve_triggers` twin of this exact
+    call; batch-computation-reuse 4.6): each side's trigger node and its
+    pre-risk composition are computed through the context's memo at the
+    point they are computed today. Without them, everything computes
+    directly."""
+
     rule, component_id = _trigger_component(raw_spec)
     anchor = _float_series(frame, plan.anchor_columns["anchor"])
+    if identities is not None and tuple(item.side for item in identities) != tuple(
+        prior.side for prior in setups
+    ):
+        identities = None  # not this call's twin: never memoize on a mismatch
     outputs: list[SideTriggerEvaluation] = []
-    for prior in setups:
+    for index, prior in enumerate(setups):
         if prior.side not in _VALID_SIDES:
             raise InvalidRequestError("trade side must be long or short", side=prior.side)
+        ids = identities[index] if identities is not None else None
+        compute: functools.partial[tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]]
         if component_id == "touch_anchor":
-            allowed, trace = _touch_anchor(frame, anchor, side=prior.side)
+            compute = functools.partial(_touch_anchor, frame, anchor, side=prior.side)
         else:
             lookback = _reclaim_lookback(rule)
-            allowed, trace = _rolling_reclaim(
+            compute = functools.partial(
+                _rolling_reclaim,
                 frame,
                 anchor,
                 side=prior.side,
                 lookback=lookback,
                 close_probe=component_id == "strong_reclaim_anchor",
             )
-        pre_risk = tuple(
-            setup_allowed and trigger_allowed
-            for setup_allowed, trigger_allowed in zip(
-                prior.pre_trigger_allowed, allowed, strict=True
-            )
+        allowed, trace = compute_through(context, ids.trigger if ids else None, compute)
+        pre_risk = compute_through(
+            context,
+            ids.pre_risk_entry_allowed if ids else None,
+            functools.partial(and_pair, prior.pre_trigger_allowed, allowed),
         )
         outputs.append(
             SideTriggerEvaluation(
                 side=prior.side,
-                trigger=TriggerMask(component_id, prior.side, allowed, trace),
+                # A private trace dict per consumer: a memoized trace is
+                # shared by every candidate that reads it.
+                trigger=TriggerMask(component_id, prior.side, allowed, dict(trace)),
                 pre_risk_entry_allowed=pre_risk,
             )
         )

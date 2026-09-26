@@ -33,9 +33,13 @@ from parity.snapshot import ArrayStore, read_json_gz
 from strategy_engine.adapters.http import strategy_routes
 
 
-def replay(case_name: str, golden_store: ArrayStore) -> list[Mismatch]:
+def replay(
+    case_name: str, golden_store: ArrayStore, *, memo_enabled: bool | None = None
+) -> list[Mismatch]:
     golden = read_json_gz(GOLDEN_DIR / "cases" / f"{case_name}.json.gz")
-    actual, actual_store = record_payload(case_name, golden["request_payload"])
+    actual, actual_store = record_payload(
+        case_name, golden["request_payload"], memo_enabled=memo_enabled
+    )
     mismatches = compare_case(golden, actual, golden_store, actual_store)
     print(f"\n--- {case_name} ---\n{format_report(mismatches, limit=12)}")
     return mismatches
@@ -125,7 +129,13 @@ def test_detects_changed_default_parameter_only_where_default_applies(
     monkeypatch: pytest.MonkeyPatch, golden_store: ArrayStore
 ) -> None:
     """untouched_anchor_setup's lookback default 50 -> 51. Only variants that
-    OMIT lookback may drift; the explicit-50 twin must stay clean."""
+    OMIT lookback may drift; the explicit-50 twin must stay clean.
+
+    The perturbation changes the default inside the compute only, so it is
+    replayed with the range-batch memo OFF: every node computes on its own,
+    exactly the harness sensitivity this test pins. (With memo ON a
+    compute-only default is a resolve/compute normalization desync -- see
+    the next test.)"""
 
     original = setups._untouched_anchor
 
@@ -136,7 +146,7 @@ def test_detects_changed_default_parameter_only_where_default_applies(
 
     monkeypatch.setattr(setups, "_untouched_anchor", default_51)
     case_name = "probe_default_setup_params"
-    mismatches = replay(case_name, golden_store)
+    mismatches = replay(case_name, golden_store, memo_enabled=False)
     assert variants_with_drift(mismatches, case_name) == {
         "untouched-lookback-omitted",
         "untouched-params-omitted",
@@ -145,6 +155,55 @@ def test_detects_changed_default_parameter_only_where_default_applies(
         item.path.endswith(".trace['untouched_prior']") and item.rule == "bool-exact"
         for item in mismatches
     )
+
+
+_OMITTED_LOOKBACK = {"untouched-lookback-omitted", "untouched-params-omitted"}
+
+
+def test_default_change_with_memo_on_drifts_only_where_default_applies(
+    monkeypatch: pytest.MonkeyPatch, golden_store: ArrayStore
+) -> None:
+    """A real default change lives in the normalization helper shared by
+    `compute()` and `resolve()` (design.md risk mitigation), so the memo
+    identity follows it: with memo ON, still only the variants that omit
+    lookback drift -- the explicit-50 twin is a distinct identity now."""
+
+    original = setups._untouched_anchor_params
+
+    def default_51(params: Any) -> tuple[int, int]:
+        if "lookback" not in params:
+            params = {**params, "lookback": 51}
+        return original(params)
+
+    monkeypatch.setattr(setups, "_untouched_anchor_params", default_51)
+    case_name = "probe_default_setup_params"
+    mismatches = replay(case_name, golden_store, memo_enabled=True)
+    assert variants_with_drift(mismatches, case_name) == _OMITTED_LOOKBACK
+
+
+def test_resolve_compute_default_desync_with_memo_on_is_detected(
+    monkeypatch: pytest.MonkeyPatch, golden_store: ArrayStore
+) -> None:
+    """The design.md D2 risk itself: `compute()` applies a default that
+    `resolve()` does not. The omitted and explicit-50 variants then share an
+    identity although they compute differently, so memo ON serves the
+    drifted result to the explicit twin as well. The parity gate catches it
+    (on every variant sharing the identity), which is why no family is
+    memoized without passing it."""
+
+    original = setups._untouched_anchor
+
+    def default_51(frame: Any, anchor_id: str, params: Any, side: str) -> Any:
+        if "lookback" not in params:
+            params = {**params, "lookback": 51}
+        return original(frame, anchor_id, params, side)
+
+    monkeypatch.setattr(setups, "_untouched_anchor", default_51)
+    case_name = "probe_default_setup_params"
+    mismatches = replay(case_name, golden_store, memo_enabled=True)
+    drifted = variants_with_drift(mismatches, case_name)
+    assert drifted > _OMITTED_LOOKBACK  # strict superset
+    assert "untouched-lookback-50-explicit" in drifted
 
 
 def test_detects_caught_failure_becoming_propagated(

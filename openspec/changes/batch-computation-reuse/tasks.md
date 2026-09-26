@@ -32,7 +32,7 @@
 - [x] 4.3 Implement failure memoization and replay: a node identity that fails during computation records an immutable failure representation (category, message/payload, propagation behavior — not the Python exception object itself) and reproduces the same observable failure for every later dependent candidate, at the same point in that candidate's evaluation sequence as today (design.md D6). This does not require reusing the same exception object or traceback. Preserve the existing `StrategyEngineError`-only catch boundary in `_stream_variants` and the uncaught `AssertionError` propagation from the projection step unchanged.
 - [x] 4.4 Enable memoization for the indicator node family first (feature-plan indicators). Add a memo-capacity toggle so the same evaluator can run with memoization on or off.
 - [x] 4.5 Run the golden-corpus harness with memo OFF vs memo ON (same code) for the indicator family; confirm bit-identical results including on heterogeneous and shuffled-order batches, before enabling the next family.
-- [ ] 4.6 Enable memoization for direction/blocker/trigger/setup-component nodes. Re-run the memo OFF vs ON parity check for this family before proceeding.
+- [x] 4.6 Enable memoization for direction/blocker/trigger/setup-component nodes. Re-run the memo OFF vs ON parity check for this family before proceeding.
 - [ ] 4.7 Enable memoization for exit-rule/aggregate/select nodes. Re-run the memo OFF vs ON parity check for this family.
 - [ ] 4.8 Run the full golden-corpus harness end to end with all families memoized, across homogeneous, partially-shared, fully heterogeneous, shuffled-order, and duplicated-spec batch shapes.
 

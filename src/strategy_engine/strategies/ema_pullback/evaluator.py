@@ -27,6 +27,8 @@ from strategy_engine.strategies.decision_events import build_decision_events
 from strategy_engine.strategies.ema_pullback.evaluation import (
     EmaPullbackEvaluation,
     evaluate_ema_pullback_frame,
+    memoized_stage_consumptions,
+    resolve_memoized_stages,
 )
 from strategy_engine.strategies.ema_pullback.potential_entries import potential_entries_to_wire
 from strategy_engine.strategies.historical_execution_projection import (
@@ -50,13 +52,20 @@ class EmaPullbackRangeEvaluator:
     ) -> tuple[NodeSpec, ...]:
         """Identities this strategy's evaluation will consume through an
         `EvaluationContext` memo, in consumption order -- the batch refcount
-        pre-pass (batch-computation-reuse group 4, design.md D5). Only the
-        indicator node family is memoized at this stage. Raises whatever
-        feature planning raises; the caller treats that as "no predicted
-        consumptions"."""
+        pre-pass (batch-computation-reuse group 4, design.md D5). Memoized
+        families: indicators (4.4) and direction/blocker/setup/trigger nodes
+        (4.6); exit nodes are not memoized. Raises whatever feature planning
+        raises; the caller treats that as "no predicted consumptions"."""
 
         planned = self._feature_planner.execute(strategy)
-        return resolve_indicator_consumptions(planned.indicator_plan, base_timeframe=base_timeframe)
+        indicators = resolve_indicator_consumptions(
+            planned.indicator_plan, base_timeframe=base_timeframe
+        )
+        if len(indicators) != len(planned.indicator_plan.features):
+            # Indicator evaluation will fail before any strategy node runs.
+            return indicators
+        stages = resolve_memoized_stages(strategy.raw_spec, planned, base_timeframe=base_timeframe)
+        return indicators + memoized_stage_consumptions(stages)
 
     def _evaluate_frame(
         self, request: StrategyRangeRequest
@@ -102,7 +111,9 @@ class EmaPullbackRangeEvaluator:
                 evaluation_context=request.evaluation_context,
             )
         )
-        evaluation = evaluate_ema_pullback_frame(request.strategy, frame, planned)
+        evaluation = evaluate_ema_pullback_frame(
+            request.strategy, frame, planned, context=request.evaluation_context
+        )
         return frame, evaluation
 
     def evaluate_execution(self, request: StrategyRangeRequest) -> StrategyEvaluationExecution:

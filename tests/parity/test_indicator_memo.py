@@ -141,6 +141,12 @@ def _kind(identity: NodeSpec) -> str:
     return identity.kind.removeprefix("indicator.")
 
 
+def _indicator_only(counts: Counter[NodeSpec]) -> Counter[NodeSpec]:
+    return Counter(
+        {identity: n for identity, n in counts.items() if identity.kind.startswith("indicator.")}
+    )
+
+
 def _expected_raw_calls(compute_calls: Counter[NodeSpec]) -> Counter[str]:
     """Raw compute-function executions implied by per-identity compute
     calls: one per identity computation, except ADX/DI+/DI- which share one
@@ -193,30 +199,34 @@ def test_memo_off_and_on_match_golden_and_reuse_is_real(
 
     off_stats = off_probe.context.stats
     on_stats = on_probe.context.stats
-    consumptions = off_stats.total_compute_calls
-    unique = set(off_stats.compute_calls)
+    # This is the indicator-family (4.4/4.5) check: other memoized families
+    # (4.6) are proven in `test_strategy_node_memo.py`.
+    off_computes = _indicator_only(off_stats.compute_calls)
+    on_computes = _indicator_only(on_stats.compute_calls)
+    consumptions = sum(off_computes.values())
+    unique = set(off_computes)
 
     # Memo OFF is today's behaviour: every consumption computes, nothing is
     # retained or reused.
     assert off_stats.hits == 0 and off_stats.peak_entries == 0
-    off_expected = _expected_raw_calls(off_stats.compute_calls)
+    off_expected = _expected_raw_calls(off_computes)
     for kind in ("ema", "atr", "rsi", "atr_distance"):
         assert off_probe.raw_calls[kind] == off_expected[kind], (kind, off_probe.raw_calls)
     # ADX/DI+/DI- share one compute per (timeframe, period) per candidate.
     adx_computes_off = sum(
-        count for identity, count in off_stats.compute_calls.items() if _kind(identity) == "adx"
+        count for identity, count in off_computes.items() if _kind(identity) == "adx"
     )
     assert off_probe.raw_calls["adx_dmi"] <= adx_computes_off
 
     # (2) reuse is real: memo ON computes each unique identity exactly once,
     # and every other consumption is served from the memo.
-    assert set(on_stats.compute_calls) == unique
+    assert set(on_computes) == unique
     assert all(count == 1 for count in on_stats.compute_calls.values()), on_stats.compute_calls
-    assert on_stats.total_compute_calls == len(unique)
-    assert on_stats.hits == consumptions - len(unique)
+    assert sum(on_computes.values()) == len(unique)
+    assert sum(_indicator_only(on_stats.hit_calls).values()) == consumptions - len(unique)
     assert on_stats.failure_replays == 0  # no corpus case fails inside a compute
     # Independent spy on the underlying compute functions agrees.
-    on_expected = _expected_raw_calls(on_stats.compute_calls)
+    on_expected = _expected_raw_calls(on_computes)
     for kind in ("ema", "atr", "rsi", "atr_distance"):
         assert on_probe.raw_calls[kind] == on_expected[kind], (kind, on_probe.raw_calls)
     adx_groups = {
@@ -226,7 +236,8 @@ def test_memo_off_and_on_match_golden_and_reuse_is_real(
     }
     assert on_probe.raw_calls["adx_dmi"] == len(adx_groups)
 
-    # The pre-pass predicted every consumption; D5 eviction left nothing.
+    # The pre-pass predicted every consumption (every family); D5 eviction
+    # left nothing.
     for stats in (off_stats, on_stats):
         assert stats.unforeseen_consumptions == 0
     assert on_probe.context.live_entries == 0
@@ -234,13 +245,13 @@ def test_memo_off_and_on_match_golden_and_reuse_is_real(
 
     if case_name in ("real_width_only_sweep", "real_3d_grid_subset", "real_tpsl_only_sweep"):
         # Guard against a vacuous pass: real sweeps share their indicators.
-        assert on_stats.total_compute_calls * 4 < consumptions, (consumptions, on_stats)
+        assert sum(on_computes.values()) * 4 < consumptions, (consumptions, on_stats)
         assert on_probe.raw_calls["ema"] < off_probe.raw_calls["ema"]
 
     REUSE_REPORT[case_name] = {
         "variants": len(payload["variants"]),
         "consumptions_off": consumptions,
-        "computes_on": on_stats.total_compute_calls,
+        "computes_on": sum(on_computes.values()),
         "unique": len(unique),
         "raw_off": dict(off_probe.raw_calls),
         "raw_on": dict(on_probe.raw_calls),

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+import functools
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -12,6 +14,7 @@ import pandas as pd
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.node_identity import NodeSpec, node_spec
 from strategy_engine.indicators.contracts import FeatureFrameLike
+from strategy_engine.indicators.evaluation_context import EvaluationContext, compute_through
 from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
     GateIdentity,
@@ -346,16 +349,16 @@ def _trend_strength_blocker(
     }
 
 
-def _blocker(
+def _blocker_intrinsic(
+    component_id: str,
     item: Mapping[str, Any],
     frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     side: str,
-    records: tuple[ContextConsumptionRecord, ...],
-) -> ComponentMask:
-    component_id, instance_id = _blocker_identity(item)
-    if component_id not in BLOCKER_SUPPORTED:
-        raise InvalidRequestError("unsupported blocker component", component_id=component_id)
+) -> tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]:
+    """One blocker's `(intrinsic_allowed, trace)` -- the part covered by
+    `resolve_blocker_intrinsic` (no label, no gate)."""
+
     length = len(frame.time_ms)
     trace: dict[str, tuple[object, ...]] = {}
     if component_id == "no_blockers":
@@ -371,8 +374,30 @@ def _blocker(
         intrinsic, trace = _rsi_blocker(item, frame, plan, side)
     else:
         intrinsic, trace = _trend_strength_blocker(item, frame, plan, side)
+    return intrinsic, trace
+
+
+def _blocker(
+    item: Mapping[str, Any],
+    frame: FeatureFrameLike,
+    plan: EmaPullbackFeaturePlan,
+    side: str,
+    records: tuple[ContextConsumptionRecord, ...],
+    *,
+    context: EvaluationContext | None = None,
+    intrinsic_id: NodeSpec | None = None,
+    allowed_id: NodeSpec | None = None,
+) -> ComponentMask:
+    component_id, instance_id = _blocker_identity(item)
+    if component_id not in BLOCKER_SUPPORTED:
+        raise InvalidRequestError("unsupported blocker component", component_id=component_id)
+    intrinsic, trace = compute_through(
+        context,
+        intrinsic_id,
+        functools.partial(_blocker_intrinsic, component_id, item, frame, plan, side),
+    )
     gate = _gate_for(records, role="blocker", instance_id=instance_id, side=side)
-    allowed = _apply_gate(intrinsic, gate)
+    allowed = compute_through(context, allowed_id, functools.partial(_apply_gate, intrinsic, gate))
     return ComponentMask(
         role="blockers",
         component_id=component_id,
@@ -381,8 +406,17 @@ def _blocker(
         intrinsic_allowed=intrinsic,
         context_allowed=gate,
         allowed=allowed,
-        trace=trace,
+        # A private dict per consumer: a memoized trace is shared by every
+        # candidate that reads it and must never be handed out mutable.
+        trace=dict(trace),
     )
+
+
+def and_pair(left: tuple[bool, ...], right: tuple[bool, ...]) -> tuple[bool, ...]:
+    """Element-wise `left and right` of two bar-aligned masks (the
+    pre-setup / pre-trigger / pre-risk composition, moved verbatim)."""
+
+    return tuple(a and b for a, b in zip(left, right, strict=True))
 
 
 def _combine_blocker_masks(
@@ -420,18 +454,59 @@ def evaluate_direction_and_blockers(
     frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     context_records: tuple[ContextConsumptionRecord, ...],
+    *,
+    context: EvaluationContext | None = None,
+    identities: tuple[SideDirectionBlockerIdentity, ...] | None = None,
 ) -> tuple[SideDirectionBlockers, ...]:
+    """`context` + `identities` (the `resolve_direction_and_blockers` twin of
+    this exact call; batch-computation-reuse 4.6): every direction, blocker
+    and mask-composition node is computed through the context's memo at the
+    point it is computed today. Without them, everything computes directly."""
+
     blocker_items = _blocker_items(raw_spec)
+    sides = _enabled_sides(raw_spec)
+    if identities is not None and (
+        tuple(item.side for item in identities) != sides
+        or any(len(item.blocker_intrinsic) != len(blocker_items) for item in identities)
+    ):
+        identities = None  # not this call's twin: never memoize on a mismatch
     outputs: list[SideDirectionBlockers] = []
-    for side in _enabled_sides(raw_spec):
-        direction = _direction(raw_spec, frame, plan, side)
+    for index, side in enumerate(sides):
+        ids = identities[index] if identities is not None else None
+        direction = compute_through(
+            context,
+            ids.direction if ids else None,
+            functools.partial(_direction, raw_spec, frame, plan, side),
+        )
+        # Private trace dict per consumer (the memoized mask is shared).
+        direction = dataclasses.replace(direction, trace=dict(direction.trace))
         blockers = tuple(
-            _blocker(item, frame, plan, side, context_records) for item in blocker_items
+            _blocker(
+                item,
+                frame,
+                plan,
+                side,
+                context_records,
+                context=context,
+                intrinsic_id=ids.blocker_intrinsic[item_index][1] if ids else None,
+                allowed_id=ids.blocker_allowed[item_index][1] if ids else None,
+            )
+            for item_index, item in enumerate(blocker_items)
         )
-        blockers_ok = _combine_blocker_masks(
-            tuple(mask.allowed for mask in blockers), len(frame.time_ms)
+        blockers_ok = compute_through(
+            context,
+            ids.blockers_ok if ids else None,
+            functools.partial(
+                _combine_blocker_masks,
+                tuple(mask.allowed for mask in blockers),
+                len(frame.time_ms),
+            ),
         )
-        pre_setup = tuple(a and b for a, b in zip(direction.allowed, blockers_ok, strict=True))
+        pre_setup = compute_through(
+            context,
+            ids.pre_setup_allowed if ids else None,
+            functools.partial(and_pair, direction.allowed, blockers_ok),
+        )
         outputs.append(SideDirectionBlockers(side, direction, blockers, blockers_ok, pre_setup))
     return tuple(outputs)
 
