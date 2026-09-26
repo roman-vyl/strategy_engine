@@ -41,7 +41,7 @@
 - [x] 5.1 Wire `EvaluationContext` into `strategies/application/evaluate_range_batch.py:EvaluateStrategyRangeBatch.execute` so it is constructed once per range-batch call and used by `_stream_variants` for every candidate, without changing NDJSON emission order or per-variant error isolation.
 - [x] 5.2 Confirm the single-spec entrypoint (`strategies/application/evaluate_range.py`) still functions correctly as a context-of-one, per the "one evaluation path" requirement.
 - [x] 5.3 Run the full golden-corpus harness against the fully-integrated evaluator (real + synthetic + alias corpora), including a batch-of-one-candidate scenario compared against the single-spec entrypoint's output for the same input.
-- [ ] 5.4 Run an end-to-end Research Service batch (`RunBatchExperiment`) against both the pre-change and post-change Strategy Engine, and compare every persisted run artifact for semantic-content equality (trades, fills, fees, PnL, cumulative R, metrics, provenance-relevant content) after excluding non-deterministic fields (`run_id`, timestamps) — not byte-identical comparison of the full artifact — to confirm downstream parity.
+- [x] 5.4 Run an end-to-end Research Service batch (`RunBatchExperiment`) against both the pre-change and post-change Strategy Engine, and compare every persisted run artifact for semantic-content equality (trades, fills, fees, PnL, cumulative R, metrics, provenance-relevant content) after excluding non-deterministic fields (`run_id`, timestamps) — not byte-identical comparison of the full artifact — to confirm downstream parity.
 
 ## 6. Benchmark and follow-up decision
 
