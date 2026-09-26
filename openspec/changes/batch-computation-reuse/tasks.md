@@ -34,7 +34,7 @@
 - [x] 4.5 Run the golden-corpus harness with memo OFF vs memo ON (same code) for the indicator family; confirm bit-identical results including on heterogeneous and shuffled-order batches, before enabling the next family.
 - [x] 4.6 Enable memoization for direction/blocker/trigger/setup-component nodes. Re-run the memo OFF vs ON parity check for this family before proceeding.
 - [x] 4.7 Enable memoization for exit-rule/aggregate/select nodes. Re-run the memo OFF vs ON parity check for this family.
-- [ ] 4.8 Run the full golden-corpus harness end to end with all families memoized, across homogeneous, partially-shared, fully heterogeneous, shuffled-order, and duplicated-spec batch shapes.
+- [x] 4.8 Run the full golden-corpus harness end to end with all families memoized, across homogeneous, partially-shared, fully heterogeneous, shuffled-order, and duplicated-spec batch shapes.
 
 ## 5. Batch integration and end-to-end validation
 
