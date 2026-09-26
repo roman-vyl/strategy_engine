@@ -26,12 +26,19 @@ class EvaluateStrategyRange:
     `compact-strategy-evaluation-boundary-v1`). `execute_projection` is
     the production path -- both `/strategy-evaluations/range` and
     `/strategy-evaluations/range-batch` call it (per variant, for
-    batch) since I8. `execute` (the sparse `.v1`
-    `StrategyEvaluationExecution` shape) is no longer reachable from any
-    route -- private, in-process-only, kept for this repo's own test
-    suite and any future regression comparison. `execute_diagnostics`
-    is the separate, explicitly-requested path for dense per-bar
-    diagnostic data, unaffected by any of this."""
+    batch) since I8. `execute_diagnostics` is the separate,
+    explicitly-requested path for dense per-bar diagnostic data
+    (`/strategy-evaluations/range/diagnostics`).
+
+    Both `execute_projection` and `execute_diagnostics` evaluate through
+    `_evaluate_root()`, i.e. the same `EvaluationContext` mechanism the
+    range-batch uses (batch-computation-reuse, design.md D1/D4, tasks
+    2.4/5.2): a request without a context becomes the only root of a
+    context-of-one; a batch variant is a root of the batch's N-root
+    context. `execute` (the sparse `.v1` `StrategyEvaluationExecution`
+    shape) is the only context-free path left: it is not reachable from
+    any route -- private, in-process-only, kept for this repo's own test
+    suite and any future regression comparison."""
 
     def __init__(
         self,
