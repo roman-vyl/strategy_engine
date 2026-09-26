@@ -67,8 +67,9 @@ class IndicatorRangeRequest:
     # derived from this exact `market_frame` (checked, fail closed). Absent
     # (None): the evaluator derives it from the frame it evaluates.
     market_arrays: MarketArrays | None = None
-    # Internal-only seam (batch-computation-reuse, group 4): the range-batch
-    # `EvaluationContext` for this exact `market_frame`; indicator features
+    # Internal-only seam (batch-computation-reuse, group 4): the
+    # `EvaluationContext` (range-batch or single-spec) for this exact
+    # `market_frame`; indicator features
     # are then memoized by identity through it. Absent (None): computed
     # directly, exactly as before.
     evaluation_context: EvaluationContext | None = None

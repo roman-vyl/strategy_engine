@@ -12,7 +12,7 @@
 - [x] 2.1 Design the per-range-batch common-array bundle (float64 OHLCV, `DatetimeIndex`, `time_ms`) that replaces repeated per-node Decimal→float conversion (`indicators/implementations/frame_ops.py:market_frame_to_dataframe`, and the per-node `_market_values`/`_frame_dataframe` conversions in `setups.py`, `triggers.py`, `exits.py`).
 - [x] 2.2 Wire the shared bundle into the batch evaluation path so every node that today re-derives float64 arrays from the `MarketFrame` consumes the shared bundle instead.
 - [x] 2.3 Run the golden-corpus harness against this stage; confirm bit-identical output (including at the DataFrame/array level, not just final NDJSON) before proceeding.
-- [ ] 2.4 Converge the single-spec (non-batch) entrypoint onto the same shared common-array bundle and, once later stages land, the same `EvaluationContext` mechanism as the batch path — the target architecture has no permanent separate preparation path for single-spec. It is acceptable for the single-spec entrypoint to keep its current implementation temporarily while later groups are still being migrated node family by node family, but this task is not complete until single-spec is running on the shared context as a context-of-one.
+- [x] 2.4 Converge the single-spec (non-batch) entrypoint onto the same shared common-array bundle and, once later stages land, the same `EvaluationContext` mechanism as the batch path — the target architecture has no permanent separate preparation path for single-spec. It is acceptable for the single-spec entrypoint to keep its current implementation temporarily while later groups are still being migrated node family by node family, but this task is not complete until single-spec is running on the shared context as a context-of-one.
 
 ## 3. Semantic node identity (`resolve()`/`NodeSpec`), no memoization yet
 
@@ -38,9 +38,9 @@
 
 ## 5. Batch integration and end-to-end validation
 
-- [ ] 5.1 Wire `EvaluationContext` into `strategies/application/evaluate_range_batch.py:EvaluateStrategyRangeBatch.execute` so it is constructed once per range-batch call and used by `_stream_variants` for every candidate, without changing NDJSON emission order or per-variant error isolation.
-- [ ] 5.2 Confirm the single-spec entrypoint (`strategies/application/evaluate_range.py`) still functions correctly as a context-of-one, per the "one evaluation path" requirement.
-- [ ] 5.3 Run the full golden-corpus harness against the fully-integrated evaluator (real + synthetic + alias corpora), including a batch-of-one-candidate scenario compared against the single-spec entrypoint's output for the same input.
+- [x] 5.1 Wire `EvaluationContext` into `strategies/application/evaluate_range_batch.py:EvaluateStrategyRangeBatch.execute` so it is constructed once per range-batch call and used by `_stream_variants` for every candidate, without changing NDJSON emission order or per-variant error isolation.
+- [x] 5.2 Confirm the single-spec entrypoint (`strategies/application/evaluate_range.py`) still functions correctly as a context-of-one, per the "one evaluation path" requirement.
+- [x] 5.3 Run the full golden-corpus harness against the fully-integrated evaluator (real + synthetic + alias corpora), including a batch-of-one-candidate scenario compared against the single-spec entrypoint's output for the same input.
 - [ ] 5.4 Run an end-to-end Research Service batch (`RunBatchExperiment`) against both the pre-change and post-change Strategy Engine, and compare every persisted run artifact for semantic-content equality (trades, fills, fees, PnL, cumulative R, metrics, provenance-relevant content) after excluding non-deterministic fields (`run_id`, timestamps) — not byte-identical comparison of the full artifact — to confirm downstream parity.
 
 ## 6. Benchmark and follow-up decision

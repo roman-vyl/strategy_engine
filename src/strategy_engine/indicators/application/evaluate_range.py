@@ -48,6 +48,16 @@ class EvaluateIndicatorRange:
             context=request.evaluation_context,
         )
 
+    def load_market_frame(self, request: IndicatorRangeRequest) -> MarketFrame:
+        """Internal-only: exactly the acquisition/validation `execute_native`
+        runs before computing (same checks, same order, same `load_range`
+        call), returning the market frame without computing anything -- so
+        a single-spec strategy evaluation can build its `EvaluationContext`
+        over that frame (batch-computation-reuse task 2.4) with no change in
+        what is validated or fetched, or in which failure is raised first."""
+
+        return self._prepare(request)[1]
+
     def _prepare(
         self, request: IndicatorRangeRequest
     ) -> tuple[IndicatorEvaluator, MarketFrame]:

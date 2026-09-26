@@ -80,10 +80,11 @@ def evaluate_ema_pullback_frame(
     *,
     context: EvaluationContext | None = None,
 ) -> EmaPullbackEvaluation:
-    """`context` (batch-computation-reuse 4.6): the range-batch
-    `EvaluationContext`; when given, and `frame` is a native frame over that
-    context's market, direction/blocker/setup/trigger nodes (and the mask
-    compositions of those stages; 4.6) and exit-rule / per-profile
+    """`context` (batch-computation-reuse 4.6): the request's
+    `EvaluationContext` (range-batch or single-spec); when given, and
+    `frame` is a native frame over that context's market,
+    direction/blocker/setup/trigger nodes (and the mask compositions of
+    those stages; 4.6) and exit-rule / per-profile
     aggregate / profile-select nodes (4.7) are memoized by identity."""
 
     memo = _memo_identities(strategy.raw_spec, frame, planned, context)

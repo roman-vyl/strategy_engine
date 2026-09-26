@@ -1,9 +1,13 @@
 """Batch-scoped evaluation context: shared range arrays + identity memo.
 
-OpenSpec change `batch-computation-reuse`, group 4 (design.md D1, D2, D5,
-D6). One `EvaluationContext` exists per range-batch call. It owns:
+OpenSpec change `batch-computation-reuse`, group 4 (design.md D1, D2, D4,
+D5, D6). One `EvaluationContext` exists per range evaluation request: a
+`/range-batch` call builds one with N roots (`EvaluateStrategyRangeBatch`),
+a single-spec `/range` (or `/range/diagnostics`) request builds one with
+exactly one root (`EvaluateStrategyRange`) -- one mechanism, differing only
+in root count. It owns:
 
-- the shared range-invariant `MarketArrays` bundle of that call (group 2);
+- the shared range-invariant `MarketArrays` bundle of that request (group 2);
 - a memo `NodeSpec identity -> immutable result`, where a "result" is
   either the node's computed value or an immutable `FailureRecord`;
 - per-identity reference counts, computed from every root's resolved
@@ -32,7 +36,9 @@ Memo toggle (design.md D3's A/B tool): `memo_enabled=False` keeps every
 line of this code path -- identity resolution, refcount bookkeeping,
 compute counting -- but never stores an entry, so every consumption
 computes. Memo OFF vs memo ON therefore differ only in whether results are
-reused, never in which code runs.
+reused, never in which code runs. Production never turns it off (no wiring
+or request field sets it); it is kept as the regression-testing knob the
+`tests/parity` memo-OFF vs memo-ON gates rely on.
 
 D5 refcounts count *consumptions* (a root that reads one identity twice,
 e.g. two timeframe-aliased plan columns, contributes 2). A root's
@@ -157,7 +163,11 @@ class _Failure:
 
 @dataclass(slots=True)
 class EvaluationStats:
-    """Observable reuse accounting for one context (tests / benchmark)."""
+    """Reuse accounting for one context: cheap per-consumption counters that
+    the `tests/parity` gates assert on (each identity computed exactly once
+    with memo on, hits = consumptions - 1, zero `unforeseen_consumptions` on
+    a successful evaluation -- the D5 pre-pass completeness invariant) and
+    that stay available for runtime inspection."""
 
     compute_calls: Counter[NodeSpec] = field(default_factory=Counter)
     hit_calls: Counter[NodeSpec] = field(default_factory=Counter)
@@ -176,7 +186,7 @@ class EvaluationStats:
 
 
 class EvaluationContext:
-    """Per-range-batch evaluation context (see module docstring)."""
+    """Per-request evaluation context, one or N roots (see module docstring)."""
 
     def __init__(
         self,

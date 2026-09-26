@@ -70,10 +70,11 @@ class StrategyRangeRequest:
     # HTTP request DTO; absent (None), the evaluation derives it once from
     # the market frame it evaluates.
     market_arrays: MarketArrays | None = None
-    # Internal-only seam (batch-computation-reuse, group 4): the range-batch
-    # `EvaluationContext` (one per range-batch call, shared by every
-    # variant). Not exposed on any HTTP request DTO; absent (None), nothing
-    # is memoized.
+    # Internal-only seam (batch-computation-reuse, groups 4-5): the
+    # `EvaluationContext` this request is a root of (one per range-batch
+    # call, shared by every variant). Not exposed on any HTTP request DTO;
+    # absent (None) on a single-spec request, `EvaluateStrategyRange` builds
+    # a context with this request as its only root before evaluating.
     evaluation_context: EvaluationContext | None = None
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from strategy_engine.domain.market import MarketFrame
 from strategy_engine.strategies.contracts import (
     HistoricalExecutionProjection,
     StrategyDiagnosticEvaluation,
@@ -14,6 +15,8 @@ from strategy_engine.strategies.contracts import (
 
 
 class StrategyEvaluator(Protocol):
+    def load_market_frame(self, request: StrategyRangeRequest) -> MarketFrame: ...
+
     def evaluate(self, request: StrategyRangeRequest) -> StrategyRangeResult: ...
 
     def evaluate_execution(self, request: StrategyRangeRequest) -> StrategyEvaluationExecution: ...

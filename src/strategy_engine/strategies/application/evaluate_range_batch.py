@@ -43,7 +43,9 @@ class EvaluateStrategyRangeBatch:
     ) -> None:
         """`memo_enabled` is the batch-computation-reuse memo toggle
         (design.md D3): the same evaluator code runs either way; off, the
-        evaluation context never retains a result, so every node computes."""
+        evaluation context never retains a result, so every node computes.
+        Production wiring always uses the default (on); off exists only for
+        the `tests/parity` memo-OFF vs memo-ON regression gates."""
 
         self._evaluator = evaluator
         self._market_data = market_data
