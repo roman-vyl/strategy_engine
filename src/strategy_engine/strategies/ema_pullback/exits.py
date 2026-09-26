@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import functools
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from math import isfinite
@@ -15,6 +16,7 @@ from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.node_identity import NodeSpec, node_spec
 from strategy_engine.domain.values import normalized_decimal_text
 from strategy_engine.indicators.contracts import FeatureFrameLike
+from strategy_engine.indicators.evaluation_context import EvaluationContext, compute_through
 from strategy_engine.indicators.market_arrays import frame_market_arrays
 from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
@@ -453,15 +455,59 @@ def _profile_selection(
     )
 
 
+def _false_signal(index: pd.Index) -> pd.Series:
+    """The all-False signal of a signal rule on a side that is not enabled."""
+
+    return pd.Series(False, index=index, dtype=bool)
+
+
+def _matches_rules(
+    identities: ExitPolicyIdentity, groups: Mapping[str, tuple[Mapping[str, Any], ...]]
+) -> bool:
+    """True when `identities` is the resolved twin of exactly these rules:
+    every rule's instance_id is present once, in its family's map, and no
+    other instance_id is (duplicate ids would make the instance-keyed maps
+    ambiguous, so they never memoize)."""
+
+    signal: list[str] = []
+    distance: list[str] = []
+    for rules in groups.values():
+        for rule in rules:
+            instance_id = str(rule.get("instance_id", ""))
+            component_id = str(rule.get("component_id", ""))
+            (signal if component_id in _SIGNAL_COMPONENTS else distance).append(instance_id)
+    return (
+        len(set(signal) | set(distance)) == len(signal) + len(distance)
+        and set(signal) == set(identities.signal_rules)
+        and set(distance) == set(identities.distance_rules)
+    )
+
+
 def evaluate_exit_policy(
     raw_spec: Mapping[str, Any],
     frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     consumption: tuple[ContextConsumptionRecord, ...],
+    *,
+    context: EvaluationContext | None = None,
+    identities: ExitPolicyIdentity | None = None,
 ) -> ExitPolicyEvaluation:
+    """`context` + `identities` (the `resolve_exit_policy` twin of this exact
+    call; batch-computation-reuse 4.7): every exit-rule, per-profile
+    aggregate and profile-select node is computed through the context's memo
+    at the point it is computed today. Without them, everything computes
+    directly.
+
+    Nothing here reads setups, triggers or entries: the inputs are the
+    frame (market columns + planned feature series), the exit rules, the
+    enabled sides and the exit-profile consumption record only."""
+
     df = _frame_dataframe(frame)
     sides = _enabled_sides(raw_spec)
     groups = _policy_rules(raw_spec)
+    if identities is not None and not _matches_rules(identities, groups):
+        identities = None  # not this call's twin: never memoize on a mismatch
+    ids = identities
     context_state, profile_long, profile_short = _profiles(consumption, len(df))
     signal_long_by_instance: dict[str, pd.Series] = {}
     signal_short_by_instance: dict[str, pd.Series] = {}
@@ -474,10 +520,15 @@ def evaluate_exit_policy(
             instance_id, component_id, exit_kind, family = _exit_rule_head(rule)
             if family == "signal":
                 for side in ("long", "short"):
-                    signal = (
-                        _signal_rule(df, rule, plan, side)
+                    signal_compute: functools.partial[pd.Series] = (
+                        functools.partial(_signal_rule, df, rule, plan, side)
                         if side in sides
-                        else pd.Series(False, index=df.index, dtype=bool)
+                        else functools.partial(_false_signal, df.index)
+                    )
+                    signal = compute_through(
+                        context,
+                        ids.signal_rules[instance_id][side] if ids else None,
+                        signal_compute,
                     )
                     target = signal_long_by_instance if side == "long" else signal_short_by_instance
                     target[instance_id] = signal
@@ -493,7 +544,11 @@ def evaluate_exit_policy(
                             )
                         )
             else:
-                distance, ratio = _distance(df, rule, plan)
+                distance, ratio = compute_through(
+                    context,
+                    ids.distance_rules[instance_id] if ids else None,
+                    functools.partial(_distance, df, rule, plan),
+                )
                 distance_by_instance[instance_id] = distance
                 ratio_by_instance[instance_id] = ratio
                 evidence.append(
@@ -517,54 +572,104 @@ def evaluate_exit_policy(
     tp_configured_by_profile: dict[str, bool] = {}
     for profile in _PROFILE_ORDER:
         selection = _profile_selection(groups, profile)
+        agg = ids.by_profile[profile] if ids else None
         sl_configured_by_profile[profile] = selection.stop_loss_configured
         tp_configured_by_profile[profile] = selection.take_profit_configured
-        signals_long[profile] = _or(
-            [signal_long_by_instance[instance_id] for instance_id in selection.signal],
-            df.index,
+        signals_long[profile] = compute_through(
+            context,
+            agg.signal_long if agg else None,
+            functools.partial(
+                _or,
+                [signal_long_by_instance[instance_id] for instance_id in selection.signal],
+                df.index,
+            ),
         )
-        signals_short[profile] = _or(
-            [signal_short_by_instance[instance_id] for instance_id in selection.signal],
-            df.index,
+        signals_short[profile] = compute_through(
+            context,
+            agg.signal_short if agg else None,
+            functools.partial(
+                _or,
+                [signal_short_by_instance[instance_id] for instance_id in selection.signal],
+                df.index,
+            ),
         )
-        sl_by_profile[profile] = _min(
-            [ratio_by_instance[instance_id] for instance_id in selection.stop_loss],
-            df.index,
+        sl_by_profile[profile] = compute_through(
+            context,
+            agg.stop_loss_ratio if agg else None,
+            functools.partial(
+                _min,
+                [ratio_by_instance[instance_id] for instance_id in selection.stop_loss],
+                df.index,
+            ),
         )
-        tp_by_profile[profile] = _min(
-            [ratio_by_instance[instance_id] for instance_id in selection.take_profit],
-            df.index,
+        tp_by_profile[profile] = compute_through(
+            context,
+            agg.take_profit_ratio if agg else None,
+            functools.partial(
+                _min,
+                [ratio_by_instance[instance_id] for instance_id in selection.take_profit],
+                df.index,
+            ),
         )
-        sl_distance_by_profile[profile] = _min(
-            [distance_by_instance[instance_id] for instance_id in selection.stop_loss],
-            df.index,
+        sl_distance_by_profile[profile] = compute_through(
+            context,
+            agg.stop_loss_distance if agg else None,
+            functools.partial(
+                _min,
+                [distance_by_instance[instance_id] for instance_id in selection.stop_loss],
+                df.index,
+            ),
         )
-        tp_distance_by_profile[profile] = _min(
-            [distance_by_instance[instance_id] for instance_id in selection.take_profit],
-            df.index,
+        tp_distance_by_profile[profile] = compute_through(
+            context,
+            agg.take_profit_distance if agg else None,
+            functools.partial(
+                _min,
+                [distance_by_instance[instance_id] for instance_id in selection.take_profit],
+                df.index,
+            ),
         )
 
-    signal_long = _select_bool(profile_long, signals_long, df.index)
-    signal_short = _select_bool(profile_short, signals_short, df.index)
-    sl_long = _select(profile_long, sl_by_profile, df.index)
-    sl_short = _select(profile_short, sl_by_profile, df.index)
-    tp_long = _select(profile_long, tp_by_profile, df.index)
-    tp_short = _select(profile_short, tp_by_profile, df.index)
-    sl_distance_long = _select(profile_long, sl_distance_by_profile, df.index)
-    sl_distance_short = _select(profile_short, sl_distance_by_profile, df.index)
-    tp_distance_long = _select(profile_long, tp_distance_by_profile, df.index)
-    tp_distance_short = _select(profile_short, tp_distance_by_profile, df.index)
+    profile_by_side = {"long": profile_long, "short": profile_short}
+
+    def select(
+        field: str,
+        side: str,
+        function: Callable[[tuple[str, ...], dict[str, pd.Series], pd.Index], pd.Series],
+        values: dict[str, pd.Series],
+    ) -> pd.Series:
+        return compute_through(
+            context,
+            ids.select[(field, side)] if ids else None,
+            functools.partial(function, profile_by_side[side], values, df.index),
+        )
+
+    signal_long = select("signal", "long", _select_bool, signals_long)
+    signal_short = select("signal", "short", _select_bool, signals_short)
+    sl_long = select("stop_loss_ratio", "long", _select, sl_by_profile)
+    sl_short = select("stop_loss_ratio", "short", _select, sl_by_profile)
+    tp_long = select("take_profit_ratio", "long", _select, tp_by_profile)
+    tp_short = select("take_profit_ratio", "short", _select, tp_by_profile)
+    sl_distance_long = select("stop_loss_distance", "long", _select, sl_distance_by_profile)
+    sl_distance_short = select("stop_loss_distance", "short", _select, sl_distance_by_profile)
+    tp_distance_long = select("take_profit_distance", "long", _select, tp_distance_by_profile)
+    tp_distance_short = select("take_profit_distance", "short", _select, tp_distance_by_profile)
     ready_by_profile = {
-        profile: _ready(
-            sl_by_profile[profile],
-            tp_by_profile[profile],
-            sl_configured_by_profile[profile],
-            tp_configured_by_profile[profile],
+        profile: compute_through(
+            context,
+            ids.by_profile[profile].ready if ids else None,
+            functools.partial(
+                _ready,
+                sl_by_profile[profile],
+                tp_by_profile[profile],
+                sl_configured_by_profile[profile],
+                tp_configured_by_profile[profile],
+            ),
         )
         for profile in _PROFILE_ORDER
     }
-    ready_long = _select_bool(profile_long, ready_by_profile, df.index)
-    ready_short = _select_bool(profile_short, ready_by_profile, df.index)
+    ready_long = select("ready", "long", _select_bool, ready_by_profile)
+    ready_short = select("ready", "short", _select_bool, ready_by_profile)
     return ExitPolicyEvaluation(
         context_state=context_state,
         profile_long=profile_long,
@@ -857,3 +962,57 @@ def resolve_exit_policy(
         by_profile=by_profile,
         select=select,
     )
+
+
+# -- memoized exit nodes (batch-computation-reuse 4.7) ---------------------------
+
+
+def resolve_memoized_exit_policy(
+    raw_spec: Mapping[str, Any],
+    plan: EmaPullbackFeaturePlan,
+    feature_ids: Mapping[str, NodeSpec],
+    context_ids: Mapping[str, NodeSpec],
+) -> ExitPolicyIdentity | None:
+    """`resolve_exit_policy`, or `None` when its identities cannot key this
+    spec's exit nodes unambiguously (duplicate instance_ids): exit nodes then
+    compute directly, unmemoized. Raises whatever resolution raises."""
+
+    identities = resolve_exit_policy(raw_spec, plan, feature_ids, context_ids)
+    if not _matches_rules(identities, _policy_rules(raw_spec)):
+        return None
+    return identities
+
+
+def exit_policy_consumptions(identities: ExitPolicyIdentity) -> tuple[NodeSpec, ...]:
+    """Every memo consumption `evaluate_exit_policy` makes with these
+    identities (design.md D5 pre-pass): each signal rule once per side (a
+    disabled side consumes the constant all-False signal), each distance
+    rule once, then per profile its six OR/min aggregates, then the ten
+    signal/ratio/distance profile-selects, the three per-profile `ready`
+    aggregates and the two `ready` selects."""
+
+    consumed: list[NodeSpec] = []
+    for per_side in identities.signal_rules.values():
+        consumed += (per_side["long"], per_side["short"])
+    consumed += identities.distance_rules.values()
+    for profile in _PROFILE_ORDER:
+        aggregate = identities.by_profile[profile]
+        consumed += (
+            aggregate.signal_long,
+            aggregate.signal_short,
+            aggregate.stop_loss_ratio,
+            aggregate.take_profit_ratio,
+            aggregate.stop_loss_distance,
+            aggregate.take_profit_distance,
+        )
+    for field in (
+        "signal",
+        "stop_loss_ratio",
+        "take_profit_ratio",
+        "stop_loss_distance",
+        "take_profit_distance",
+    ):
+        consumed += (identities.select[(field, "long")], identities.select[(field, "short")])
+    consumed += (identities.by_profile[profile].ready for profile in _PROFILE_ORDER)
+    consumed += (identities.select[("ready", "long")], identities.select[("ready", "short")])
+    return tuple(consumed)

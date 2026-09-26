@@ -53,8 +53,8 @@ class EmaPullbackRangeEvaluator:
         """Identities this strategy's evaluation will consume through an
         `EvaluationContext` memo, in consumption order -- the batch refcount
         pre-pass (batch-computation-reuse group 4, design.md D5). Memoized
-        families: indicators (4.4) and direction/blocker/setup/trigger nodes
-        (4.6); exit nodes are not memoized. Raises whatever feature planning
+        families: indicators (4.4), direction/blocker/setup/trigger nodes
+        (4.6) and exit-rule/aggregate/select nodes (4.7). Raises whatever feature planning
         raises; the caller treats that as "no predicted consumptions"."""
 
         planned = self._feature_planner.execute(strategy)

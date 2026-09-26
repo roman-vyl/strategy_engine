@@ -62,12 +62,12 @@ AND_ALL = "mask.all"
 
 
 def family(identity: NodeSpec) -> str | None:
-    """Node type of a memoized identity (`None` for indicators). Any other
-    kind fails: in particular no exit-rule/aggregate/select identity may be
-    memoized at this stage (4.7 is out of scope)."""
+    """Node type of a memoized identity (`None` for indicators and for the
+    exit-rule/aggregate/select family, which `test_exit_node_memo.py`
+    accounts for). Any other kind fails."""
 
     kind = identity.kind
-    if kind.startswith("indicator."):
+    if kind.startswith(("indicator.", "exit.")):
         return None
     if kind.startswith("direction."):
         return DIRECTION

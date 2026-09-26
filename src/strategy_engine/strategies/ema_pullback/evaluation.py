@@ -31,7 +31,9 @@ from strategy_engine.strategies.ema_pullback.exits import (
     ExitPolicyEvaluation,
     ExitPolicyIdentity,
     evaluate_exit_policy,
+    exit_policy_consumptions,
     resolve_exit_policy,
+    resolve_memoized_exit_policy,
 )
 from strategy_engine.strategies.ema_pullback.feature_plan import (
     EmaPullbackFeaturePlan,
@@ -81,8 +83,8 @@ def evaluate_ema_pullback_frame(
     """`context` (batch-computation-reuse 4.6): the range-batch
     `EvaluationContext`; when given, and `frame` is a native frame over that
     context's market, direction/blocker/setup/trigger nodes (and the mask
-    compositions of those stages) are memoized by identity. Exit-policy
-    nodes are not memoized at this stage."""
+    compositions of those stages; 4.6) and exit-rule / per-profile
+    aggregate / profile-select nodes (4.7) are memoized by identity."""
 
     memo = _memo_identities(strategy.raw_spec, frame, planned, context)
     memo_context = context if memo is not None else None
@@ -114,7 +116,14 @@ def evaluate_ema_pullback_frame(
         identities=memo.triggers if memo else None,
     )
     entries = evaluate_risk_and_entries(strategy.raw_spec, triggers)
-    exit_policy = evaluate_exit_policy(strategy.raw_spec, frame, planned, consumption)
+    exit_policy = evaluate_exit_policy(
+        strategy.raw_spec,
+        frame,
+        planned,
+        consumption,
+        context=memo_context,
+        identities=memo.exit_policy if memo else None,
+    )
     potential_entries = project_potential_entries(
         frame,
         planned,
@@ -182,19 +191,20 @@ def resolve_ema_pullback_frame(
     )
 
 
-# -- memoized strategy nodes (batch-computation-reuse 4.6) ------------------------
+# -- memoized strategy nodes (batch-computation-reuse 4.6, 4.7) -------------------
 
 
 @dataclass(frozen=True, slots=True)
 class MemoizedStageIdentities:
-    """Identities of the memoized direction/blocker, setup and trigger
-    stages of one strategy evaluation. A stage whose identities could not be
+    """Identities of the memoized direction/blocker, setup, trigger and
+    exit-policy stages of one strategy evaluation. A stage whose identities could not be
     resolved is `None` (and so is every later stage): its nodes then compute
     directly, unmemoized, and raise exactly what they raise today."""
 
     direction_blockers: tuple[SideDirectionBlockerIdentity, ...] | None
     setups: tuple[SideSetupIdentity, ...] | None
     triggers: tuple[SideTriggerIdentity, ...] | None
+    exit_policy: ExitPolicyIdentity | None = None
 
 
 def resolve_memoized_stages(
@@ -211,9 +221,8 @@ def resolve_memoized_stages(
 
     try:
         features = resolve_feature_identities(planned, base_timeframe=base_timeframe)
-        gates = resolve_context_consumption(
-            raw_spec, resolve_context_bundle(raw_spec, planned, features)
-        )
+        contexts = resolve_context_bundle(raw_spec, planned, features)
+        gates = resolve_context_consumption(raw_spec, contexts)
         direction_blockers = resolve_direction_and_blockers(raw_spec, planned, features, gates)
     except Exception:
         return MemoizedStageIdentities(None, None, None)
@@ -225,7 +234,11 @@ def resolve_memoized_stages(
         triggers = resolve_triggers(raw_spec, planned, features, setups)
     except Exception:
         return MemoizedStageIdentities(direction_blockers, setups, None)
-    return MemoizedStageIdentities(direction_blockers, setups, triggers)
+    try:
+        exit_policy = resolve_memoized_exit_policy(raw_spec, planned, features, contexts)
+    except Exception:
+        return MemoizedStageIdentities(direction_blockers, setups, triggers, None)
+    return MemoizedStageIdentities(direction_blockers, setups, triggers, exit_policy)
 
 
 def memoized_stage_consumptions(stages: MemoizedStageIdentities) -> tuple[NodeSpec, ...]:
@@ -252,6 +265,8 @@ def memoized_stage_consumptions(stages: MemoizedStageIdentities) -> tuple[NodeSp
         consumed += (side_setups.setups_ok, side_setups.pre_trigger_allowed)
     for side_trigger in stages.triggers or ():
         consumed += (side_trigger.trigger, side_trigger.pre_risk_entry_allowed)
+    if stages.exit_policy is not None:
+        consumed += exit_policy_consumptions(stages.exit_policy)
     return tuple(consumed)
 
 

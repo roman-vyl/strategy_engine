@@ -16,9 +16,10 @@ frame (object identity) before consulting it, so memo entries from
 different ranges can never meet -- which is why identities themselves
 never repeat the market/range identity (design.md D2).
 
-Memoized node families: indicators (4.4) and direction / blocker /
+Memoized node families: indicators (4.4); direction / blocker /
 setup-component / trigger nodes plus the mask compositions those stages
-build (4.6). Exit nodes are not memoized.
+build (4.6); exit-rule, per-profile aggregate and profile-select nodes
+(4.7).
 
 D1: this is scoped memoization *inside* the existing pipeline, not an
 executor. The evaluator keeps its execution order and control flow; each
