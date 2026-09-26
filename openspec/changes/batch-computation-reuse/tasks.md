@@ -45,6 +45,6 @@
 
 ## 6. Benchmark and follow-up decision
 
-- [ ] 6.1 Measure the real computation counts (unique vs total node evaluations) on the representative real batches (width, untouched, TP/SL, combined 3D grid) and compare against the audit's predicted counts.
-- [ ] 6.2 Measure actual wall-clock effect on the same representative batches, native (no ARM64/parallelism changes bundled in).
-- [ ] 6.3 Document the measured results and use them to decide, as a separate follow-up (not part of this change), whether output-diet, parallelism, or ARM64 migration are worth pursuing next.
+- [x] 6.1 Measure the real computation counts (unique vs total node evaluations) on the representative real batches (width, untouched, TP/SL, combined 3D grid) and compare against the audit's predicted counts. See `benchmark-report.md` §6.1 (already measured in Group 4.8; discrepancies with audit predictions explained, not forced to match).
+- [x] 6.2 Measure actual wall-clock effect on the same representative batches, native (no ARM64/parallelism changes bundled in). See `benchmark-report.md` §6.2 (already measured: 1.11x/1.59x/1.90x/2.17x at N=1/10/50/195; not directly comparable to the audit's baseline model, environment/measurement-boundary differences stated explicitly).
+- [x] 6.3 Document the measured results and use them to decide, as a separate follow-up (not part of this change), whether output-diet, parallelism, or ARM64 migration are worth pursuing next. See `benchmark-report.md` §6.3.
