@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, cast
 
 from strategy_engine.domain.errors import InvalidRequestError
+from strategy_engine.domain.node_identity import NodeSpec
 from strategy_engine.indicators.contracts import IndicatorPlan, PlannedFeature
+from strategy_engine.indicators.implementations.range_evaluator import (
+    resolve_feature,
+    resolve_indicator_plan,
+)
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     require_non_empty_instance_id,
     resolve_exit_rule_groups,
@@ -97,6 +102,31 @@ def _ema(raw: Any, path: str) -> tuple[str, str, int]:
     return source, timeframe, period
 
 
+def _ema_feature(source: str, timeframe: str, period: int) -> PlannedFeature:
+    """The planned EMA feature for one normalized EMA request. Its
+    `output_id` deliberately keeps today's source-blind `_ema_id` label
+    (pinned legacy behavior: same timeframe/period, different source,
+    collide in plan deduplication and the first-planned one wins)."""
+
+    return PlannedFeature(_ema_id(timeframe, period), "ema", timeframe, source, {"period": period})
+
+
+def _context_ema_features(
+    context_ref: object, provider: Mapping[str, Any]
+) -> Iterator[tuple[str, PlannedFeature]]:
+    """The fast/anchor/slow EMA features one HTF context provider requests
+    (lazy, role order, so validation interleaves with planning exactly as
+    before)."""
+
+    timeframe = str(provider.get("timeframe", ""))
+    source = str(provider.get("source", "close"))
+    for role in ("fast", "anchor", "slow"):
+        period = _positive_int(
+            provider.get(f"{role}_period"), f"contexts.{context_ref}.{role}_period"
+        )
+        yield role, _ema_feature(source, timeframe, period)
+
+
 def _rsi(raw: Any, path: str) -> tuple[str, int] | None:
     if raw is None:
         return None
@@ -127,8 +157,9 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
 
     def add_ema(raw: Any, path: str, ema_columns: dict[tuple[str, int], str] | None = None) -> str:
         source, timeframe, period = _ema(raw, path)
-        output_id = _ema_id(timeframe, period)
-        add(PlannedFeature(output_id, "ema", timeframe, source, {"period": period}))
+        feature = _ema_feature(source, timeframe, period)
+        output_id = feature.output_id
+        add(feature)
         if ema_columns is not None:
             ema_columns[(timeframe, period)] = output_id
         return output_id
@@ -168,16 +199,10 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
     contexts = _mapping(contexts_raw, "contexts") if contexts_raw is not None else {}
     for context_ref, provider_raw in contexts.items():
         provider = _mapping(provider_raw, f"contexts.{context_ref}")
-        timeframe = str(provider.get("timeframe", ""))
-        source = str(provider.get("source", "close"))
         resolved: dict[str, str] = {}
-        for role in ("fast", "anchor", "slow"):
-            period = _positive_int(
-                provider.get(f"{role}_period"), f"contexts.{context_ref}.{role}_period"
-            )
-            output_id = _ema_id(timeframe, period)
-            add(PlannedFeature(output_id, "ema", timeframe, source, {"period": period}))
-            resolved[role] = output_id
+        for role, feature in _context_ema_features(context_ref, provider):
+            add(feature)
+            resolved[role] = feature.output_id
         htf_columns[str(context_ref)] = resolved
 
     exit_rule_groups = resolve_exit_rule_groups(root)
@@ -335,3 +360,54 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
         ema_columns=ema_columns,
         htf_context_columns_by_ref=htf_columns,
     )
+
+
+# -- semantic node identity (batch-computation-reuse group 3) -----------------
+
+
+def resolve_feature_identities(
+    planned: EmaPullbackFeaturePlan, *, base_timeframe: str
+) -> dict[str, NodeSpec]:
+    """Plan column label -> identity of the computation that fills it.
+
+    Downstream nodes read indicator values by plan column label, so their
+    upstream identity is whatever this map holds for the label they read --
+    the identity of what is *actually computed and consumed*, never the
+    label itself. For the pinned legacy source collision (e.g. an open-source
+    context EMA(200) whose `ema_close_base_200` label was already taken by
+    the close-source stack anchor) the label resolves to the close EMA's
+    identity, which is exactly the series that consumer reads today.
+    """
+
+    return resolve_indicator_plan(planned.indicator_plan, base_timeframe=base_timeframe)
+
+
+def resolve_ema_request(raw: Any, path: str, *, base_timeframe: str) -> NodeSpec:
+    """Identity of the EMA an `{source?, timeframe?, period}` fragment
+    *requests*, normalized through the same `_ema` defaults the plan builder
+    applies. Source-aware: close vs open EMA with the same timeframe/period
+    get distinct identities even though their plan labels collide."""
+
+    source, timeframe, period = _ema(raw, path)
+    return resolve_feature(
+        _ema_feature(source, timeframe, period), base_timeframe=base_timeframe, upstream={}
+    )
+
+
+def resolve_context_ema_requests(
+    raw_spec: Mapping[str, Any], *, base_timeframe: str
+) -> dict[str, dict[str, NodeSpec]]:
+    """Identity of each HTF context's *requested* fast/anchor/slow EMA
+    (`context_ref -> role -> identity`), with the plan builder's context
+    defaults (source "close", timeframe "")."""
+
+    contexts_raw = raw_spec.get("contexts", {})
+    contexts = _mapping(contexts_raw, "contexts") if contexts_raw is not None else {}
+    requested: dict[str, dict[str, NodeSpec]] = {}
+    for context_ref, provider_raw in contexts.items():
+        provider = _mapping(provider_raw, f"contexts.{context_ref}")
+        requested[str(context_ref)] = {
+            role: resolve_feature(feature, base_timeframe=base_timeframe, upstream={})
+            for role, feature in _context_ema_features(context_ref, provider)
+        }
+    return requested

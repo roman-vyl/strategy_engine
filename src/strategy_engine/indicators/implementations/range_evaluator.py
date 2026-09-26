@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import pandas as pd
 
 from strategy_engine.domain.errors import EvaluationInvariantError, InvalidRequestError
 from strategy_engine.domain.market import MarketFrame
+from strategy_engine.domain.node_identity import NodeSpec, node_spec
 from strategy_engine.domain.ranges import timeframe_duration_ms
 from strategy_engine.domain.validity import Validity
 from strategy_engine.indicators.contracts import (
@@ -57,6 +60,20 @@ def _validate_feature_timeframe(
     return timeframe
 
 
+def _feature_period(feature: PlannedFeature) -> int:
+    """Effective period of an already-validated period-parameterized feature
+    (shared by compute and `resolve_feature`)."""
+
+    return int(feature.parameters["period"])
+
+
+def _atr_distance_multiplier(feature: PlannedFeature) -> float:
+    """Effective multiplier of an already-validated atr_distance feature
+    (shared by compute and `resolve_feature`)."""
+
+    return float(feature.parameters["multiplier"])
+
+
 def _ema_values(frame: pd.DataFrame, feature: PlannedFeature) -> pd.Series:
     validate_ema_feature(feature)
     assert feature.source is not None
@@ -64,7 +81,7 @@ def _ema_values(frame: pd.DataFrame, feature: PlannedFeature) -> pd.Series:
         frame[feature.source]
         .astype(float)
         .ewm(
-            span=int(feature.parameters["period"]),
+            span=_feature_period(feature),
             adjust=False,
         )
         .mean()
@@ -75,7 +92,7 @@ def _rsi_values(frame: pd.DataFrame, feature: PlannedFeature) -> pd.Series:
     validate_rsi_feature(feature)
     return rsi_rolling_mean(
         frame["close"].astype(float),
-        period=int(feature.parameters["period"]),
+        period=_feature_period(feature),
     )
 
 
@@ -85,8 +102,96 @@ def _atr_values(frame: pd.DataFrame, feature: PlannedFeature) -> pd.Series:
         frame["high"].astype(float),
         frame["low"].astype(float),
         frame["close"].astype(float),
-        period=int(feature.parameters["period"]),
+        period=_feature_period(feature),
     )
+
+
+# -- semantic node identity (batch-computation-reuse group 3) -----------------
+#
+# `resolve_feature` is the identity twin of one loop iteration of
+# `RangeIndicatorEvaluator.evaluate_native`: it runs the same validators and
+# the same normalization (`_validate_feature_timeframe` resolves "base" to
+# the market base timeframe; `_feature_period`/`_atr_distance_multiplier`)
+# and never reads `output_id` except to look up the dependency it names.
+# Nothing consumes these identities yet (no memoization at this stage).
+
+INDICATOR_NODE_VERSION = 1
+
+
+def resolve_feature(
+    feature: PlannedFeature,
+    *,
+    base_timeframe: str,
+    upstream: Mapping[str, NodeSpec],
+) -> NodeSpec:
+    """Identity of one planned indicator feature.
+
+    `upstream` maps already-resolved plan `output_id`s to identities -- the
+    same lookup `evaluate_native` does against its `series` dict -- and is
+    only consulted for `atr_distance`'s single dependency. Invalid features
+    fail closed with the same validator error `evaluate_native` raises.
+    """
+
+    timeframe = _validate_feature_timeframe(feature, base_timeframe=base_timeframe)
+    if feature.kind == "ema":
+        validate_ema_feature(feature)
+    elif feature.kind == "atr":
+        validate_atr_feature(feature)
+    elif feature.kind == "rsi":
+        validate_rsi_feature(feature)
+    elif feature.kind in {"adx", "di_plus", "di_minus"}:
+        validate_adx_dmi_feature(feature)
+    elif feature.kind == "atr_distance":
+        validate_atr_distance_feature(feature)
+        dependency_id = feature.dependencies[0]
+        dependency = upstream.get(dependency_id)
+        if dependency is None:
+            raise InvalidRequestError(
+                "atr_distance dependency has not been evaluated",
+                output_id=feature.output_id,
+                dependency=dependency_id,
+            )
+        return node_spec(
+            "indicator.atr_distance",
+            version=INDICATOR_NODE_VERSION,
+            params={
+                "timeframe": timeframe,
+                "multiplier": _atr_distance_multiplier(feature),
+            },
+            upstream={"atr": dependency},
+        )
+    else:
+        raise InvalidRequestError(
+            "range evaluator received unsupported indicator kind",
+            output_id=feature.output_id,
+            kind=feature.kind,
+        )
+    return node_spec(
+        f"indicator.{feature.kind}",
+        version=INDICATOR_NODE_VERSION,
+        params={
+            "timeframe": timeframe,
+            "source": feature.source,
+            "period": _feature_period(feature),
+        },
+    )
+
+
+def resolve_indicator_plan(plan: IndicatorPlan, *, base_timeframe: str) -> dict[str, NodeSpec]:
+    """`output_id -> identity of the series evaluate_native stores under it`.
+
+    Walks the plan in the same order `evaluate_native` does (so a
+    dependency must precede its dependent, exactly as there). The key is the
+    plan's column label; the value is the identity of the computation that
+    actually fills that column.
+    """
+
+    resolved: dict[str, NodeSpec] = {}
+    for feature in plan.features:
+        resolved[feature.output_id] = resolve_feature(
+            feature, base_timeframe=base_timeframe, upstream=resolved
+        )
+    return resolved
 
 
 class RangeIndicatorEvaluator:
@@ -154,7 +259,7 @@ class RangeIndicatorEvaluator:
                         output_id=feature.output_id,
                         dependency=dependency_id,
                     )
-                multiplier = float(feature.parameters["multiplier"])
+                multiplier = _atr_distance_multiplier(feature)
                 output = tuple(
                     None if value is None else float(value) * multiplier
                     for value in dependency_values
@@ -172,7 +277,7 @@ class RangeIndicatorEvaluator:
                 values = _rsi_values(feature_frame, feature)
             elif feature.kind in {"adx", "di_plus", "di_minus"}:
                 validate_adx_dmi_feature(feature)
-                period = int(feature.parameters["period"])
+                period = _feature_period(feature)
                 key = (timeframe, period)
                 group = adx_dmi_cache.get(key)
                 if group is None:

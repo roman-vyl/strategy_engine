@@ -17,6 +17,9 @@ Layout:
                   request extraction); their outputs are committed
 - `record_golden.py`  (re)writes the golden baseline (task 1.6)
 - `test_parity_golden.py`  the parity gate + harness self-check
+- `test_node_identity.py`  identity-soundness suite for `resolve()`/`NodeSpec`
+                  (task 3.7): equivalence/distinctness on normalized inputs,
+                  same identity => bit-identical result over the corpus
 
 Re-run the gate:   .venv/bin/python -m pytest tests/parity -q
 Re-record golden:  PYTHONPATH=src:tests .venv/bin/python -m parity.record_golden

@@ -16,14 +16,14 @@
 
 ## 3. Semantic node identity (`resolve()`/`NodeSpec`), no memoization yet
 
-- [ ] 3.1 Define the `NodeSpec` identity representation (frozen, hashable value: node kind + implementation version, normalized effective parameters, upstream identities, side only when read) per design.md D2.
-- [ ] 3.2 For each node family, add a `resolve()` that derives its `NodeSpec` from the raw spec fragment using the *same* default-normalization logic as the existing `compute()` (shared helper, not duplicated defaults), starting with indicators (`indicators/implementations/range_evaluator.py`, `strategies/ema_pullback/feature_plan.py`).
-- [ ] 3.3 Extend `resolve()` to context/context-consumption gate, direction, blocker (`strategies/ema_pullback/contexts.py`, `context_consumption.py`, `direction_blockers.py`).
-- [ ] 3.4 Extend `resolve()` to setup components, including the width-specific side-free prefix/suffix split identified by the audit (`strategies/ema_pullback/setups.py`).
-- [ ] 3.5 Extend `resolve()` to triggers (`strategies/ema_pullback/triggers.py`).
-- [ ] 3.6 Extend `resolve()` to exit-rule numeric evaluation, per-profile aggregate, and profile-select nodes (`strategies/ema_pullback/exits.py`).
-- [ ] 3.7 Add the identity-soundness test suite, checked against normalized inputs and dependency structure (never against output-value equality): (a) assert semantically equivalent normalized inputs/dependencies produce the same identity (e.g. missing-default vs explicit-default parameter values); (b) assert semantically distinct computation never produces the same identity (e.g. close vs open EMA with identical period, timeframe aliasing resolved so equivalent timeframes match and non-equivalent ones don't); (c) assert same identity implies bit-identical computed result. Explicitly include a case where two distinct computations coincidentally produce equal output values and assert they still receive different identities.
-- [ ] 3.8 Confirm zero behavior change at this stage (memoization is not yet enabled) via the golden-corpus harness.
+- [x] 3.1 Define the `NodeSpec` identity representation (frozen, hashable value: node kind + implementation version, normalized effective parameters, upstream identities, side only when read) per design.md D2.
+- [x] 3.2 For each node family, add a `resolve()` that derives its `NodeSpec` from the raw spec fragment using the *same* default-normalization logic as the existing `compute()` (shared helper, not duplicated defaults), starting with indicators (`indicators/implementations/range_evaluator.py`, `strategies/ema_pullback/feature_plan.py`).
+- [x] 3.3 Extend `resolve()` to context/context-consumption gate, direction, blocker (`strategies/ema_pullback/contexts.py`, `context_consumption.py`, `direction_blockers.py`).
+- [x] 3.4 Extend `resolve()` to setup components, including the width-specific side-free prefix/suffix split identified by the audit (`strategies/ema_pullback/setups.py`).
+- [x] 3.5 Extend `resolve()` to triggers (`strategies/ema_pullback/triggers.py`).
+- [x] 3.6 Extend `resolve()` to exit-rule numeric evaluation, per-profile aggregate, and profile-select nodes (`strategies/ema_pullback/exits.py`).
+- [x] 3.7 Add the identity-soundness test suite, checked against normalized inputs and dependency structure (never against output-value equality): (a) assert semantically equivalent normalized inputs/dependencies produce the same identity (e.g. missing-default vs explicit-default parameter values); (b) assert semantically distinct computation never produces the same identity (e.g. close vs open EMA with identical period, timeframe aliasing resolved so equivalent timeframes match and non-equivalent ones don't); (c) assert same identity implies bit-identical computed result. Explicitly include a case where two distinct computations coincidentally produce equal output values and assert they still receive different identities.
+- [x] 3.8 Confirm zero behavior change at this stage (memoization is not yet enabled) via the golden-corpus harness.
 
 ## 4. Batch-scoped `EvaluationContext` and incremental memoization
 

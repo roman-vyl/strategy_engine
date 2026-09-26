@@ -11,13 +11,20 @@ import numpy as np
 import pandas as pd
 
 from strategy_engine.domain.errors import InvalidRequestError
+from strategy_engine.domain.node_identity import NodeSpec, node_spec
 from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.indicators.market_arrays import frame_market_arrays
 from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
+    GateIdentity,
 )
 from strategy_engine.strategies.ema_pullback.direction_blockers import (
+    SideDirectionBlockerIdentity,
     SideDirectionBlockers,
+    and_masks_node,
+    gate_node_for,
+    gated_mask_node,
+    pairwise_and_node,
 )
 from strategy_engine.strategies.ema_pullback.feature_plan import (
     EmaPullbackFeaturePlan,
@@ -118,16 +125,24 @@ def _apply_gate(local: tuple[bool, ...], gate: tuple[bool, ...] | None) -> tuple
     return tuple(left and right for left, right in zip(local, gate, strict=True))
 
 
+def _untouched_anchor_params(params: Mapping[str, Any]) -> tuple[int, int]:
+    """Effective `(lookback, active_bars)`, post-defaults (shared by compute
+    and resolve)."""
+
+    lookback = int(params.get("lookback", 50))
+    active_bars = int(params.get("active_bars", 3))
+    if lookback <= 0 or active_bars <= 0:
+        raise InvalidRequestError("untouched anchor setup periods must be positive")
+    return lookback, active_bars
+
+
 def _untouched_anchor(
     frame: FeatureFrameLike,
     anchor_id: str,
     params: Mapping[str, Any],
     side: str,
 ) -> tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]:
-    lookback = int(params.get("lookback", 50))
-    active_bars = int(params.get("active_bars", 3))
-    if lookback <= 0 or active_bars <= 0:
-        raise InvalidRequestError("untouched anchor setup periods must be positive")
+    lookback, active_bars = _untouched_anchor_params(params)
     anchor = _float_series(frame, anchor_id)
     close = _market_values(frame, "close")
     low = _market_values(frame, "low")
@@ -186,12 +201,11 @@ def _untouched_anchor(
     }
 
 
-def _ema_bounce_counter(
-    frame: FeatureFrameLike,
-    columns: Mapping[str, str],
-    params: Mapping[str, Any],
-    side: str,
-) -> tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]:
+def _ema_bounce_counter_params(params: Mapping[str, Any]) -> tuple[int, str, int, int, int]:
+    """Effective `(max_bounces, raw_touch_mode, touch_lookback_bars,
+    trend_start_confirmation_bars, trend_break_confirmation_bars)`,
+    post-defaults (shared by compute and resolve)."""
+
     max_bounces = int(params.get("max_bounces", 3))
     raw_touch_mode = str(params.get("raw_touch_mode", "range_cross"))
     touch_lookback = int(params.get("touch_lookback_bars", 10))
@@ -201,6 +215,18 @@ def _ema_bounce_counter(
         raise InvalidRequestError("ema bounce counter parameters must be positive")
     if raw_touch_mode != "range_cross":
         raise InvalidRequestError("raw_touch_mode must be range_cross")
+    return max_bounces, raw_touch_mode, touch_lookback, start_confirm, break_confirm
+
+
+def _ema_bounce_counter(
+    frame: FeatureFrameLike,
+    columns: Mapping[str, str],
+    params: Mapping[str, Any],
+    side: str,
+) -> tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]:
+    max_bounces, _raw_touch_mode, touch_lookback, start_confirm, break_confirm = (
+        _ema_bounce_counter_params(params)
+    )
     fast = _float_series(frame, columns["fast"])
     anchor = _float_series(frame, columns["anchor"])
     slow = _float_series(frame, columns["slow"])
@@ -320,20 +346,29 @@ def _ema_bounce_counter(
     return tuple(bool(item) for item in trace["setup_allowed"]), trace
 
 
-def _anchor_stack_width(
-    frame: FeatureFrameLike,
-    columns: Mapping[str, str],
-    params: Mapping[str, Any],
-) -> tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]:
+def _anchor_stack_width_params(params: Mapping[str, Any]) -> tuple[float, float, int]:
+    """Effective `(min_current_width_atr, min_recent_width_atr,
+    width_lookback_bars)`, post-defaults (shared by compute and resolve)."""
+
     min_current = float(params.get("min_current_width_atr", 2.0))
     min_recent = float(params.get("min_recent_width_atr", 4.0))
     lookback = int(params.get("width_lookback_bars", 80))
     if min_current <= 0 or min_recent <= 0 or lookback <= 0:
         raise InvalidRequestError("anchor stack width parameters must be positive")
-    fast = _float_series(frame, columns["fast"])
-    anchor = _float_series(frame, columns["anchor"])
-    slow = _float_series(frame, columns["slow"])
-    atr = _float_series(frame, columns["atr"])
+    return min_current, min_recent, lookback
+
+
+def _anchor_stack_width_prefix(
+    fast: tuple[float, ...],
+    slow: tuple[float, ...],
+    atr: tuple[float, ...],
+    lookback: int,
+) -> tuple[tuple[float, ...], list[float]]:
+    """Side-free, threshold-free prefix of the width setup: per-bar
+    `width_atr` and its trailing `recent_max` over `lookback` bars. Depends
+    only on (fast, slow, atr, lookback) -- not on the anchor or on either
+    width threshold, which only the suffix reads."""
+
     width_atr = tuple(
         abs(f - s) / a if all(isfinite(v) for v in (f, s, a)) and a > 0 else float("nan")
         for f, s, a in zip(fast, slow, atr, strict=True)
@@ -358,7 +393,21 @@ def _anchor_stack_width(
         .sum()
         .eq(lookback)
     )
-    recent_max = roll_max.where(roll_all_finite, other=np.nan).tolist()
+    recent_max: list[float] = roll_max.where(roll_all_finite, other=np.nan).tolist()
+    return width_atr, recent_max
+
+
+def _anchor_stack_width(
+    frame: FeatureFrameLike,
+    columns: Mapping[str, str],
+    params: Mapping[str, Any],
+) -> tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]:
+    min_current, min_recent, lookback = _anchor_stack_width_params(params)
+    fast = _float_series(frame, columns["fast"])
+    anchor = _float_series(frame, columns["anchor"])
+    slow = _float_series(frame, columns["slow"])
+    atr = _float_series(frame, columns["atr"])
+    width_atr, recent_max = _anchor_stack_width_prefix(fast, slow, atr, lookback)
     allowed: list[bool] = []
     reasons: list[str] = []
     current_ok: list[bool] = []
@@ -411,6 +460,26 @@ def _combine_setup_masks(
     return tuple(reduced.tolist())
 
 
+def _setup_head(item: Mapping[str, Any], side: str) -> tuple[str, str, Mapping[str, Any]]:
+    """Validated `(component_id, instance_id, params)` of one setup item
+    (shared by compute and resolve)."""
+
+    component_id, instance_id = _setup_identity(item)
+    if component_id not in SETUP_SUPPORTED:
+        raise InvalidRequestError("unsupported setup component", component_id=component_id)
+    params = _mapping(item.get("params", {}), f"setup[{instance_id}].params")
+    if side not in _VALID_SIDES:
+        raise InvalidRequestError("trade side must be long or short", side=side)
+    return component_id, instance_id, params
+
+
+def _setup_columns(plan: EmaPullbackFeaturePlan, instance_id: str) -> dict[str, str]:
+    columns = plan.setup_columns_by_instance_id.get(instance_id)
+    if columns is None:
+        raise InvalidRequestError("missing setup feature mapping", instance_id=instance_id)
+    return columns
+
+
 def _setup(
     item: Mapping[str, Any],
     frame: FeatureFrameLike,
@@ -418,23 +487,14 @@ def _setup(
     side: str,
     records: tuple[ContextConsumptionRecord, ...],
 ) -> SetupMask:
-    component_id, instance_id = _setup_identity(item)
-    if component_id not in SETUP_SUPPORTED:
-        raise InvalidRequestError("unsupported setup component", component_id=component_id)
-    params = _mapping(item.get("params", {}), f"setup[{instance_id}].params")
-    if side not in _VALID_SIDES:
-        raise InvalidRequestError("trade side must be long or short", side=side)
+    component_id, instance_id, params = _setup_head(item, side)
     if component_id == "untouched_anchor_setup":
         local, trace = _untouched_anchor(frame, plan.anchor_columns["anchor"], params, side)
     elif component_id == "ema_bounce_counter_setup":
-        columns = plan.setup_columns_by_instance_id.get(instance_id)
-        if columns is None:
-            raise InvalidRequestError("missing setup feature mapping", instance_id=instance_id)
+        columns = _setup_columns(plan, instance_id)
         local, trace = _ema_bounce_counter(frame, columns, params, side)
     else:
-        columns = plan.setup_columns_by_instance_id.get(instance_id)
-        if columns is None:
-            raise InvalidRequestError("missing setup feature mapping", instance_id=instance_id)
+        columns = _setup_columns(plan, instance_id)
         local, trace = _anchor_stack_width(frame, columns, params)
     gate = _gate_for(records, instance_id=instance_id, side=side)
     return SetupMask(
@@ -448,6 +508,13 @@ def _setup(
     )
 
 
+def _setup_items(raw_spec: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+    raw_setups = _sequence(raw_spec.get("setups", []), "raw_spec.setups")
+    return tuple(
+        _mapping(item, f"raw_spec.setups[{index}]") for index, item in enumerate(raw_setups)
+    )
+
+
 def evaluate_setups(
     raw_spec: Mapping[str, Any],
     frame: FeatureFrameLike,
@@ -455,10 +522,7 @@ def evaluate_setups(
     context_records: tuple[ContextConsumptionRecord, ...],
     direction_blockers: tuple[SideDirectionBlockers, ...],
 ) -> tuple[SideSetupEvaluation, ...]:
-    raw_setups = _sequence(raw_spec.get("setups", []), "raw_spec.setups")
-    setup_items = tuple(
-        _mapping(item, f"raw_spec.setups[{index}]") for index, item in enumerate(raw_setups)
-    )
+    setup_items = _setup_items(raw_spec)
     outputs: list[SideSetupEvaluation] = []
     for prior in direction_blockers:
         masks = tuple(
@@ -472,4 +536,149 @@ def evaluate_setups(
             for allowed, setup_ok in zip(prior.pre_setup_allowed, setups_ok, strict=True)
         )
         outputs.append(SideSetupEvaluation(prior.side, masks, setups_ok, pre_trigger))
+    return tuple(outputs)
+
+
+# -- semantic node identity (batch-computation-reuse group 3) -----------------
+
+SETUP_NODE_VERSION = 1
+
+
+def _feature_node(feature_ids: Mapping[str, NodeSpec], output_id: str) -> NodeSpec:
+    try:
+        return feature_ids[output_id]
+    except KeyError as exc:
+        raise InvalidRequestError("missing planned feature series", output_id=output_id) from exc
+
+
+@dataclass(frozen=True, slots=True)
+class SetupIdentity:
+    """Identities of one setup item for one side. `local` covers
+    `local_setup_allowed` + `trace`; `final` covers `final_setup_allowed`.
+    `width_prefix` is set only for the width setup: its side-free,
+    threshold-free `(current_width_atr, recent_max_width_atr)` prefix."""
+
+    instance_id: str
+    side: str
+    local: NodeSpec
+    final: NodeSpec
+    width_prefix: NodeSpec | None = None
+
+
+def resolve_setup_local(
+    item: Mapping[str, Any],
+    plan: EmaPullbackFeaturePlan,
+    feature_ids: Mapping[str, NodeSpec],
+    side: str,
+) -> tuple[NodeSpec, NodeSpec | None]:
+    """`(local identity, width prefix identity or None)` for one setup item.
+
+    Untouched-anchor and bounce-counter read the side; the width setup does
+    not (its local identity is the same for both sides). `instance_id` is a
+    label: it selects plan columns and the gate, never enters an identity.
+    """
+
+    component_id, instance_id, params = _setup_head(item, side)
+    kind = f"setup.{component_id}"
+    if component_id == "untouched_anchor_setup":
+        lookback, active_bars = _untouched_anchor_params(params)
+        return (
+            node_spec(
+                kind,
+                version=SETUP_NODE_VERSION,
+                params={"lookback": lookback, "active_bars": active_bars},
+                upstream={"anchor": _feature_node(feature_ids, plan.anchor_columns["anchor"])},
+                side=side,
+            ),
+            None,
+        )
+    columns = _setup_columns(plan, instance_id)
+    if component_id == "ema_bounce_counter_setup":
+        max_bounces, raw_touch_mode, touch_lookback, start_confirm, break_confirm = (
+            _ema_bounce_counter_params(params)
+        )
+        return (
+            node_spec(
+                kind,
+                version=SETUP_NODE_VERSION,
+                params={
+                    "max_bounces": max_bounces,
+                    "raw_touch_mode": raw_touch_mode,
+                    "touch_lookback_bars": touch_lookback,
+                    "trend_start_confirmation_bars": start_confirm,
+                    "trend_break_confirmation_bars": break_confirm,
+                },
+                upstream={
+                    role: _feature_node(feature_ids, columns[role])
+                    for role in ("fast", "anchor", "slow")
+                },
+                side=side,
+            ),
+            None,
+        )
+    min_current, min_recent, lookback = _anchor_stack_width_params(params)
+    fast = _feature_node(feature_ids, columns["fast"])
+    anchor = _feature_node(feature_ids, columns["anchor"])
+    slow = _feature_node(feature_ids, columns["slow"])
+    atr = _feature_node(feature_ids, columns["atr"])
+    prefix = node_spec(
+        "setup.anchor_stack_width.prefix",
+        version=SETUP_NODE_VERSION,
+        params={"width_lookback_bars": lookback},
+        upstream={"fast": fast, "slow": slow, "atr": atr},
+    )
+    local = node_spec(
+        kind,
+        version=SETUP_NODE_VERSION,
+        params={"min_current_width_atr": min_current, "min_recent_width_atr": min_recent},
+        upstream={"prefix": prefix, "fast": fast, "anchor": anchor, "slow": slow, "atr": atr},
+    )
+    return local, prefix
+
+
+@dataclass(frozen=True, slots=True)
+class SideSetupIdentity:
+    side: str
+    setups: tuple[SetupIdentity, ...]
+    setups_ok: NodeSpec
+    pre_trigger_allowed: NodeSpec
+
+
+def resolve_setups(
+    raw_spec: Mapping[str, Any],
+    plan: EmaPullbackFeaturePlan,
+    feature_ids: Mapping[str, NodeSpec],
+    gates: tuple[GateIdentity, ...],
+    direction_blockers: tuple[SideDirectionBlockerIdentity, ...],
+) -> tuple[SideSetupIdentity, ...]:
+    """Identity twin of `evaluate_setups` (per side of `direction_blockers`)."""
+
+    setup_items = _setup_items(raw_spec)
+    outputs: list[SideSetupIdentity] = []
+    for prior in direction_blockers:
+        setups: list[SetupIdentity] = []
+        for item in setup_items:
+            local, prefix = resolve_setup_local(item, plan, feature_ids, prior.side)
+            _component_id, instance_id = _setup_identity(item)
+            gate = gate_node_for(gates, role="setup", instance_id=instance_id, side=prior.side)
+            setups.append(
+                SetupIdentity(
+                    instance_id=instance_id,
+                    side=prior.side,
+                    local=local,
+                    final=gated_mask_node(local, gate),
+                    width_prefix=prefix,
+                )
+            )
+        setups_ok = and_masks_node("mask.all", tuple(setup.final for setup in setups))
+        outputs.append(
+            SideSetupIdentity(
+                side=prior.side,
+                setups=tuple(setups),
+                setups_ok=setups_ok,
+                pre_trigger_allowed=pairwise_and_node(
+                    "mask.all", prior.pre_setup_allowed, setups_ok
+                ),
+            )
+        )
     return tuple(outputs)

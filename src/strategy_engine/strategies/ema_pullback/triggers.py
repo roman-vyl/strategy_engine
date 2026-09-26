@@ -7,8 +7,10 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from strategy_engine.domain.errors import InvalidRequestError
+from strategy_engine.domain.node_identity import NodeSpec, node_spec
 from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.indicators.market_arrays import frame_market_arrays
+from strategy_engine.strategies.ema_pullback.direction_blockers import pairwise_and_node
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     TRIGGER_SUPPORTED as _SUPPORTED,
@@ -16,7 +18,7 @@ from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     resolve_trigger_rule as _trigger_rule,
 )
-from strategy_engine.strategies.ema_pullback.setups import SideSetupEvaluation
+from strategy_engine.strategies.ema_pullback.setups import SideSetupEvaluation, SideSetupIdentity
 
 _VALID_SIDES = frozenset({"long", "short"})
 
@@ -173,16 +175,31 @@ def _touch_anchor(
     return trigger, {"touch": touch, "close_ok": close_ok, "trigger": trigger}
 
 
+def _trigger_component(raw_spec: Mapping[str, Any]) -> tuple[Mapping[str, Any], str]:
+    """Validated `(trigger rule, component_id)`, post-defaults (shared by
+    compute and resolve)."""
+
+    rule = _trigger_rule(raw_spec)
+    component_id = str(rule.get("component_id", "reclaim_anchor"))
+    if component_id not in _SUPPORTED:
+        raise InvalidRequestError("unsupported trigger component", component_id=component_id)
+    return rule, component_id
+
+
+def _reclaim_lookback(rule: Mapping[str, Any]) -> int:
+    """Effective reclaim lookback, post-default (validated at use by
+    `_rolling_reclaim`; shared by compute and resolve)."""
+
+    return int(rule.get("lookback", 1))
+
+
 def evaluate_triggers(
     raw_spec: Mapping[str, Any],
     frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     setups: tuple[SideSetupEvaluation, ...],
 ) -> tuple[SideTriggerEvaluation, ...]:
-    rule = _trigger_rule(raw_spec)
-    component_id = str(rule.get("component_id", "reclaim_anchor"))
-    if component_id not in _SUPPORTED:
-        raise InvalidRequestError("unsupported trigger component", component_id=component_id)
+    rule, component_id = _trigger_component(raw_spec)
     anchor = _float_series(frame, plan.anchor_columns["anchor"])
     outputs: list[SideTriggerEvaluation] = []
     for prior in setups:
@@ -191,7 +208,7 @@ def evaluate_triggers(
         if component_id == "touch_anchor":
             allowed, trace = _touch_anchor(frame, anchor, side=prior.side)
         else:
-            lookback = int(rule.get("lookback", 1))
+            lookback = _reclaim_lookback(rule)
             allowed, trace = _rolling_reclaim(
                 frame,
                 anchor,
@@ -210,6 +227,75 @@ def evaluate_triggers(
                 side=prior.side,
                 trigger=TriggerMask(component_id, prior.side, allowed, trace),
                 pre_risk_entry_allowed=pre_risk,
+            )
+        )
+    return tuple(outputs)
+
+
+# -- semantic node identity (batch-computation-reuse group 3) -----------------
+
+TRIGGER_NODE_VERSION = 1
+
+
+@dataclass(frozen=True, slots=True)
+class SideTriggerIdentity:
+    side: str
+    trigger: NodeSpec
+    pre_risk_entry_allowed: NodeSpec
+
+
+def resolve_trigger(
+    raw_spec: Mapping[str, Any],
+    plan: EmaPullbackFeaturePlan,
+    feature_ids: Mapping[str, NodeSpec],
+    side: str,
+) -> NodeSpec:
+    """Identity of one side's trigger `allowed`/`trace`. Every trigger reads
+    the side; `lookback` is part of the identity only for the reclaim
+    variants that read it (touch_anchor ignores it)."""
+
+    rule, component_id = _trigger_component(raw_spec)
+    if side not in _VALID_SIDES:
+        raise InvalidRequestError("trade side must be long or short", side=side)
+    try:
+        anchor = feature_ids[plan.anchor_columns["anchor"]]
+    except KeyError as exc:
+        raise InvalidRequestError(
+            "missing planned feature series", output_id=plan.anchor_columns["anchor"]
+        ) from exc
+    params: dict[str, object] = {}
+    if component_id != "touch_anchor":
+        lookback = _reclaim_lookback(rule)
+        if lookback <= 0:
+            raise InvalidRequestError("trigger.lookback must be > 0")
+        params["lookback"] = lookback
+    return node_spec(
+        f"trigger.{component_id}",
+        version=TRIGGER_NODE_VERSION,
+        params=params,
+        upstream={"anchor": anchor},
+        side=side,
+    )
+
+
+def resolve_triggers(
+    raw_spec: Mapping[str, Any],
+    plan: EmaPullbackFeaturePlan,
+    feature_ids: Mapping[str, NodeSpec],
+    setups: tuple[SideSetupIdentity, ...],
+) -> tuple[SideTriggerIdentity, ...]:
+    """Identity twin of `evaluate_triggers` (per side of `setups`)."""
+
+    outputs: list[SideTriggerIdentity] = []
+    for prior in setups:
+        trigger = resolve_trigger(raw_spec, plan, feature_ids, prior.side)
+        outputs.append(
+            SideTriggerIdentity(
+                side=prior.side,
+                trigger=trigger,
+                pre_risk_entry_allowed=pairwise_and_node(
+                    "mask.all", prior.pre_trigger_allowed, trigger
+                ),
             )
         )
     return tuple(outputs)

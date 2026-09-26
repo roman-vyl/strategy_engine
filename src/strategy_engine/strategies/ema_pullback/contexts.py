@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from strategy_engine.domain.errors import InvalidRequestError
+from strategy_engine.domain.node_identity import NodeSpec, node_spec
 from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 
@@ -87,16 +88,16 @@ def _evaluate_stack(
     return tuple(states), tuple(up_mask), tuple(down_mask), tuple(neutral_mask)
 
 
-def build_context_bundle(
+def _context_providers(
     raw_spec: Mapping[str, Any],
-    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
-) -> ContextBundle:
-    """Evaluate canonical BBB context providers from the enriched feature frame."""
+) -> Iterator[tuple[str, dict[str, Any], dict[str, str]]]:
+    """Validated `(context_ref, provider, plan columns)` per declared context,
+    lazily in declaration order -- the single parsing/validation path shared
+    by `build_context_bundle` (compute) and `resolve_context_bundle`."""
 
     contexts_raw = raw_spec.get("contexts", {})
     contexts = _mapping(contexts_raw, "raw_spec.contexts") if contexts_raw is not None else {}
-    outputs: list[ContextOutput] = []
     for context_ref_raw, provider_raw in contexts.items():
         context_ref = str(context_ref_raw)
         provider = dict(_mapping(provider_raw, f"raw_spec.contexts.{context_ref}"))
@@ -112,6 +113,18 @@ def build_context_bundle(
                 "context provider has no feature-plan mapping",
                 context_ref=context_ref,
             )
+        yield context_ref, provider, columns
+
+
+def build_context_bundle(
+    raw_spec: Mapping[str, Any],
+    frame: FeatureFrameLike,
+    plan: EmaPullbackFeaturePlan,
+) -> ContextBundle:
+    """Evaluate canonical BBB context providers from the enriched feature frame."""
+
+    outputs: list[ContextOutput] = []
+    for context_ref, provider, columns in _context_providers(raw_spec, plan):
         state, up, down, neutral = _evaluate_stack(
             frame.series.get(columns["fast"]),
             frame.series.get(columns["anchor"]),
@@ -129,3 +142,31 @@ def build_context_bundle(
             )
         )
     return ContextBundle(time_ms=frame.time_ms, outputs=tuple(outputs))
+
+
+# -- semantic node identity (batch-computation-reuse group 3) -----------------
+
+CONTEXT_NODE_VERSION = 1
+
+
+def resolve_context_bundle(
+    raw_spec: Mapping[str, Any],
+    plan: EmaPullbackFeaturePlan,
+    feature_ids: Mapping[str, NodeSpec],
+) -> dict[str, NodeSpec]:
+    """`context_ref -> identity` of each context's state/up/down/neutral.
+
+    The computation reads only the three stack series (by plan label, via
+    `frame.series.get`, so an absent series is an absent upstream) -- the
+    `context_ref` and provider echo are labels, not inputs. Timeframe and
+    source enter through the upstream EMA identities.
+    """
+
+    return {
+        context_ref: node_spec(
+            "context.htf_context",
+            version=CONTEXT_NODE_VERSION,
+            upstream={role: feature_ids.get(columns[role]) for role in ("fast", "anchor", "slow")},
+        )
+        for context_ref, _provider, columns in _context_providers(raw_spec, plan)
+    }
