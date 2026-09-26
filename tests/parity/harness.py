@@ -274,13 +274,27 @@ def _patched(module: Any, name: str, value: Any) -> Iterator[None]:
 
 
 @contextlib.contextmanager
-def recording_services(recorder: Recorder) -> Iterator[ApplicationServices]:
+def recording_services(
+    recorder: Recorder, *, memo_enabled: bool | None = None
+) -> Iterator[ApplicationServices]:
     """Production `build_services` wiring with recording hooks and the
     fixture-backed MDS client. Stage-name patches stay active while the
-    context is open (i.e. while the batch stream is being drained)."""
+    context is open (i.e. while the batch stream is being drained).
+
+    `memo_enabled` (batch-computation-reuse group 4): None keeps the
+    production default; True/False forces the range-batch memo toggle, so
+    the same evaluator code can be recorded memo-ON and memo-OFF."""
 
     with contextlib.ExitStack() as stack:
         stack.enter_context(_patched(wiring, "MarketDataServiceClient", _fixture_mds_client))
+        if memo_enabled is not None:
+            stack.enter_context(
+                _patched(
+                    wiring,
+                    "EvaluateStrategyRangeBatch",
+                    functools.partial(wiring.EvaluateStrategyRangeBatch, memo_enabled=memo_enabled),
+                )
+            )
         stack.enter_context(
             _patched(wiring, "EvaluateStrategyRange", _recording_strategy_range(recorder))
         )
@@ -436,13 +450,15 @@ class Case:
         )
 
 
-def record_payload(name: str, payload: Mapping[str, Any]) -> tuple[dict[str, Any], ArrayStore]:
+def record_payload(
+    name: str, payload: Mapping[str, Any], *, memo_enabled: bool | None = None
+) -> tuple[dict[str, Any], ArrayStore]:
     """Run one range-batch request through the real evaluator and return
     its canonical record plus the array store its encoding refers to."""
 
     store = ArrayStore()
     recorder = Recorder()
-    with recording_services(recorder) as services:
+    with recording_services(recorder, memo_enabled=memo_enabled) as services:
         ndjson = _drain_route(services, payload)
     variant_ids = [variant["variant_id"] for variant in payload["variants"]]
     candidates = []

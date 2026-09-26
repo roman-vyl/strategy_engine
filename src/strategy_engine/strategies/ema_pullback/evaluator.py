@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from strategy_engine.domain.node_identity import NodeSpec
 from strategy_engine.indicators.application.evaluate_range import EvaluateIndicatorRange
 from strategy_engine.indicators.contracts import (
     FeatureFrame,
@@ -9,9 +10,13 @@ from strategy_engine.indicators.contracts import (
     NativeFeatureFrame,
 )
 from strategy_engine.indicators.implementations.frame_ops import serialize_value
+from strategy_engine.indicators.implementations.range_evaluator import (
+    resolve_indicator_consumptions,
+)
 from strategy_engine.strategies.application.build_feature_plan import BuildStrategyFeaturePlan
 from strategy_engine.strategies.contracts import (
     HistoricalExecutionProjection,
+    LiveStrategySpec,
     StrategyDiagnosticEvaluation,
     StrategyEvaluationExecution,
     StrategyRangeRequest,
@@ -40,6 +45,19 @@ class EmaPullbackRangeEvaluator:
         self._feature_planner = feature_planner
         self._indicator_evaluator = indicator_evaluator
 
+    def resolve_memoized_identities(
+        self, strategy: LiveStrategySpec, *, base_timeframe: str
+    ) -> tuple[NodeSpec, ...]:
+        """Identities this strategy's evaluation will consume through an
+        `EvaluationContext` memo, in consumption order -- the batch refcount
+        pre-pass (batch-computation-reuse group 4, design.md D5). Only the
+        indicator node family is memoized at this stage. Raises whatever
+        feature planning raises; the caller treats that as "no predicted
+        consumptions"."""
+
+        planned = self._feature_planner.execute(strategy)
+        return resolve_indicator_consumptions(planned.indicator_plan, base_timeframe=base_timeframe)
+
     def _evaluate_frame(
         self, request: StrategyRangeRequest
     ) -> tuple[FeatureFrame, EmaPullbackEvaluation]:
@@ -55,6 +73,7 @@ class EmaPullbackRangeEvaluator:
                 expected_market_data_hash=request.expected_market_data_hash,
                 market_frame=request.market_frame,
                 market_arrays=request.market_arrays,
+                evaluation_context=request.evaluation_context,
             )
         )
         evaluation = evaluate_ema_pullback_frame(request.strategy, frame, planned)
@@ -80,6 +99,7 @@ class EmaPullbackRangeEvaluator:
                 expected_market_data_hash=request.expected_market_data_hash,
                 market_frame=request.market_frame,
                 market_arrays=request.market_arrays,
+                evaluation_context=request.evaluation_context,
             )
         )
         evaluation = evaluate_ema_pullback_frame(request.strategy, frame, planned)

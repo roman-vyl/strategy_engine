@@ -8,6 +8,7 @@ from typing import Any, Literal
 from strategy_engine.domain.market import MarketFrame, MarketStream
 from strategy_engine.domain.ranges import TimeRange
 from strategy_engine.domain.values import canonical_json_hash
+from strategy_engine.indicators.evaluation_context import EvaluationContext
 from strategy_engine.indicators.market_arrays import MarketArrays
 
 
@@ -69,6 +70,11 @@ class StrategyRangeRequest:
     # HTTP request DTO; absent (None), the evaluation derives it once from
     # the market frame it evaluates.
     market_arrays: MarketArrays | None = None
+    # Internal-only seam (batch-computation-reuse, group 4): the range-batch
+    # `EvaluationContext` (one per range-batch call, shared by every
+    # variant). Not exposed on any HTTP request DTO; absent (None), nothing
+    # is memoized.
+    evaluation_context: EvaluationContext | None = None
 
 
 @dataclass(frozen=True, slots=True)

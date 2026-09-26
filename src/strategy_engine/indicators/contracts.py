@@ -10,6 +10,7 @@ from strategy_engine.domain.market import MarketBar, MarketFrame, MarketStream
 from strategy_engine.domain.ranges import TimeRange
 from strategy_engine.domain.validity import Validity
 from strategy_engine.domain.values import canonical_json_hash
+from strategy_engine.indicators.evaluation_context import EvaluationContext
 from strategy_engine.indicators.market_arrays import MarketArrays
 
 
@@ -66,6 +67,11 @@ class IndicatorRangeRequest:
     # derived from this exact `market_frame` (checked, fail closed). Absent
     # (None): the evaluator derives it from the frame it evaluates.
     market_arrays: MarketArrays | None = None
+    # Internal-only seam (batch-computation-reuse, group 4): the range-batch
+    # `EvaluationContext` for this exact `market_frame`; indicator features
+    # are then memoized by identity through it. Absent (None): computed
+    # directly, exactly as before.
+    evaluation_context: EvaluationContext | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -11,6 +11,7 @@ from strategy_engine.indicators.contracts import (
     NativeFeatureFrame,
     PlannedFeature,
 )
+from strategy_engine.indicators.evaluation_context import EvaluationContext
 from strategy_engine.indicators.market_arrays import MarketArrays
 
 
@@ -21,6 +22,7 @@ class IndicatorEvaluator(Protocol):
         plan: IndicatorPlan,
         *,
         market_arrays: MarketArrays | None = None,
+        context: EvaluationContext | None = None,
     ) -> FeatureFrame: ...
 
     def evaluate_native(
@@ -29,6 +31,7 @@ class IndicatorEvaluator(Protocol):
         plan: IndicatorPlan,
         *,
         market_arrays: MarketArrays | None = None,
+        context: EvaluationContext | None = None,
     ) -> NativeFeatureFrame: ...
 
 
