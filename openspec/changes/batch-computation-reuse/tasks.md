@@ -9,9 +9,9 @@
 
 ## 2. Shared range-invariant common arrays
 
-- [ ] 2.1 Design the per-range-batch common-array bundle (float64 OHLCV, `DatetimeIndex`, `time_ms`) that replaces repeated per-node Decimal→float conversion (`indicators/implementations/frame_ops.py:market_frame_to_dataframe`, and the per-node `_market_values`/`_frame_dataframe` conversions in `setups.py`, `triggers.py`, `exits.py`).
-- [ ] 2.2 Wire the shared bundle into the batch evaluation path so every node that today re-derives float64 arrays from the `MarketFrame` consumes the shared bundle instead.
-- [ ] 2.3 Run the golden-corpus harness against this stage; confirm bit-identical output (including at the DataFrame/array level, not just final NDJSON) before proceeding.
+- [x] 2.1 Design the per-range-batch common-array bundle (float64 OHLCV, `DatetimeIndex`, `time_ms`) that replaces repeated per-node Decimal→float conversion (`indicators/implementations/frame_ops.py:market_frame_to_dataframe`, and the per-node `_market_values`/`_frame_dataframe` conversions in `setups.py`, `triggers.py`, `exits.py`).
+- [x] 2.2 Wire the shared bundle into the batch evaluation path so every node that today re-derives float64 arrays from the `MarketFrame` consumes the shared bundle instead.
+- [x] 2.3 Run the golden-corpus harness against this stage; confirm bit-identical output (including at the DataFrame/array level, not just final NDJSON) before proceeding.
 - [ ] 2.4 Converge the single-spec (non-batch) entrypoint onto the same shared common-array bundle and, once later stages land, the same `EvaluationContext` mechanism as the batch path — the target architecture has no permanent separate preparation path for single-spec. It is acceptable for the single-spec entrypoint to keep its current implementation temporarily while later groups are still being migrated node family by node family, but this task is not complete until single-spec is running on the shared context as a context-of-one.
 
 ## 3. Semantic node identity (`resolve()`/`NodeSpec`), no memoization yet

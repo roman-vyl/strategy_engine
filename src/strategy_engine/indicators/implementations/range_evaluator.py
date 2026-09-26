@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from strategy_engine.domain.errors import InvalidRequestError
+from strategy_engine.domain.errors import EvaluationInvariantError, InvalidRequestError
 from strategy_engine.domain.market import MarketFrame
 from strategy_engine.domain.ranges import timeframe_duration_ms
 from strategy_engine.domain.validity import Validity
@@ -29,7 +29,6 @@ from strategy_engine.indicators.implementations.ema import validate_ema_feature
 from strategy_engine.indicators.implementations.frame_ops import (
     align_completed_to_base,
     feature_timeframe,
-    market_frame_to_dataframe,
     resample_ohlcv,
     serialize_value,
 )
@@ -37,6 +36,7 @@ from strategy_engine.indicators.implementations.rsi import (
     rsi_rolling_mean,
     validate_rsi_feature,
 )
+from strategy_engine.indicators.market_arrays import MarketArrays
 
 
 def _validate_feature_timeframe(
@@ -104,9 +104,27 @@ class RangeIndicatorEvaluator:
     unchanged.
     """
 
-    def evaluate_native(self, market_frame: MarketFrame, plan: IndicatorPlan) -> NativeFeatureFrame:
+    def evaluate_native(
+        self,
+        market_frame: MarketFrame,
+        plan: IndicatorPlan,
+        *,
+        market_arrays: MarketArrays | None = None,
+    ) -> NativeFeatureFrame:
+        """`market_arrays`, when given, is the caller's shared float64 view
+        of this exact `market_frame` (batch-computation-reuse group 2);
+        otherwise it is derived here, once, for this evaluation. Either way
+        the returned frame carries it so downstream strategy nodes read
+        prices from it instead of re-converting `market_bars`."""
+
+        if market_arrays is None:
+            market_arrays = MarketArrays.from_market_frame(market_frame)
+        elif not market_arrays.is_derived_from(market_frame):
+            raise EvaluationInvariantError(
+                "shared market arrays were not derived from the evaluated market frame"
+            )
         base_timeframe = market_frame.market.base_timeframe
-        frame = market_frame_to_dataframe(market_frame)
+        frame = market_arrays.dataframe()
         cached_frames: dict[str, pd.DataFrame] = {base_timeframe: frame, "base": frame}
         series: dict[str, tuple[float | None, ...]] = {}
         validity: dict[str, Validity] = {}
@@ -203,16 +221,23 @@ class RangeIndicatorEvaluator:
         return NativeFeatureFrame(
             market=market_frame.market,
             requested_range=market_frame.requested_range,
-            time_ms=tuple(bar.open_time_ms for bar in market_frame.bars),
+            time_ms=market_arrays.time_ms,
             series=series,
             validity=validity,
             plan_hash=plan.plan_hash,
             market_data_hash=market_frame.market_data_hash,
             market_bars=market_frame.bars,
+            market_arrays=market_arrays,
         )
 
-    def evaluate(self, market_frame: MarketFrame, plan: IndicatorPlan) -> FeatureFrame:
-        native = self.evaluate_native(market_frame, plan)
+    def evaluate(
+        self,
+        market_frame: MarketFrame,
+        plan: IndicatorPlan,
+        *,
+        market_arrays: MarketArrays | None = None,
+    ) -> FeatureFrame:
+        native = self.evaluate_native(market_frame, plan, market_arrays=market_arrays)
         return FeatureFrame(
             market=native.market,
             requested_range=native.requested_range,
@@ -227,4 +252,5 @@ class RangeIndicatorEvaluator:
             plan_hash=native.plan_hash,
             market_data_hash=native.market_data_hash,
             market_bars=native.market_bars,
+            market_arrays=native.market_arrays,
         )

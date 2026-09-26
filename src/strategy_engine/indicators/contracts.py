@@ -10,6 +10,7 @@ from strategy_engine.domain.market import MarketBar, MarketFrame, MarketStream
 from strategy_engine.domain.ranges import TimeRange
 from strategy_engine.domain.validity import Validity
 from strategy_engine.domain.values import canonical_json_hash
+from strategy_engine.indicators.market_arrays import MarketArrays
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +60,12 @@ class IndicatorRangeRequest:
     # any HTTP request DTO; absent (None) preserves today's fetch-per-call
     # behavior exactly.
     market_frame: MarketFrame | None = None
+    # Internal-only seam (batch-computation-reuse, group 2): the shared
+    # float64/DatetimeIndex/time_ms view of `market_frame`, built once by
+    # the caller and reused by every evaluation it threads it into. Must be
+    # derived from this exact `market_frame` (checked, fail closed). Absent
+    # (None): the evaluator derives it from the frame it evaluates.
+    market_arrays: MarketArrays | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +85,9 @@ class FeatureFrame:
     plan_hash: str
     market_data_hash: str
     market_bars: tuple[MarketBar, ...] = ()
+    # Internal-only (batch-computation-reuse, group 2): shared float64 view
+    # of `market_bars`; not part of the wire contract, equality, or repr.
+    market_arrays: MarketArrays | None = field(default=None, compare=False, repr=False)
 
 
 class FeatureFrameLike(Protocol):
@@ -116,6 +126,9 @@ class FeatureFrameLike(Protocol):
     @property
     def market_bars(self) -> tuple[MarketBar, ...]: ...
 
+    @property
+    def market_arrays(self) -> MarketArrays | None: ...
+
 
 @dataclass(frozen=True, slots=True)
 class NativeFeatureFrame:
@@ -135,3 +148,7 @@ class NativeFeatureFrame:
     plan_hash: str
     market_data_hash: str
     market_bars: tuple[MarketBar, ...] = ()
+    # Internal-only (batch-computation-reuse, group 2): the shared float64
+    # view of `market_bars` every strategy node reads prices from; excluded
+    # from equality and repr.
+    market_arrays: MarketArrays | None = field(default=None, compare=False, repr=False)

@@ -16,6 +16,7 @@ from typing import Any
 
 from strategy_engine.domain.errors import InvalidRequestError, StrategyEngineError
 from strategy_engine.domain.market import MarketFrame
+from strategy_engine.indicators.market_arrays import MarketArrays
 from strategy_engine.ports.market_data import MarketDataPort
 from strategy_engine.strategies.application.evaluate_range import EvaluateStrategyRange
 from strategy_engine.strategies.contracts import (
@@ -60,10 +61,20 @@ class EvaluateStrategyRangeBatch:
             request.time_range,
             expected_market_data_hash=request.expected_market_data_hash,
         )
-        return self._stream_variants(request, market_frame)
+        # batch-computation-reuse group 2 (design.md D4): one shared
+        # float64/DatetimeIndex/time_ms view of the range for every variant,
+        # instead of each variant re-converting the Decimal bars. Building it
+        # does no conversion yet (each part is derived lazily, on first use
+        # by the first variant that needs it), so nothing observable moves
+        # ahead of streaming.
+        market_arrays = MarketArrays.from_market_frame(market_frame)
+        return self._stream_variants(request, market_frame, market_arrays)
 
     def _stream_variants(
-        self, request: StrategyRangeBatchRequest, market_frame: MarketFrame
+        self,
+        request: StrategyRangeBatchRequest,
+        market_frame: MarketFrame,
+        market_arrays: MarketArrays,
     ) -> Iterator[BatchVariantOutcome]:
         """A generator function's body does not run until iterated --
         `execute()` above returns this call's (not-yet-started) generator
@@ -79,6 +90,7 @@ class EvaluateStrategyRangeBatch:
                         time_range=request.time_range,
                         options=request.options,
                         market_frame=market_frame,
+                        market_arrays=market_arrays,
                         expected_market_data_hash=request.expected_market_data_hash,
                     )
                 )

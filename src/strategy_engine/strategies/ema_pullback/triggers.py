@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.indicators.contracts import FeatureFrameLike
+from strategy_engine.indicators.market_arrays import frame_market_arrays
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     TRIGGER_SUPPORTED as _SUPPORTED,
@@ -87,7 +88,7 @@ def _float_series(frame: FeatureFrameLike, output_id: str) -> tuple[float, ...]:
 def _market_values(frame: FeatureFrameLike, field: str) -> tuple[float, ...]:
     if len(frame.market_bars) != len(frame.time_ms):
         raise InvalidRequestError("market bars unavailable for trigger evaluation")
-    return tuple(float(getattr(bar, field)) for bar in frame.market_bars)
+    return frame_market_arrays(frame).values(field)
 
 
 def _rolling_reclaim(

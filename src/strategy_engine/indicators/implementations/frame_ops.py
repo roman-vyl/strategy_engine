@@ -9,6 +9,7 @@ import pandas as pd
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.market import MarketFrame
 from strategy_engine.domain.values import normalized_decimal_text
+from strategy_engine.indicators.market_arrays import MarketArrays
 
 
 def pandas_frequency(timeframe: str) -> str:
@@ -28,21 +29,11 @@ def feature_timeframe(feature_timeframe: str, base_timeframe: str) -> str:
 
 
 def market_frame_to_dataframe(market_frame: MarketFrame) -> pd.DataFrame:
-    index = pd.to_datetime(
-        [bar.open_time_ms for bar in market_frame.bars],
-        unit="ms",
-        utc=True,
-    )
-    return pd.DataFrame(
-        {
-            "open": [float(bar.open) for bar in market_frame.bars],
-            "high": [float(bar.high) for bar in market_frame.bars],
-            "low": [float(bar.low) for bar in market_frame.bars],
-            "close": [float(bar.close) for bar in market_frame.bars],
-            "volume": [float(bar.volume) for bar in market_frame.bars],
-        },
-        index=index,
-    )
+    """Standalone float64 OHLCV frame for one `MarketFrame`, through the
+    shared `MarketArrays` conversion. Evaluation paths build `MarketArrays`
+    once and call `.dataframe()` on it instead of converting per call."""
+
+    return MarketArrays.from_market_frame(market_frame).dataframe()
 
 
 def resample_ohlcv(frame: pd.DataFrame, timeframe: str) -> pd.DataFrame:

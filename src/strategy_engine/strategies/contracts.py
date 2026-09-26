@@ -8,6 +8,7 @@ from typing import Any, Literal
 from strategy_engine.domain.market import MarketFrame, MarketStream
 from strategy_engine.domain.ranges import TimeRange
 from strategy_engine.domain.values import canonical_json_hash
+from strategy_engine.indicators.market_arrays import MarketArrays
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +63,12 @@ class StrategyRangeRequest:
     # any HTTP request DTO; absent (None) preserves today's fetch-per-call
     # behavior exactly.
     market_frame: MarketFrame | None = None
+    # Internal-only seam (batch-computation-reuse, group 2): the shared
+    # float64/DatetimeIndex/time_ms view of `market_frame`, built once per
+    # range-batch call and threaded to every variant. Not exposed on any
+    # HTTP request DTO; absent (None), the evaluation derives it once from
+    # the market frame it evaluates.
+    market_arrays: MarketArrays | None = None
 
 
 @dataclass(frozen=True, slots=True)

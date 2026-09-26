@@ -14,6 +14,7 @@ import pandas as pd
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.values import normalized_decimal_text
 from strategy_engine.indicators.contracts import FeatureFrameLike
+from strategy_engine.indicators.market_arrays import frame_market_arrays
 from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
 )
@@ -163,17 +164,11 @@ def _enabled_sides(raw_spec: Mapping[str, Any]) -> tuple[str, ...]:
 def _frame_dataframe(frame: FeatureFrameLike) -> pd.DataFrame:
     if len(frame.market_bars) != len(frame.time_ms):
         raise InvalidRequestError("market bars unavailable for exit policy")
-    index = pd.to_datetime(frame.time_ms, unit="ms", utc=True)
-    data: dict[str, object] = {
-        "open": [float(bar.open) for bar in frame.market_bars],
-        "high": [float(bar.high) for bar in frame.market_bars],
-        "low": [float(bar.low) for bar in frame.market_bars],
-        "close": [float(bar.close) for bar in frame.market_bars],
-        "volume": [float(bar.volume) for bar in frame.market_bars],
-    }
+    arrays = frame_market_arrays(frame)
+    data: dict[str, object] = arrays.ohlcv_columns()
     for output_id, values in frame.series.items():
         data[output_id] = [float("nan") if value is None else float(value) for value in values]
-    return pd.DataFrame(data, index=index)
+    return pd.DataFrame(data, index=arrays.index())
 
 
 def _ema_column(raw: object, plan: EmaPullbackFeaturePlan, path: str) -> str:

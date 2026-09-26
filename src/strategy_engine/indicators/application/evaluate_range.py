@@ -27,7 +27,7 @@ class EvaluateIndicatorRange:
 
     def execute(self, request: IndicatorRangeRequest) -> FeatureFrame:
         evaluator, market_frame = self._prepare(request)
-        return evaluator.evaluate(market_frame, request.plan)
+        return evaluator.evaluate(market_frame, request.plan, market_arrays=request.market_arrays)
 
     def execute_native(self, request: IndicatorRangeRequest) -> NativeFeatureFrame:
         """Internal-only: same acquisition/validation as `execute`, but
@@ -36,7 +36,9 @@ class EvaluateIndicatorRange:
         (`compact-strategy-evaluation-boundary-v1`)."""
 
         evaluator, market_frame = self._prepare(request)
-        return evaluator.evaluate_native(market_frame, request.plan)
+        return evaluator.evaluate_native(
+            market_frame, request.plan, market_arrays=request.market_arrays
+        )
 
     def _prepare(
         self, request: IndicatorRangeRequest

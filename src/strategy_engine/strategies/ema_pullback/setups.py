@@ -12,6 +12,7 @@ import pandas as pd
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.indicators.contracts import FeatureFrameLike
+from strategy_engine.indicators.market_arrays import frame_market_arrays
 from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
 )
@@ -94,7 +95,7 @@ def _float_series(frame: FeatureFrameLike, output_id: str) -> tuple[float, ...]:
 def _market_values(frame: FeatureFrameLike, field: str) -> tuple[float, ...]:
     if len(frame.market_bars) != len(frame.time_ms):
         raise InvalidRequestError("market bars unavailable for setup evaluation")
-    return tuple(float(getattr(bar, field)) for bar in frame.market_bars)
+    return frame_market_arrays(frame).values(field)
 
 
 def _gate_for(
