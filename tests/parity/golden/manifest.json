@@ -1,0 +1,194 @@
+{
+ "format_version": 1,
+ "recorded_against": {
+  "git_head": "ca0d0d2ecfc7c04150ad4fb13d15a7f18c85473e",
+  "src_strategy_engine_sha256": "0a46e3e496125fd0c0686f870e87423fa4d47496371b2c44a5815cdaf5d4927c",
+  "note": "pre-change evaluator (batch-computation-reuse group 1 baseline)"
+ },
+ "environment": {
+  "python": "3.12.13",
+  "machine": "arm64",
+  "numpy": "2.5.1",
+  "pandas": "2.3.3"
+ },
+ "market_fixture": {
+  "file": "fixtures/mds_btcusdt_p_5m_1786800000000_1790400000000.json.gz",
+  "sha256": "630e0598354b784799609d343a7b1cabe2dd3d4817ac70c9ac99490140b740d2",
+  "ticker": "BTCUSDT.P",
+  "timeframe": "5m",
+  "from_ms": 1786800000000,
+  "to_ms": 1790400000000,
+  "market_data_hash": "a29faf1a278b53b446239c2d0f6de4307e2bbd7b45e8bc6db8bda135fd6a7da1",
+  "bar_count": 12000
+ },
+ "arrays": {
+  "file": "arrays.npz",
+  "count": 1674,
+  "raw_bytes": 80352012,
+  "sha256": "f88c924825fc15b64613d39c564c6b6d21a3981450e80d220cfb17e4589667f5"
+ },
+ "cases": [
+  {
+   "case": "real_3d_grid_subset",
+   "group": "real",
+   "variants": 27,
+   "file": "cases/real_3d_grid_subset.json.gz",
+   "sha256": "96ace09eb72d2dc48c1c5b22fb0e5fa9d8881812c6ed2cefc305d60b8176aa2c"
+  },
+  {
+   "case": "real_tpsl_only_sweep",
+   "group": "real",
+   "variants": 13,
+   "file": "cases/real_tpsl_only_sweep.json.gz",
+   "sha256": "cd53a6bd07f4e751883f0ab110674f24296b880007c192ba0e1747409796fe2f"
+  },
+  {
+   "case": "real_untouched_only_sweep",
+   "group": "real",
+   "variants": 22,
+   "file": "cases/real_untouched_only_sweep.json.gz",
+   "sha256": "146cf83df3957920473764e8cf62d5dd18b80e0176f5b957aebbdbebb4033f68"
+  },
+  {
+   "case": "real_width_only_sweep",
+   "group": "real",
+   "variants": 35,
+   "file": "cases/real_width_only_sweep.json.gz",
+   "sha256": "536f5289c2aca7e578168701e9f2ef2eb0a8996b6a1f2de3f6282fcbd479dfb9"
+  },
+  {
+   "case": "synthetic_ema_periods",
+   "group": "synthetic",
+   "variants": 5,
+   "file": "cases/synthetic_ema_periods.json.gz",
+   "sha256": "88bd6fd8670ac26f1b6c912461b845c3d741ea518d648af2c29284c7f90d54d9"
+  },
+  {
+   "case": "synthetic_atr_config",
+   "group": "synthetic",
+   "variants": 7,
+   "file": "cases/synthetic_atr_config.json.gz",
+   "sha256": "0b47ca8de09c410f61fc64f5c51404e143fcc25379a31d08ad3c63ce93f9ad2a"
+  },
+  {
+   "case": "synthetic_context_structure",
+   "group": "synthetic",
+   "variants": 6,
+   "file": "cases/synthetic_context_structure.json.gz",
+   "sha256": "9af4f1dacf6e9b7e6db4c61b59407d63e93a0ad9196094575c2fe5ae7f25fc6b"
+  },
+  {
+   "case": "synthetic_setup_trigger_structure",
+   "group": "synthetic",
+   "variants": 6,
+   "file": "cases/synthetic_setup_trigger_structure.json.gz",
+   "sha256": "992bf5f513ae45de269f2f1d240f885b267083656d1b846ff1e4b70dd784d6ee"
+  },
+  {
+   "case": "synthetic_blockers",
+   "group": "synthetic",
+   "variants": 5,
+   "file": "cases/synthetic_blockers.json.gz",
+   "sha256": "f98070a6333c5506576e307f03a3c9a4c3af21e76aabeb77439064c31fb2c7a6"
+  },
+  {
+   "case": "synthetic_exit_structure",
+   "group": "synthetic",
+   "variants": 10,
+   "file": "cases/synthetic_exit_structure.json.gz",
+   "sha256": "bb210e3453b3fa9fa107bd225733d8d093736ca052f780656c80739bdd7b5296"
+  },
+  {
+   "case": "synthetic_failures_mixed",
+   "group": "synthetic",
+   "variants": 9,
+   "file": "cases/synthetic_failures_mixed.json.gz",
+   "sha256": "77d887b7d198f51cf074d90c71f14954949b62c443a832a689bb5db60a3a2a32"
+  },
+  {
+   "case": "synthetic_heterogeneous_shuffled",
+   "group": "synthetic",
+   "variants": 10,
+   "file": "cases/synthetic_heterogeneous_shuffled.json.gz",
+   "sha256": "d48bd0f480a4bdc0787d9075cac8afca295f794ede94da386d21ee786c0f2882"
+  },
+  {
+   "case": "probe_default_setup_params",
+   "group": "probe",
+   "variants": 10,
+   "file": "cases/probe_default_setup_params.json.gz",
+   "sha256": "9355b254a3b96526f8e07eb88ded70defc32ce75b7fb580504cf8b46148d3dd7"
+  },
+  {
+   "case": "probe_default_components",
+   "group": "probe",
+   "variants": 9,
+   "file": "cases/probe_default_components.json.gz",
+   "sha256": "018165cb442d1006fe8c5a1067daf39056b0db93e63d24ff81ba9225125559d4"
+  },
+  {
+   "case": "probe_default_indicator_fields",
+   "group": "probe",
+   "variants": 4,
+   "file": "cases/probe_default_indicator_fields.json.gz",
+   "sha256": "249a15a003e8d68c75e35d9d5918f4661e96e96e054baff68c5b3efc838cf162"
+  },
+  {
+   "case": "probe_side_only_when_read",
+   "group": "probe",
+   "variants": 9,
+   "file": "cases/probe_side_only_when_read.json.gz",
+   "sha256": "b84a8560b6cb01601ae883d8ca62e8f2ba24271e0c10024a4879b9f37cab7ac0"
+  },
+  {
+   "case": "probe_timeframe_alias",
+   "group": "probe",
+   "variants": 9,
+   "file": "cases/probe_timeframe_alias.json.gz",
+   "sha256": "eec7da87e5d3a5cdccdf700f26d07dba479bb50e9b0c6ae08f3daf9f45b4893b"
+  },
+  {
+   "case": "probe_source_distinct_same_period",
+   "group": "probe",
+   "variants": 6,
+   "file": "cases/probe_source_distinct_same_period.json.gz",
+   "sha256": "2acbbd94ef3bc34282ee995bce720f48cd407198542530f7792fb3b87ff9260f"
+  },
+  {
+   "case": "probe_rule_order_and_labels",
+   "group": "probe",
+   "variants": 12,
+   "file": "cases/probe_rule_order_and_labels.json.gz",
+   "sha256": "af782f7be65c9e60e7125c5f346c70f6c544353b72991a83d814bb9749fe0971"
+  },
+  {
+   "case": "probe_float_normalization",
+   "group": "probe",
+   "variants": 11,
+   "file": "cases/probe_float_normalization.json.gz",
+   "sha256": "218ff06efc85ca1cb9a1cb64ece0e0caf0a8a956ff27c9b83e458c4bbe804278"
+  },
+  {
+   "case": "probe_duplicates_and_order",
+   "group": "probe",
+   "variants": 8,
+   "file": "cases/probe_duplicates_and_order.json.gz",
+   "sha256": "795b2f79b409ff23aeb88eacb0a6c615e63654dfba2acc83657cbe41428b811b"
+  },
+  {
+   "case": "probe_market_acquisition_without_hash",
+   "group": "probe",
+   "variants": 2,
+   "file": "cases/probe_market_acquisition_without_hash.json.gz",
+   "sha256": "016593c28f9d932c199b23dfa7eb0bdc4c96977911d5178041441893a51e2597"
+  },
+  {
+   "case": "probe_request_level_failure",
+   "group": "probe",
+   "variants": 2,
+   "file": "cases/probe_request_level_failure.json.gz",
+   "sha256": "ebd6c49197d1826b4d2fb71c909d55836f245fe285d4ef4bce9d594a88361a16"
+  }
+ ],
+ "record_seconds": 55.7
+}

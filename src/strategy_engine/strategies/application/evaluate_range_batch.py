@@ -16,6 +16,7 @@ from typing import Any
 
 from strategy_engine.domain.errors import InvalidRequestError, StrategyEngineError
 from strategy_engine.domain.market import MarketFrame
+from strategy_engine.indicators.evaluation_context import EvaluationContext
 from strategy_engine.ports.market_data import MarketDataPort
 from strategy_engine.strategies.application.evaluate_range import EvaluateStrategyRange
 from strategy_engine.strategies.contracts import (
@@ -33,9 +34,22 @@ class BatchVariantOutcome:
 
 
 class EvaluateStrategyRangeBatch:
-    def __init__(self, evaluator: EvaluateStrategyRange, market_data: MarketDataPort) -> None:
+    def __init__(
+        self,
+        evaluator: EvaluateStrategyRange,
+        market_data: MarketDataPort,
+        *,
+        memo_enabled: bool = True,
+    ) -> None:
+        """`memo_enabled` is the batch-computation-reuse memo toggle
+        (design.md D3): the same evaluator code runs either way; off, the
+        evaluation context never retains a result, so every node computes.
+        Production wiring always uses the default (on); off exists only for
+        the `tests/parity` memo-OFF vs memo-ON regression gates."""
+
         self._evaluator = evaluator
         self._market_data = market_data
+        self._memo_enabled = memo_enabled
 
     def execute(self, request: StrategyRangeBatchRequest) -> Iterator[BatchVariantOutcome]:
         ids = [variant.variant_id for variant in request.variants]
@@ -60,28 +74,53 @@ class EvaluateStrategyRangeBatch:
             request.time_range,
             expected_market_data_hash=request.expected_market_data_hash,
         )
-        return self._stream_variants(request, market_frame)
+        # batch-computation-reuse group 2 (design.md D4) + group 4 (D1/D2):
+        # one evaluation context per range-batch call, owning the shared
+        # float64/DatetimeIndex/time_ms view of the range and the identity
+        # memo, scoped to this exact market frame. Building it does no
+        # conversion or computation yet (the arrays are derived lazily, on
+        # first use by the first variant that needs them), so nothing
+        # observable moves ahead of streaming.
+        context = EvaluationContext(market_frame, memo_enabled=self._memo_enabled)
+        return self._stream_variants(request, market_frame, context)
 
     def _stream_variants(
-        self, request: StrategyRangeBatchRequest, market_frame: MarketFrame
+        self,
+        request: StrategyRangeBatchRequest,
+        market_frame: MarketFrame,
+        context: EvaluationContext,
     ) -> Iterator[BatchVariantOutcome]:
         """A generator function's body does not run until iterated --
         `execute()` above returns this call's (not-yet-started) generator
         object only after shared acquisition already completed, so nothing
         here can execute before that point."""
 
-        for variant in request.variants:
+        # design.md D5: every root's memo consumptions are predicted (feature
+        # planning + identity resolution only -- no node is computed) before
+        # the first root is evaluated, so each memoized result is evicted
+        # the moment its last consumer has read it. Prediction never raises.
+        context.plan_roots(
+            self._evaluator.resolve_memoized_identities(variant.strategy, request.market)
+            for variant in request.variants
+        )
+        for index, variant in enumerate(request.variants):
             try:
-                result = self._evaluator.execute_projection(
-                    StrategyRangeRequest(
-                        strategy=variant.strategy,
-                        market=request.market,
-                        time_range=request.time_range,
-                        options=request.options,
-                        market_frame=market_frame,
-                        expected_market_data_hash=request.expected_market_data_hash,
+                # `root()` only scopes refcount bookkeeping: it never catches,
+                # replaces or reorders an exception, so the catch boundary
+                # below (and propagation of anything else) is unchanged.
+                with context.root(index):
+                    result = self._evaluator.execute_projection(
+                        StrategyRangeRequest(
+                            strategy=variant.strategy,
+                            market=request.market,
+                            time_range=request.time_range,
+                            options=request.options,
+                            market_frame=market_frame,
+                            market_arrays=context.market_arrays,
+                            evaluation_context=context,
+                            expected_market_data_hash=request.expected_market_data_hash,
+                        )
                     )
-                )
                 yield BatchVariantOutcome(variant.variant_id, result, None)
             except StrategyEngineError as exc:
                 yield BatchVariantOutcome(

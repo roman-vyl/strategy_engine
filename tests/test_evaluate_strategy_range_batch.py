@@ -235,6 +235,60 @@ def test_single_variant_evaluate_strategy_range_still_fetches_its_own_dataset() 
     assert market_data.calls == 2
 
 
+def _single_request(
+    raw_spec: dict[str, object] | None = None,
+    *,
+    time_range: TimeRange | None = None,
+    expected_market_data_hash: str | None = None,
+) -> StrategyRangeRequest:
+    return StrategyRangeRequest(
+        strategy=LiveStrategySpec("ema_pullback", minimal_spec() if raw_spec is None else raw_spec),
+        market=MarketStream("BTCUSDT.P", "5m"),
+        time_range=time_range or TimeRange(0, 3_600_000),
+        expected_market_data_hash=expected_market_data_hash,
+    )
+
+
+def test_single_spec_projection_acquires_once_per_request_as_a_context_of_one() -> None:
+    # batch-computation-reuse 2.4/5.2: /range builds its own one-root
+    # EvaluationContext over the frame it acquires -- still exactly one
+    # acquisition per request, and the result equals a batch of one.
+    market_data = SpyMarketData()
+    batch_eval, strategy_eval = _build(market_data)
+    single = strategy_eval.execute_projection(_single_request())
+    assert market_data.calls == 1
+    strategy_eval.execute_projection(_single_request())
+    assert market_data.calls == 2
+    (outcome,) = tuple(batch_eval.execute(_batch_request(1)))
+    assert outcome.result == single
+
+
+def test_single_spec_projection_forwards_expected_market_data_hash_unchanged() -> None:
+    market_data = SpyMarketData()
+    _, strategy_eval = _build(market_data)
+    strategy_eval.execute_projection(_single_request())
+    strategy_eval.execute_projection(
+        _single_request(expected_market_data_hash="fixture-market-hash")
+    )
+    assert market_data.expected_market_data_hashes == [None, "fixture-market-hash"]
+
+
+def test_single_spec_validation_still_precedes_market_acquisition() -> None:
+    # Unlike the batch (shared acquisition first), single-spec validation
+    # still runs before any acquisition: an invalid spec with a failing
+    # MDS is still an invalid_request, and a misaligned range fetches nothing.
+    _, strategy_eval = _build(FailingMarketData())
+    with pytest.raises(InvalidRequestError):
+        strategy_eval.execute_projection(_single_request({"anchor_stack": {}}))
+    with pytest.raises(MarketDataUnavailableError):
+        strategy_eval.execute_projection(_single_request())
+    market_data = SpyMarketData()
+    _, strategy_eval = _build(market_data)
+    with pytest.raises(InvalidRequestError):
+        strategy_eval.execute_projection(_single_request(time_range=TimeRange(1, 3_600_000)))
+    assert market_data.calls == 0
+
+
 def test_per_variant_errors_still_envelope_after_successful_acquisition() -> None:
     market_data = SpyMarketData()
     batch_eval, _ = _build(market_data)

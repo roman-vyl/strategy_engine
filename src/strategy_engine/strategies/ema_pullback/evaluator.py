@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+from strategy_engine.domain.market import MarketFrame
+from strategy_engine.domain.node_identity import NodeSpec
 from strategy_engine.indicators.application.evaluate_range import EvaluateIndicatorRange
 from strategy_engine.indicators.contracts import (
     FeatureFrame,
+    IndicatorPlan,
     IndicatorRangeRequest,
     NativeFeatureFrame,
 )
 from strategy_engine.indicators.implementations.frame_ops import serialize_value
+from strategy_engine.indicators.implementations.range_evaluator import (
+    resolve_indicator_consumptions,
+)
 from strategy_engine.strategies.application.build_feature_plan import BuildStrategyFeaturePlan
 from strategy_engine.strategies.contracts import (
     HistoricalExecutionProjection,
+    LiveStrategySpec,
     StrategyDiagnosticEvaluation,
     StrategyEvaluationExecution,
     StrategyRangeRequest,
@@ -22,11 +29,25 @@ from strategy_engine.strategies.decision_events import build_decision_events
 from strategy_engine.strategies.ema_pullback.evaluation import (
     EmaPullbackEvaluation,
     evaluate_ema_pullback_frame,
+    memoized_stage_consumptions,
+    resolve_memoized_stages,
 )
 from strategy_engine.strategies.ema_pullback.potential_entries import potential_entries_to_wire
 from strategy_engine.strategies.historical_execution_projection import (
     build_historical_execution_projection,
 )
+
+
+def _indicator_request(request: StrategyRangeRequest, plan: IndicatorPlan) -> IndicatorRangeRequest:
+    return IndicatorRangeRequest(
+        market=request.market,
+        time_range=request.time_range,
+        plan=plan,
+        expected_market_data_hash=request.expected_market_data_hash,
+        market_frame=request.market_frame,
+        market_arrays=request.market_arrays,
+        evaluation_context=request.evaluation_context,
+    )
 
 
 class EmaPullbackRangeEvaluator:
@@ -40,6 +61,40 @@ class EmaPullbackRangeEvaluator:
         self._feature_planner = feature_planner
         self._indicator_evaluator = indicator_evaluator
 
+    def resolve_memoized_identities(
+        self, strategy: LiveStrategySpec, *, base_timeframe: str
+    ) -> tuple[NodeSpec, ...]:
+        """Identities this strategy's evaluation will consume through an
+        `EvaluationContext` memo, in consumption order -- the refcount
+        pre-pass of a range-batch or single-spec context
+        (batch-computation-reuse, design.md D5). Memoized
+        families: indicators (4.4), direction/blocker/setup/trigger nodes
+        (4.6) and exit-rule/aggregate/select nodes (4.7). Raises whatever feature planning
+        raises; the caller treats that as "no predicted consumptions"."""
+
+        planned = self._feature_planner.execute(strategy)
+        indicators = resolve_indicator_consumptions(
+            planned.indicator_plan, base_timeframe=base_timeframe
+        )
+        if len(indicators) != len(planned.indicator_plan.features):
+            # Indicator evaluation will fail before any strategy node runs.
+            return indicators
+        stages = resolve_memoized_stages(strategy.raw_spec, planned, base_timeframe=base_timeframe)
+        return indicators + memoized_stage_consumptions(stages)
+
+    def load_market_frame(self, request: StrategyRangeRequest) -> MarketFrame:
+        """The market frame this request's evaluation reads, acquired and
+        validated exactly as `_evaluate_frame_native` would before computing
+        (feature planning, then the indicator layer's validation and
+        `load_range`), without computing anything. Used by the single-spec
+        entrypoint to build its one-root `EvaluationContext`
+        (batch-computation-reuse task 2.4)."""
+
+        planned = self._feature_planner.execute(request.strategy)
+        return self._indicator_evaluator.load_market_frame(
+            _indicator_request(request, planned.indicator_plan)
+        )
+
     def _evaluate_frame(
         self, request: StrategyRangeRequest
     ) -> tuple[FeatureFrame, EmaPullbackEvaluation]:
@@ -48,13 +103,7 @@ class EmaPullbackRangeEvaluator:
 
         planned = self._feature_planner.execute(request.strategy)
         frame = self._indicator_evaluator.execute(
-            IndicatorRangeRequest(
-                market=request.market,
-                time_range=request.time_range,
-                plan=planned.indicator_plan,
-                expected_market_data_hash=request.expected_market_data_hash,
-                market_frame=request.market_frame,
-            )
+            _indicator_request(request, planned.indicator_plan)
         )
         evaluation = evaluate_ema_pullback_frame(request.strategy, frame, planned)
         return frame, evaluation
@@ -72,15 +121,11 @@ class EmaPullbackRangeEvaluator:
 
         planned = self._feature_planner.execute(request.strategy)
         frame = self._indicator_evaluator.execute_native(
-            IndicatorRangeRequest(
-                market=request.market,
-                time_range=request.time_range,
-                plan=planned.indicator_plan,
-                expected_market_data_hash=request.expected_market_data_hash,
-                market_frame=request.market_frame,
-            )
+            _indicator_request(request, planned.indicator_plan)
         )
-        evaluation = evaluate_ema_pullback_frame(request.strategy, frame, planned)
+        evaluation = evaluate_ema_pullback_frame(
+            request.strategy, frame, planned, context=request.evaluation_context
+        )
         return frame, evaluation
 
     def evaluate_execution(self, request: StrategyRangeRequest) -> StrategyEvaluationExecution:

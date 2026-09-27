@@ -27,7 +27,12 @@ class EvaluateIndicatorRange:
 
     def execute(self, request: IndicatorRangeRequest) -> FeatureFrame:
         evaluator, market_frame = self._prepare(request)
-        return evaluator.evaluate(market_frame, request.plan)
+        return evaluator.evaluate(
+            market_frame,
+            request.plan,
+            market_arrays=request.market_arrays,
+            context=request.evaluation_context,
+        )
 
     def execute_native(self, request: IndicatorRangeRequest) -> NativeFeatureFrame:
         """Internal-only: same acquisition/validation as `execute`, but
@@ -36,7 +41,22 @@ class EvaluateIndicatorRange:
         (`compact-strategy-evaluation-boundary-v1`)."""
 
         evaluator, market_frame = self._prepare(request)
-        return evaluator.evaluate_native(market_frame, request.plan)
+        return evaluator.evaluate_native(
+            market_frame,
+            request.plan,
+            market_arrays=request.market_arrays,
+            context=request.evaluation_context,
+        )
+
+    def load_market_frame(self, request: IndicatorRangeRequest) -> MarketFrame:
+        """Internal-only: exactly the acquisition/validation `execute_native`
+        runs before computing (same checks, same order, same `load_range`
+        call), returning the market frame without computing anything -- so
+        a single-spec strategy evaluation can build its `EvaluationContext`
+        over that frame (batch-computation-reuse task 2.4) with no change in
+        what is validated or fetched, or in which failure is raised first."""
+
+        return self._prepare(request)[1]
 
     def _prepare(
         self, request: IndicatorRangeRequest

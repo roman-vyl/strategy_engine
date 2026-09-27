@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from strategy_engine.domain.errors import InvalidRequestError
+from strategy_engine.domain.node_identity import NodeSpec, node_spec
 from strategy_engine.strategies.ema_pullback.contexts import ContextBundle
 
 HTF_REGIME_GATE_POLICY = "htf_regime_gate"
@@ -100,6 +101,21 @@ def _raw_state(bundle: ContextBundle, context_ref: str) -> tuple[str, ...]:
     raise InvalidRequestError("unknown context_ref", context_ref=context_ref)
 
 
+def _gate_allowed_regimes(policy_id: str, params: Mapping[str, Any]) -> tuple[str, ...]:
+    """Validated `allowed_regimes` of one gate policy, in declared order
+    (shared by `_gate_record` and `resolve_context_consumption`)."""
+
+    if policy_id != HTF_REGIME_GATE_POLICY:
+        raise InvalidRequestError("unsupported context consumption policy", policy_id=policy_id)
+    raw_allowed = params.get("allowed_regimes")
+    if not isinstance(raw_allowed, list) or not raw_allowed:
+        raise InvalidRequestError("allowed_regimes must be a non-empty list")
+    allowed_regimes = tuple(str(item) for item in raw_allowed)
+    if set(allowed_regimes) - _VALID_REGIMES:
+        raise InvalidRequestError("allowed_regimes contains invalid values")
+    return allowed_regimes
+
+
 def _gate_record(
     *,
     role: str,
@@ -109,14 +125,7 @@ def _gate_record(
     bundle: ContextBundle,
 ) -> ContextConsumptionRecord:
     context_ref, policy_id, params = consumption
-    if policy_id != HTF_REGIME_GATE_POLICY:
-        raise InvalidRequestError("unsupported context consumption policy", policy_id=policy_id)
-    raw_allowed = params.get("allowed_regimes")
-    if not isinstance(raw_allowed, list) or not raw_allowed:
-        raise InvalidRequestError("allowed_regimes must be a non-empty list")
-    allowed_regimes = tuple(str(item) for item in raw_allowed)
-    if set(allowed_regimes) - _VALID_REGIMES:
-        raise InvalidRequestError("allowed_regimes contains invalid values")
+    allowed_regimes = _gate_allowed_regimes(policy_id, params)
     raw = _raw_state(bundle, context_ref)
     resolved = tuple(resolve_htf_regime(item, side) for item in raw)
     return ContextConsumptionRecord(
@@ -137,11 +146,13 @@ def _gate_record(
     )
 
 
-def build_context_consumption_evidence(
-    raw_spec: Mapping[str, Any], bundle: ContextBundle
-) -> tuple[ContextConsumptionRecord, ...]:
-    records: list[ContextConsumptionRecord] = []
-    sides = _enabled_sides(raw_spec)
+def _gate_declarations(
+    raw_spec: Mapping[str, Any], sides: tuple[str, ...]
+) -> Iterator[tuple[str, Mapping[str, Any], tuple[str, str, dict[str, Any]], str]]:
+    """`(role, component, consumption, side)` for every declared gate, lazily
+    in evaluation order (blockers, then setups; sides innermost) -- the
+    single iteration shared by compute and `resolve_context_consumption`."""
+
     components = _mapping(raw_spec.get("components", {}), "raw_spec.components")
     for role, raw_items in (
         ("blocker", components.get("blockers", [])),
@@ -157,11 +168,12 @@ def build_context_consumption_evidence(
             if consumption is None:
                 continue
             for side in sides:
-                records.append(
-                    _gate_record(
-                        role=role, component=item, consumption=consumption, side=side, bundle=bundle
-                    )
-                )
+                yield role, item, consumption, side
+
+
+def _exit_consumption(raw_spec: Mapping[str, Any]) -> tuple[str, str] | None:
+    """Validated `(context_ref, policy_id)` of the exit-profile consumption,
+    if declared (shared by compute and `resolve_exit_profiles`)."""
 
     trade_management = _mapping(raw_spec.get("trade_management", {}), "raw_spec.trade_management")
     exit_policy = _mapping(
@@ -171,10 +183,29 @@ def build_context_consumption_evidence(
         exit_policy.get("context_consumption"),
         "raw_spec.trade_management.exit_policy.context_consumption",
     )
+    if exit_consumption is None:
+        return None
+    context_ref, policy_id, _params = exit_consumption
+    if policy_id != EXIT_PROFILE_BY_HTF_STATE_POLICY:
+        raise InvalidRequestError("unsupported exit context policy", policy_id=policy_id)
+    return context_ref, policy_id
+
+
+def build_context_consumption_evidence(
+    raw_spec: Mapping[str, Any], bundle: ContextBundle
+) -> tuple[ContextConsumptionRecord, ...]:
+    records: list[ContextConsumptionRecord] = []
+    sides = _enabled_sides(raw_spec)
+    for role, item, consumption, side in _gate_declarations(raw_spec, sides):
+        records.append(
+            _gate_record(
+                role=role, component=item, consumption=consumption, side=side, bundle=bundle
+            )
+        )
+
+    exit_consumption = _exit_consumption(raw_spec)
     if exit_consumption is not None:
-        context_ref, policy_id, _params = exit_consumption
-        if policy_id != EXIT_PROFILE_BY_HTF_STATE_POLICY:
-            raise InvalidRequestError("unsupported exit context policy", policy_id=policy_id)
+        context_ref, policy_id = exit_consumption
         raw = _raw_state(bundle, context_ref)
         long_profile = (
             tuple(resolve_htf_regime(item, "long") for item in raw)
@@ -200,3 +231,98 @@ def build_context_consumption_evidence(
             )
         )
     return tuple(records)
+
+
+# -- semantic node identity (batch-computation-reuse group 3) -----------------
+
+CONTEXT_CONSUMPTION_NODE_VERSION = 1
+
+
+@dataclass(frozen=True, slots=True)
+class GateIdentity:
+    """Identity of one gate record's `resolved_regime`/`allowed` output, with
+    the labels `_gate_for` lookups match on (role/instance_id/side exactly as
+    the compute-side record carries them)."""
+
+    role: str
+    instance_id: str | None
+    side: str
+    node: NodeSpec
+
+
+def _context_node(context_ids: Mapping[str, NodeSpec], context_ref: str) -> NodeSpec:
+    node = context_ids.get(context_ref)
+    if node is None:
+        raise InvalidRequestError("unknown context_ref", context_ref=context_ref)
+    return node
+
+
+def resolve_context_consumption(
+    raw_spec: Mapping[str, Any], context_ids: Mapping[str, NodeSpec]
+) -> tuple[GateIdentity, ...]:
+    """Gate identities, in the same order compute emits gate records.
+
+    A gate reads the context's raw state and the side; `allowed_regimes` is
+    only used for membership, so its identity is the de-duplicated, sorted
+    set (declared order and repeats are labels on the echoed record only).
+    """
+
+    sides = _enabled_sides(raw_spec)
+    gates: list[GateIdentity] = []
+    for role, item, consumption, side in _gate_declarations(raw_spec, sides):
+        context_ref, policy_id, params = consumption
+        allowed_regimes = _gate_allowed_regimes(policy_id, params)
+        gates.append(
+            GateIdentity(
+                role=role,
+                instance_id=(
+                    str(item.get("instance_id")) if item.get("instance_id") is not None else None
+                ),
+                side=side,
+                node=node_spec(
+                    "context_consumption.htf_regime_gate",
+                    version=CONTEXT_CONSUMPTION_NODE_VERSION,
+                    params={"allowed_regimes": frozenset(allowed_regimes)},
+                    upstream={"context": _context_node(context_ids, context_ref)},
+                    side=side,
+                ),
+            )
+        )
+    return tuple(gates)
+
+
+def constant_neutral_profile() -> NodeSpec:
+    """The all-"neutral" profile series: used when no exit consumption is
+    declared and for a side that is not enabled (identical computation)."""
+
+    return node_spec(
+        "context_consumption.exit_profile.constant_neutral",
+        version=CONTEXT_CONSUMPTION_NODE_VERSION,
+    )
+
+
+def resolve_exit_profiles(
+    raw_spec: Mapping[str, Any], context_ids: Mapping[str, NodeSpec]
+) -> tuple[NodeSpec | None, NodeSpec, NodeSpec]:
+    """`(context_state, profile_long, profile_short)` identities consumed by
+    the exit policy. `context_state` is the context node itself (its raw
+    state), or `None` when no exit consumption is declared (then the exit
+    policy uses an all-"neutral" state)."""
+
+    sides = _enabled_sides(raw_spec)
+    exit_consumption = _exit_consumption(raw_spec)
+    if exit_consumption is None:
+        return None, constant_neutral_profile(), constant_neutral_profile()
+    context = _context_node(context_ids, exit_consumption[0])
+
+    def profile(side: str) -> NodeSpec:
+        if side not in sides:
+            return constant_neutral_profile()
+        return node_spec(
+            "context_consumption.exit_profile",
+            version=CONTEXT_CONSUMPTION_NODE_VERSION,
+            upstream={"context": context},
+            side=side,
+        )
+
+    return context, profile("long"), profile("short")

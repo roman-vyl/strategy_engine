@@ -1,0 +1,3200 @@
+{
+ "case": "real_width_only_sweep",
+ "description": "Width-only sweep: anchor_stack_width_setup min_current_width_atr 1..35 (all).",
+ "provenance": {
+  "sources": [
+   {
+    "path": "research_service/results/lab_baseline_width_only_v2/request.json",
+    "sha256": "8b313db3bc7c2a1cb803e60addbdf2a38344bf634421a2244d0f1d5627f7d0f3",
+    "selection": "all candidates"
+   }
+  ]
+ },
+ "variants": [
+  {
+   "variant_id": "width-01",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 1,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-02",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 2,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-03",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 3,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-04",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 4,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-05",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 5,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-06",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 6,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-07",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 7,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-08",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 8,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-09",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 9,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-10",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 10,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-11",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 11,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-12",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 12,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-13",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 13,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-14",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 14,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-15",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 15,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-16",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 16,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-17",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 17,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-18",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 18,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-19",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 19,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-20",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 20,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-21",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 21,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-22",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 22,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-23",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 23,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-24",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 24,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-25",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 25,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-26",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 26,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-27",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 27,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-28",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 28,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-29",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 29,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-30",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 30,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-31",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 31,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-32",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 32,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-33",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 33,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-34",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 34,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  },
+  {
+   "variant_id": "width-35",
+   "strategy": {
+    "strategy_id": "ema_pullback",
+    "raw_spec": {
+     "anchor_stack": {
+      "anchor": {
+       "period": 200,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "fast": {
+       "period": 100,
+       "source": "close",
+       "timeframe": "base"
+      },
+      "slow": {
+       "period": 500,
+       "source": "close",
+       "timeframe": "base"
+      }
+     },
+     "components": {
+      "blockers": [],
+      "direction": "ema_anchor_stack_trend",
+      "risk": "no_risk_filter",
+      "trigger": {
+       "component_id": "touch_anchor"
+      }
+     },
+     "contexts": {},
+     "setups": [
+      {
+       "component_id": "anchor_stack_width_setup",
+       "instance_id": "width1",
+       "params": {
+        "atr_period": 48,
+        "atr_timeframe": "base",
+        "min_current_width_atr": 35,
+        "min_recent_width_atr": 4.0,
+        "width_lookback_bars": 80
+       }
+      }
+     ],
+     "trade_management": {
+      "exit_management": {},
+      "exit_policy": {
+       "always_on": {
+        "exits": [
+         {
+          "component_id": "atr_stop_loss",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "stop_loss",
+          "instance_id": "sl-measurement"
+         },
+         {
+          "component_id": "atr_take_profit",
+          "distance": {
+           "multiplier": 3.0,
+           "period": 48,
+           "timeframe": "base"
+          },
+          "exit_kind": "take_profit",
+          "instance_id": "tp-measurement"
+         }
+        ]
+       },
+       "profiles": {
+        "aligned": {
+         "exits": []
+        },
+        "countertrend": {
+         "exits": []
+        },
+        "neutral": {
+         "exits": []
+        }
+       }
+      }
+     },
+     "trade_sides": [
+      "long",
+      "short"
+     ]
+    }
+   }
+  }
+ ]
+}
