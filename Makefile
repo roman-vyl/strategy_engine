@@ -1,7 +1,15 @@
-.PHONY: test lint typecheck release-check verify run build
+.PHONY: test test-parity lint typecheck release-check verify run build
 
+# tests/parity is architecture-dependent golden-corpus scaffolding built for
+# the batch-computation-reuse migration (bit-exact float64 comparison against
+# fixtures recorded on arm64; not reproducible bit-for-bit on the x86_64 CI
+# runner - see the "temporary migration scaffolding" follow-up issue).
+# Excluded from the mandatory CI gate; run explicitly via `make test-parity`.
 test:
-	python -m pytest
+	python -m pytest --ignore=tests/parity
+
+test-parity:
+	python -m pytest tests/parity
 
 lint:
 	ruff check src tests scripts
