@@ -134,6 +134,39 @@ distills phase order, activation phase, condition/distance references,
 specifically so Research's consumption code has no strategy-specific
 branches.
 
+**D6a: `rules[]` is a minimal discriminated union, formalized before
+implementation, with exactly four kinds — one per managed-policy
+concern `managed.py` implements (phase transition, take action, stop
+action, runtime exit).** Every variant carries only opaque references
+and generic fields; none ever carries `component_id` or a raw strategy
+parameter. Common to every variant: `rule_id` (opaque), `activation_phase`
+(the phase in which this rule is evaluated), `confirm_bars` (integer,
+applied Research-side per D4), and zero or more `condition_id`/
+`distance_id` references (opaque, per D2/D3). The four `kind` values:
+
+- `phase_transition` — advances the trade to a new phase.
+  Adds: `target_phase`, `condition_id` (the gating condition).
+- `take_action` — mutates take-profit state. Adds: `action` from a
+  closed, generic enum (`disable_take_profit` |
+  `enable_take_profit`), `condition_id` and/or `distance_id`
+  (whichever the rule's gate is expressed in).
+- `stop_action` — mutates stop state. Adds: `action` from a closed,
+  generic enum (`move_to_breakeven` | `lock_profit`), `distance_id`
+  (the stop's new distance).
+- `runtime_exit` — signals an exit independent of phase/stop/take
+  state. Adds: `exit_class` from a closed, generic enum
+  (`runtime_protective` | `runtime_take` | `runtime_close`), matching
+  the class names Research's own arbitration table
+  (`unified_exits.py`) already uses, `condition_id` (the trigger).
+
+Research SHALL dispatch on `kind` (and, for `take_action`/
+`stop_action`/`runtime_exit`, on the closed `action`/`exit_class`
+enum) alone — never on `rule_id`, `condition_id`, or `distance_id`
+content, and never by inspecting `raw_spec`. This is what makes
+Research's consumption code strategy-agnostic: adding a new managed
+component on the Strategy Engine side never requires a Research Service
+change as long as the new component maps to one of these four kinds.
+
 ## Risks / Trade-offs
 
 - [Risk] New vectorized SE-side evaluator diverges subtly from

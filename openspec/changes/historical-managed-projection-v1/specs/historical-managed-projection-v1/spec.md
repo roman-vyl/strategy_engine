@@ -16,11 +16,17 @@ projection SHALL contain: pre-confirm boolean conditions for both trade
 sides (`conditions`), fully strategy-parameterized derived distances
 with any multiplier or threshold already applied
 (`distances`), and an ordered, distilled description of phase
-transitions and generic take/stop/exit actions (`rules`). Every
-identifier in the projection (`condition_id`, `distance_id`, `rule_id`)
-SHALL be opaque to any consumer — a consumer SHALL NOT need to know the
-originating `component_id` or strategy parameter to use the projection
-correctly.
+transitions and generic take/stop/exit actions (`rules`). Each entry in
+`rules` SHALL be one of exactly four discriminated kinds —
+`phase_transition`, `take_action`, `stop_action`, `runtime_exit` — each
+carrying only opaque `condition_id`/`distance_id` references, a closed
+generic action/exit-class enum (never a raw `component_id` or strategy
+parameter), and `confirm_bars`. Every identifier in the projection
+(`condition_id`, `distance_id`, `rule_id`) SHALL be opaque to any
+consumer — a consumer SHALL NOT need to know the originating
+`component_id` or strategy parameter to use the projection correctly,
+and SHALL be able to dispatch on `rules[].kind` (and, where present,
+the closed `action`/`exit_class` enum) alone.
 
 #### Scenario: Managed candidate receives one projection
 
@@ -32,6 +38,14 @@ correctly.
 - **AND** the number of full-range feature evaluations performed for
   that candidate SHALL NOT depend on how many trades the candidate
   eventually produces.
+
+#### Scenario: Research dispatches on rule kind alone
+
+- **WHEN** Research Service consumes an entry in `rules`
+- **THEN** it SHALL determine what to do using only that entry's
+  `kind` and, where present, its closed `action`/`exit_class` enum
+- **AND** it SHALL NOT read a `component_id` or any raw strategy
+  parameter to make that determination.
 
 #### Scenario: Non-managed candidate is unaffected
 
@@ -74,24 +88,31 @@ this window itself, generically, using the projection's pre-confirm
 - **AND** a candidate-wide precomputed confirmed-boolean series SHALL
   NOT be used as the sole source of confirmation.
 
-### Requirement: Semantic parity with single-trade managed replay
+### Requirement: Managed-policy parity with single-trade managed replay
 
-For any historical trade, evaluating that trade's exits via the
-candidate-wide `HistoricalManagedProjection` plus Research Service's
-generic managed lifecycle primitives SHALL produce results identical to
-evaluating the same trade via `POST
-/v1/strategy-evaluations/managed-replay`: phase transition timestamps,
-active take-profit state timeline, managed stop price timeline,
-runtime-exit trigger bar and rule identity, exit time and price, and
-the resulting trade record.
+For any historical trade, evaluating that trade's managed-policy state
+via the candidate-wide `HistoricalManagedProjection` plus Research
+Service's generic managed lifecycle primitives SHALL produce
+managed-policy outputs identical to evaluating the same trade via
+`POST /v1/strategy-evaluations/managed-replay`: phase transition
+timestamps, active take-profit state timeline, managed stop price
+timeline, and runtime-exit trigger bar and rule identity. This
+requirement covers only the managed-policy layer (the two evaluators'
+outputs/timeline); it does not cover final exit price, the resulting
+trade record, or aggregate candidate metrics — those depend on
+Research Service's exit arbitration and are validated by a separate
+end-to-end Research Service parity check, not by this requirement.
 
 #### Scenario: Parity oracle comparison
 
 - **WHEN** a historical trade is evaluated both via
   `/managed-replay` and via the candidate-wide projection path
 - **THEN** the two evaluations SHALL produce identical phase
-  transitions, stop/take timelines, exit trigger, exit time, and exit
-  price for that trade.
+  transitions, active take-profit timeline, managed stop price
+  timeline, and runtime-exit trigger bar/rule for that trade
+- **AND** this comparison SHALL NOT itself assert final exit price,
+  trade record, or aggregate metrics equality — those are covered by
+  the separate end-to-end Research Service parity check.
 
 ### Requirement: Historical batch execution does not call managed replay per trade
 

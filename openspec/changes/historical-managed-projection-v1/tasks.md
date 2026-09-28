@@ -5,9 +5,13 @@
       `HistoricalExecutionProjection` in
       `strategy_engine/strategies/contracts.py`; `None` unless
       `exit_management.mode == "managed"`.
-- [ ] 1.2 Define the `rules[]` element shape: `rule_id`,
-      `activation_phase`, `target_phase`/generic action enum,
-      `condition_id`/`distance_id` references, `confirm_bars`.
+- [ ] 1.2 Implement the `rules[]` discriminated union per
+      `design.md` D6a: four kinds (`phase_transition`, `take_action`,
+      `stop_action`, `runtime_exit`), each carrying `rule_id`,
+      `activation_phase`, `confirm_bars`, opaque `condition_id`/
+      `distance_id` references, and (for `take_action`/`stop_action`/
+      `runtime_exit`) a closed generic `action`/`exit_class` enum —
+      never a `component_id` or raw strategy parameter.
 
 ## 2. Strategy Engine: candidate-wide managed evaluator
 
@@ -73,11 +77,12 @@
       response instead of calling `/managed-replay` per trade; keep
       the existing per-trade call path available behind a switch for
       comparison.
-- [ ] 5.2 Run full acceptance criterion 1 (semantic parity) end to end
-      through Research Service's arbitration
-      (`execution/unified_exits.py`) for the corpus in 3.1, confirming
-      final trade records and aggregate candidate metrics match the
-      `/managed-replay`-sourced path bar-for-bar and trade-for-trade.
+- [ ] 5.2 Run a separate end-to-end Research Service parity check (not
+      the managed-policy-layer check in 3.2) through Research Service's
+      arbitration (`execution/unified_exits.py`) for the corpus in 3.1,
+      confirming final exit price, trade records, and aggregate
+      candidate metrics match the `/managed-replay`-sourced path
+      trade-for-trade.
 - [ ] 5.3 Instrument and verify acceptance criterion 2
       (computational parity): assert `ValidateStrategySpec`
       calls, feature-plan builds, and indicator-range evaluations per
