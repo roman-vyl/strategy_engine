@@ -243,6 +243,7 @@ def test_batch_variant_outcome_result_exact_key_set() -> None:
         "entry_opportunities",
         "signal_exit_events",
         "warnings",
+        "managed",
     }
 
 

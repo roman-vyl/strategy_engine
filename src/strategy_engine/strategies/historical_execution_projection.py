@@ -42,6 +42,7 @@ from strategy_engine.strategies.contracts import (
     ExecutableEntryOpportunity,
     ExitAttribution,
     HistoricalExecutionProjection,
+    HistoricalManagedProjection,
     InitialProtectionLeg,
     SignalExitCandidate,
     SignalExitEvent,
@@ -250,6 +251,7 @@ def build_historical_execution_projection(
     market_data_hash: str,
     bar_count: int,
     evaluation: EmaPullbackEvaluation,
+    managed: HistoricalManagedProjection | None = None,
 ) -> HistoricalExecutionProjection:
     return HistoricalExecutionProjection(
         strategy_id=strategy_id,
@@ -263,4 +265,5 @@ def build_historical_execution_projection(
         warnings=(
             "managed exit policy is available through /v1/strategy-evaluations/managed-replay",
         ),
+        managed=managed,
     )

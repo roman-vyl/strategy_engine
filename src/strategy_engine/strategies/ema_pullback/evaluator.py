@@ -32,6 +32,9 @@ from strategy_engine.strategies.ema_pullback.evaluation import (
     memoized_stage_consumptions,
     resolve_memoized_stages,
 )
+from strategy_engine.strategies.ema_pullback.historical_managed_projection import (
+    build_historical_managed_projection,
+)
 from strategy_engine.strategies.ema_pullback.potential_entries import potential_entries_to_wire
 from strategy_engine.strategies.historical_execution_projection import (
     build_historical_execution_projection,
@@ -183,6 +186,8 @@ class EmaPullbackRangeEvaluator:
         builder produces the v2 shape from it."""
 
         frame, evaluation = self._evaluate_frame_native(request)
+        planned = self._feature_planner.execute(request.strategy)
+        managed = build_historical_managed_projection(request.strategy.raw_spec, frame, planned)
         return build_historical_execution_projection(
             strategy_id=request.strategy.strategy_id,
             config_hash=strategy_config_hash(request.strategy),
@@ -191,6 +196,7 @@ class EmaPullbackRangeEvaluator:
             market_data_hash=frame.market_data_hash,
             bar_count=len(frame.time_ms),
             evaluation=evaluation,
+            managed=managed,
         )
 
     def evaluate_diagnostics(self, request: StrategyRangeRequest) -> StrategyDiagnosticEvaluation:

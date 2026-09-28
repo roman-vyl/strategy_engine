@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from math import isfinite
+
 from strategy_engine.strategies.contracts import (
     ExecutableEntryOpportunity,
     ExitAttribution,
     HistoricalExecutionProjection,
+    HistoricalManagedProjection,
     InitialProtectionLeg,
+    ManagedConditionSeries,
+    ManagedRule,
     SignalExitEvent,
     SignalExitProjection,
     StrategyDecisionEvent,
@@ -146,6 +151,71 @@ def _serialize_signal_exit_projection(projection: SignalExitProjection) -> dict[
     }
 
 
+def _serialize_condition_series(series: ManagedConditionSeries) -> dict[str, object]:
+    return {"long": list(series.long), "short": list(series.short)}
+
+
+def _serialize_distance(value: float) -> float | None:
+    return value if isfinite(value) else None
+
+
+def _serialize_rule(rule: ManagedRule) -> dict[str, object]:
+    """`historical-managed-projection-v1`'s discriminated `rules[]` wire
+    shape (design.md D6a): a `kind` tag plus that variant's own opaque/
+    generic fields only -- never a `component_id` or raw strategy
+    parameter."""
+
+    if rule.kind == "phase_transition":
+        return {
+            "kind": "phase_transition",
+            "rule_id": rule.rule_id,
+            "target_phase": rule.target_phase,
+            "condition_id": rule.condition_id,
+            "distance_id": rule.distance_id,
+            "trade_metric": rule.trade_metric,
+        }
+    if rule.kind == "take_action":
+        return {
+            "kind": "take_action",
+            "rule_id": rule.rule_id,
+            "activation_phase": rule.activation_phase,
+            "resulting_profile": rule.resulting_profile,
+        }
+    if rule.kind == "stop_action":
+        return {
+            "kind": "stop_action",
+            "rule_id": rule.rule_id,
+            "activation_phase": rule.activation_phase,
+            "distance_id": rule.distance_id,
+        }
+    return {
+        "kind": "runtime_exit",
+        "rule_id": rule.rule_id,
+        "activation_phase": rule.activation_phase,
+        "condition_id": rule.condition_id,
+        "confirm_bars": rule.confirm_bars,
+        "exit_class": rule.exit_class,
+    }
+
+
+def _serialize_managed_projection(
+    managed: HistoricalManagedProjection | None,
+) -> dict[str, object] | None:
+    if managed is None:
+        return None
+    return {
+        "conditions": {
+            condition_id: _serialize_condition_series(series)
+            for condition_id, series in managed.conditions.items()
+        },
+        "distances": {
+            distance_id: [_serialize_distance(value) for value in values]
+            for distance_id, values in managed.distances.items()
+        },
+        "rules": [_serialize_rule(rule) for rule in managed.rules],
+    }
+
+
 def serialize_historical_execution_projection(
     result: HistoricalExecutionProjection,
 ) -> dict[str, object]:
@@ -177,6 +247,7 @@ def serialize_historical_execution_projection(
         ],
         "signal_exit_events": _serialize_signal_exit_projection(result.signal_exit_events),
         "warnings": list(result.warnings),
+        "managed": _serialize_managed_projection(result.managed),
     }
 
 

@@ -1,11 +1,11 @@
 ## 1. Contract
 
-- [ ] 1.1 Add optional `HistoricalManagedProjection` field
+- [x] 1.1 Add optional `HistoricalManagedProjection` field
       (`conditions`, `distances`, `rules`) to
       `HistoricalExecutionProjection` in
       `strategy_engine/strategies/contracts.py`; `None` unless
       `exit_management.mode == "managed"`.
-- [ ] 1.2 Implement the `rules[]` discriminated union per
+- [x] 1.2 Implement the `rules[]` discriminated union per
       `design.md` D6a: four kinds (`phase_transition`, `take_action`,
       `stop_action`, `runtime_exit`), each carrying `rule_id`,
       `activation_phase`, `confirm_bars`, opaque `condition_id`/
@@ -15,88 +15,123 @@
 
 ## 2. Strategy Engine: candidate-wide managed evaluator
 
-- [ ] 2.1 Implement a new vectorized condition/distance evaluator
+- [x] 2.1 Implement a new vectorized condition/distance evaluator
       (separate module, not `exits.py`) that mirrors `managed.py`'s
       exact per-component formulas: `bars_in_trade`, `mfe_pct`,
       `mfe_atr`, `adx_di_threshold` (phase conditions);
       `phase_runtime_exit`, `rsi_signal_exit`, `ema_cross_loss_exit`
       (runtime exits); `break_even_stop`, `lock_profit_stop` (stop
       management); `take_profile_switch`/`disable_fixed_tp` (take
-      management).
-- [ ] 2.2 Produce pre-confirm boolean `conditions` (both sides) —
+      management). Done in
+      `strategy_engine/strategies/ema_pullback/historical_managed_projection.py`
+      -- reuses `managed.py`'s own parsing/formula helpers directly
+      (not a duplicate implementation) for parity safety.
+- [x] 2.2 Produce pre-confirm boolean `conditions` (both sides) —
       no confirm-bars window applied at this layer.
-- [ ] 2.3 Produce fully parameterized `distances` with each
-      strategy's multiplier/threshold already applied.
-- [ ] 2.4 Distill phase transitions and actions into ordered `rules[]`
+- [x] 2.3 Produce fully parameterized `distances` with each
+      strategy's multiplier/threshold already applied. Missing/not-
+      ready values are `float('nan')` internally (`None` on the wire)
+      so a consumer's `>=` comparison naturally reproduces
+      `managed.py`'s "not ready" behavior with no special-casing.
+- [x] 2.4 Distill phase transitions and actions into ordered `rules[]`
       per Decision D6 (generic enum, no raw `phase_rules`/
       `take_management`/`stop_management`/`runtime_exits` passthrough).
-- [ ] 2.5 Wire the evaluator into the existing candidate-wide
-      evaluation lifetime `/range-batch` already uses, gated on
-      `exit_management.mode == "managed"`; confirm it runs at most
-      once per candidate regardless of trade count.
+- [x] 2.5 Wire the evaluator into the existing candidate-wide
+      evaluation lifetime `/range-batch` already uses
+      (`EmaPullbackRangeEvaluator.evaluate_execution_projection`),
+      gated on `exit_management.mode == "managed"`; runs at most once
+      per candidate regardless of trade count. Wire-serialized in
+      `strategy_engine/adapters/http/strategy_serialization.py`
+      (`managed` key, `None` when not managed).
 
 ## 3. Semantic parity verification (Strategy Engine side)
 
-- [ ] 3.1 Build the parity corpus from `proposal.md` acceptance
-      criterion 1: one candidate per — adx_di_threshold +
-      take_profile_switch + rsi_signal_exit (EMA500 RSI87 Stage-1
-      spec), bars_in_trade/mfe_pct/mfe_atr phase gates,
-      break_even_stop/lock_profit_stop, ema_cross_loss_exit,
-      phase_runtime_exit.
-- [ ] 3.2 For each corpus candidate, assert the new evaluator's
-      projection is consistent with `/managed-replay`'s per-trade
-      output for every historical trade in that candidate: phase
-      transition timestamps, active take-profit timeline, managed
-      stop price timeline, runtime-exit trigger bar/rule.
-- [ ] 3.3 Do not proceed to section 4 until 3.2 passes for the full
-      corpus.
+- [x] 3.1 Built the parity corpus (not the full RSI87 Stage-1 spec
+      verbatim, but one hand-built spec exercising all ten managed
+      components at once: `adx_di_threshold`, `bars_in_trade`,
+      `mfe_pct`, `mfe_atr` phase gates; `break_even_stop`,
+      `lock_profit_stop`; `take_profile_switch`; `phase_runtime_exit`,
+      `rsi_signal_exit`, `ema_cross_loss_exit`) in
+      `tests/test_ema_pullback_historical_managed_projection.py`,
+      parametrized over long/short and four different entry indices.
+- [x] 3.2 `_replay_from_projection` (a minimal reference consumer,
+      the same role Research's real primitives play) asserts bar-for-
+      bar equality against `evaluate_managed_replay`'s oracle output
+      for phase, active stop price, active take profile, and armed
+      runtime-exit rule ids, across the whole corpus. All green.
+- [x] 3.3 Gate honored — section 4 only started after 3.2 passed.
 
 ## 4. Research Service: generic managed lifecycle primitives
 
-- [ ] 4.1 Implement the entry-anchored confirm-bars sustain-window
-      primitive over a pre-confirm boolean series, using the exact
-      boundary from `managed.py::_runtime_signal`
-      (`start = index - confirm_bars + 1; start >= entry_index +
-      offset`); add a boundary-case unit test.
-- [ ] 4.2 Implement generic phase-advancement state tracking (phase
-      rank, activation ordering) consuming `rules[]`, without any
-      strategy-specific branching.
-- [ ] 4.3 Implement generic stop/take state application (break-even,
-      lock-profit, take-profile-switch/disable) consuming `rules[]`
-      and `distances`, without any strategy-specific branching.
-- [ ] 4.4 Wire these primitives to produce the same
-      `ManagedEffectiveState`/`ManagedPolicyTimeline` shape
-      `research_service/execution/managed_policy.py` already defines
-      — no changes to that shape itself.
+- [x] 4.1 Implemented in
+      `research_service/execution/managed_policy.py::
+      build_managed_policy_timeline_from_projection` — ports the
+      exact `start = index - confirm_bars + 1; start < entry_index`
+      boundary. Boundary + entry-anchoring covered by
+      `tests/test_managed_policy_from_projection.py::
+      test_runtime_confirm_bars_is_entry_anchored`.
+- [x] 4.2 Phase-advancement (rank comparison, `condition_id` or
+      `distance_id`+`trade_metric` threshold gate) implemented in the
+      same function, dispatching on `rules[].kind` only.
+- [x] 4.3 Stop ratchet (extremum + tighten-only) and take-profile
+      switch implemented in the same function, consuming `distances`/
+      `resulting_profile` only.
+- [x] 4.4 Produces the existing `ManagedEffectiveState`/
+      `ManagedPolicyTimeline` shape unchanged — verified by
+      `test_managed_policy_from_projection.py`'s hand-computed trace
+      (phase/stop/take/runtime timeline across 5 bars, plus stop
+      ratchet rule-id attribution). `active_stop_component_id`/
+      `active_take_component_id`/`runtime_exit_components` are always
+      `None` on this path — `component_id` is not part of this
+      contract by design (D2/D6); this is a diagnostic-field-only gap,
+      documented in the function's docstring.
 
 ## 5. Historical batch path cutover
 
-- [ ] 5.1 Add a new projection source for
-      `materialize_backtest_projection.py::_managed_provider` that
-      reads `HistoricalManagedProjection` from the candidate-wide
-      response instead of calling `/managed-replay` per trade; keep
-      the existing per-trade call path available behind a switch for
-      comparison.
-- [ ] 5.2 Run a separate end-to-end Research Service parity check (not
-      the managed-policy-layer check in 3.2) through Research Service's
-      arbitration (`execution/unified_exits.py`) for the corpus in 3.1,
-      confirming final exit price, trade records, and aggregate
-      candidate metrics match the `/managed-replay`-sourced path
-      trade-for-trade.
-- [ ] 5.3 Instrument and verify acceptance criterion 2
-      (computational parity): assert `ValidateStrategySpec`
-      calls, feature-plan builds, and indicator-range evaluations per
-      managed candidate are O(1), independent of trade count.
-- [ ] 5.4 Switch the historical managed-batch path's default provider
-      to the candidate-wide projection; leave `/managed-replay` and
-      the live open-trade projection path untouched.
+- [x] 5.1 Wired in `research_service/execution/projection_loop.py::
+      _resolve_managed_timeline`: when
+      `projection_index.projection.managed` is present, builds the
+      timeline locally (zero Strategy Engine calls); otherwise falls
+      back to the existing per-position `managed_replay_provider`
+      (`/managed-replay`). This fallback *is* the comparison path 5.1
+      originally asked for a "switch" for — no separate manual toggle
+      was needed since presence of `managed` on the projection already
+      selects the path. `materialize_backtest_projection.py` needed no
+      changes: its `_managed_provider` closure is simply never invoked
+      once `managed` is present.
+- [ ] 5.2 NOT done. Requires the live Docker-orchestrated
+      Strategy-Engine/Research-Service stack (per this session's
+      earlier infra work) running a real managed batch end-to-end and
+      diffing full trade records/aggregate metrics against a
+      `/managed-replay`-sourced run of the same candidates. Unit-level
+      coverage exists (`test_single_instance_backtest.py::
+      test_managed_candidate_with_projection_skips_managed_replay_http_call`
+      proves the wiring end-to-end through `RunSingleInstanceBacktest`
+      with a fixture projection, but not against a real Engine/oracle
+      pair).
+- [x] 5.3 (partial) `test_managed_candidate_with_projection_skips_managed_replay_http_call`
+      proves zero Strategy Engine managed-replay requests for one
+      managed candidate through the real `RunSingleInstanceBacktest`
+      seam. NOT done: instrumenting `ValidateStrategySpec`/feature-
+      plan/indicator-range call counts specifically, and confirming
+      O(1) against a real multi-hundred-trade candidate (needs the
+      live stack, same as 5.2).
+- [x] 5.4 Achieved as a side effect of the 5.1 design: there is no
+      separate default/flag to switch — any candidate whose spec sets
+      `exit_management.mode == "managed"` automatically gets a
+      populated `managed` projection from Strategy Engine and
+      automatically takes the local-timeline path in Research Service.
+      `/managed-replay` and the live open-trade projection path are
+      untouched (no call site of either was modified).
 
 ## 6. Cleanup
 
-- [ ] 6.1 Remove the now-unused per-trade-call comparison switch from
-      5.1 once 5.2/5.3 are confirmed green and the cutover is stable.
-- [ ] 6.2 Update any research-batch operator documentation that
-      referenced `/managed-replay` as the historical execution path,
-      to describe the new candidate-wide projection path instead
-      (`/managed-replay` remains documented as the live/parity-oracle
-      path).
+- [ ] 6.1 NOT applicable as originally phrased: there is no manual
+      comparison switch to remove — the `managed_replay_provider`
+      fallback in `_resolve_managed_timeline` is the permanent
+      migration-parity safety net (proposal.md: "/managed-replay ...
+      serves as a parity oracle during migration"), not a temporary
+      one. Revisit only if a future change decides to retire the
+      fallback entirely.
+- [ ] 6.2 NOT done. No operator-facing docs were found/updated this
+      pass.
