@@ -158,6 +158,7 @@ def test_range_response_exact_key_set() -> None:
         "entry_opportunities",
         "signal_exit_events",
         "warnings",
+        "managed",
     }
 
 

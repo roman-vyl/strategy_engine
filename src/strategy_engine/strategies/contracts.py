@@ -223,6 +223,103 @@ class SignalExitProjection:
 
 
 @dataclass(frozen=True, slots=True)
+class ManagedConditionSeries:
+    """Pre-confirm boolean condition, both sides, one entry per bar in
+    the candidate's requested range. No confirm-bars window applied --
+    that is entry-anchored and applied by the consumer
+    (`historical-managed-projection-v1`)."""
+
+    long: tuple[bool, ...]
+    short: tuple[bool, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedPhaseTransitionRule:
+    """Advances the trade to `target_phase`. Exactly one of
+    `condition_id` (a market-native boolean, e.g. an ADX/DI gate) or
+    (`distance_id`, `trade_metric`) (a threshold the consumer compares
+    against a trade-state quantity it already owns) is set -- never
+    both, never neither. `trade_metric` names which consumer-local,
+    strategy-agnostic quantity the threshold gates, using `>=`."""
+
+    kind: Literal["phase_transition"]
+    rule_id: str
+    target_phase: str
+    condition_id: str | None
+    distance_id: str | None
+    trade_metric: Literal["bars_since_entry", "mfe_pct", "mfe_distance"] | None
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedTakeActionRule:
+    """Mutates take-profit state once `activation_phase` is reached.
+    `resulting_profile` is the fully-resolved take-profile token this
+    rule sets (already resolved Strategy Engine-side from whatever
+    raw action the spec used) -- the consumer applies it verbatim and
+    never interprets it."""
+
+    kind: Literal["take_action"]
+    rule_id: str
+    activation_phase: str
+    resulting_profile: str
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedStopActionRule:
+    """Mutates stop state once `activation_phase` is reached.
+    `distance_id` is the per-bar offset from entry price; the consumer
+    (who owns entry price and side) computes the candidate stop price
+    itself and ratchets it exactly as it already does for every other
+    stop candidate."""
+
+    kind: Literal["stop_action"]
+    rule_id: str
+    activation_phase: str
+    distance_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedRuntimeExitRule:
+    """Signals an exit once `activation_phase` is reached and
+    `condition_id`'s pre-confirm boolean has held true for
+    `confirm_bars` consecutive bars ending at the current bar, anchored
+    no earlier than the trade's entry. `exit_class` is Strategy
+    Engine's own resolution of the rule's routing tag into the closed
+    vocabulary the consumer's exit arbitration already uses."""
+
+    kind: Literal["runtime_exit"]
+    rule_id: str
+    activation_phase: str
+    condition_id: str
+    confirm_bars: int
+    exit_class: Literal["runtime_protective", "runtime_take", "runtime_close"]
+
+
+ManagedRule = (
+    ManagedPhaseTransitionRule
+    | ManagedTakeActionRule
+    | ManagedStopActionRule
+    | ManagedRuntimeExitRule
+)
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalManagedProjection:
+    """Candidate-wide managed-policy projection
+    (`historical-managed-projection-v1`): computed at most once per
+    candidate whenever `exit_management.mode == "managed"`, consumed by
+    Research Service for every one of the candidate's historical
+    trades instead of one `/managed-replay` call per opened trade.
+    Every identifier here is opaque to the consumer -- it dispatches on
+    `rules[].kind` (and each variant's own closed enum) alone, never on
+    `component_id` or a raw strategy parameter."""
+
+    conditions: dict[str, ManagedConditionSeries]
+    distances: dict[str, tuple[float, ...]]
+    rules: tuple[ManagedRule, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class HistoricalExecutionProjection:
     """The target mandatory execution contract
     (`compact-strategy-evaluation-boundary-v1`), superseding
@@ -239,6 +336,7 @@ class HistoricalExecutionProjection:
     entry_opportunities: tuple[ExecutableEntryOpportunity, ...]
     signal_exit_events: SignalExitProjection
     warnings: tuple[str, ...]
+    managed: HistoricalManagedProjection | None = None
 
 
 @dataclass(frozen=True, slots=True)
