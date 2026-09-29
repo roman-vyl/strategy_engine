@@ -11,7 +11,12 @@ a separate Research Service to execute fills without importing strategy
 internals, and sufficient to reproduce the exit-profile-locking and
 attribution semantics of the reference (old-monolith) execution model.
 The range contract SHALL include strategy and market identity, aligned
-range, bar count, and market-data hash.
+range, bar count, and market-data hash. Strategy identity here means
+`strategy_id` and the provenance `config_hash`
+(`strategy-evaluation-canonical-input-v1`) only — it does NOT include
+`strategy_version` or a caller-supplied `instance_id`; retiring those
+two fields does not narrow this requirement's "strategy identity"
+clause below its post-cutover meaning.
 
 The `HistoricalExecutionProjection` wire envelope SHALL carry
 `contract_version: "strategy_evaluation_execution.v2"` — the next
@@ -166,6 +171,14 @@ next-bar effective timing.
   exit profile and attributed initial protection), and per-profile
   signal-exit events required for external execution
 - **AND** managed decisions SHALL state when they become effective.
+
+#### Scenario: Strategy identity after canonicalization
+
+- **WHEN** a range evaluation response is inspected after this change
+- **THEN** its strategy identity fields are exactly `strategy_id` and
+  `config_hash`
+- **AND** the absence of `strategy_version`/`instance_id` is not a
+  contract violation.
 
 #### Scenario: A bar with no executable entry opportunity and no signal-exit event carries no data
 
