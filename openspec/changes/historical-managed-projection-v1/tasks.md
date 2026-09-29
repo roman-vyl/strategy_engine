@@ -85,6 +85,37 @@
       `None` on this path — `component_id` is not part of this
       contract by design (D2/D6); this is a diagnostic-field-only gap,
       documented in the function's docstring.
+- [x] 4.5 **Amendment (design.md D7), found live during 5.2/5.3
+      validation**: 4.1-4.4's `build_managed_policy_timeline_from_projection`
+      eagerly materialized every bar from entry through the *end of
+      the requested market range*, not through the trade's own exit —
+      reintroducing an O(trades x remaining-range) cost inside
+      Research Service (measured: 3.32s per trade scanning ~578k
+      bars). Demoted to parity/oracle status only (still exercised via
+      `allow_legacy_managed_replay_fallback=True`, never production
+      default). Replaced as the production hot path by
+      `initialize_managed_trade_state`/`advance_managed_trade_state`
+      (`managed_policy.py`), called once per bar for exactly as long
+      as a position stays open, wired into
+      `execution/projection_loop.py`'s default path. Confirm-bars
+      becomes a per-rule consecutive-true counter (entry-anchored by
+      construction: it cannot count bars before the state was
+      created). Acceptance, measured:
+      - 1 trade @ bar 100 of 578k bars, closing after 40 bars: 40
+        `advance_managed_trade_state` calls, 0.014s (was 3.32s/
+        577,900-bar scan via the eager builder — ~240x on this one
+        trade alone, and now bounded by trade duration, not dataset
+        size). `tests/test_managed_policy_incremental_parity.py::
+        test_advance_call_count_is_bounded_by_actual_open_bars_not_remaining_range`.
+      - Bar-for-bar parity against the eager builder (now oracle-only)
+        proven across the same corpus as 4.1-4.4: all four rule kinds,
+        long/short, multiple entry indices, the confirm_bars
+        boundary — `test_managed_policy_incremental_parity.py::
+        test_incremental_matches_eager_builder_bar_for_bar[*]`,
+        `test_confirm_bars_boundary_matches_incrementally_too`.
+      - `state_for_time()` (O(states) per call) is no longer on the
+        production hot path — only reachable via the oracle opt-in,
+        where its cost no longer matters.
 
 ## 5. Historical batch path cutover
 
@@ -177,6 +208,21 @@
       `signal` attribution validation), not this one. Zero behavioral
       consequence, confirmed live across 90 runtime-exit trades in
       `B_long`, not just by static trace.
+
+      **Re-validated after the 4.5/D7 incremental-consumer fix**
+      (`_resolve_managed_timeline` above is now `_open_managed_state`;
+      NEW routes through `advance_managed_trade_state`, not the eager
+      builder). Reran both windows OLD-vs-NEW against the same live
+      Engine/MDS: `A_short` 7/7 trades matched again, identical to the
+      first run. `B_long`'s first rerun attempt hit a transient `502`
+      from the local Engine instance partway through OLD's 196th
+      `/managed-replay` call (Engine itself was healthy again
+      immediately after — not a code defect in anything this change
+      touched) — rerun cleanly on retry: **196/196 trades matched on
+      every execution-semantic field**, same disclosed diagnostic-only
+      differences as before (`exit_reason`/`exit_component_id`/
+      `exit_kind`), zero `exit_candidate_type` mismatches. See 5.3 for
+      the timing delta the incremental fix produced.
 - [x] 5.3 DONE, live. Table (NEW path, real HTTP call counts from the
       Strategy Engine access log, not a fixture):
 
@@ -194,12 +240,27 @@
       real code path. For contrast, the OLD oracle's real call counts
       on the same two windows: `managed-replay` = 7 and 196
       respectively (exactly one per opened trade, confirming the
-      eliminated pathology is real, not theoretical) — and wall time:
-      `A_short` OLD 4.9s vs NEW 1.4s; `B_long` OLD 2012.5s (~33.5 min)
-      vs NEW 199.0s (~3.3 min), a ~10x speedup already visible on a
-      *single* 196-trade candidate over 2.7 years — well short of
-      8352-candidate-batch scale, but the shape of the win is now
-      measured live, not projected.
+      eliminated pathology is real, not theoretical).
+
+      Wall time, before vs after the 4.5/D7 incremental-consumer fix
+      (same OLD oracle both times, unaffected by that fix):
+
+      | window  | OLD        | NEW (eager, pre-D7) | NEW (incremental, post-D7) |
+      |---------|------------|----------------------|------------------------------|
+      | A_short | 4.9s       | 1.4s (~3.5x)         | 1.0s (~4.9x)                 |
+      | B_long  | 2012.5s    | 199.0s (~10.1x)      | 14.5s (~139x)                |
+
+      The eager NEW path was already O(1) Strategy-Engine-calls per
+      candidate (the SE→RS boundary fix was correct from the start),
+      but was still O(trades x remaining-range) *inside* Research
+      Service, which is why the pre-D7 win was "only" ~10x instead of
+      scaling with trade count. Post-D7, `B_long`'s 196-trade NEW run
+      is ~13.7x faster again on the *same* candidate/window — the win
+      now scales with how much cheaper the eliminated pathology's
+      replacement is, not saturating around the RS-side eager-build
+      cost. 8352-candidate-batch-scale timing is still not measured
+      (that requires the 138-candidate run next, and beyond that the
+      full historical batch scale this change targets).
 - [x] 5.4 Achieved as a side effect of the 5.1 design: there is no
       separate default/flag to switch — any candidate whose spec sets
       `exit_management.mode == "managed"` automatically gets a

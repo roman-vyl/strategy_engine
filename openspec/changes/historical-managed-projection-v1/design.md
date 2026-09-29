@@ -167,6 +167,59 @@ Research's consumption code strategy-agnostic: adding a new managed
 component on the Strategy Engine side never requires a Research Service
 change as long as the new component maps to one of these four kinds.
 
+**D7 (amendment, found live during 5.2/5.3 validation): historical
+projection consumption SHALL be incremental over the actual open-trade
+lifetime.** Research Service's first implementation of the generic
+managed lifecycle consumer
+(`managed_policy.py::build_managed_policy_timeline_from_projection`)
+eagerly materialized a `ManagedEffectiveState` for every bar from a
+trade's entry through the *end of the entire requested market range* —
+not through the trade's own exit, which is unknowable at entry time,
+but through the candidate's full remaining history. Isolated
+measurement: one trade entering at bar 100 of a 578,000-bar (~5.5
+year, 5m) range cost 3.32s to materialize; a candidate with dozens of
+trades scattered across that range multiplied this by trade count
+against the *remaining* range each time — the SE→RS boundary fix (D1-
+D6a) was correct and is unaffected, but this reintroduced the same
+trade-count-dependent cost class **inside Research Service**, just
+with a far smaller constant factor (pure local arithmetic instead of
+HTTP + indicator re-evaluation), which is why it was still a genuine
+~10x win in 5.2's live measurement without yet being trade-count-
+*independent*.
+
+Fix: `execution/managed_policy.py` gained an incremental primitive
+pair — `initialize_managed_trade_state(position) -> ManagedTradeState`
+and `advance_managed_trade_state(state, projection, rule_set, ...) ->
+(ManagedTradeState, ManagedEffectiveState | None)` — advancing exactly
+one bar per call. `execution/projection_loop.py`'s production
+(`allow_legacy_managed_replay_fallback=False`) path now calls
+`advance_managed_trade_state` once per bar for exactly as long as the
+position stays open, computed as part of the loop's own chronological
+bar iteration, and discards the state the bar the position closes.
+Cost becomes O(Σ actual open-trade bars), never O(trades x remaining
+range). Confirm-bars becomes a per-rule consecutive-true counter reset
+on a false bar and incremented on a true bar (mathematically identical
+to the eager builder's entry-anchored sliding window — a run-length
+count and a from-scratch window-all-true check agree for every bar by
+construction — but computed in O(1) amortized instead of re-scanning
+the window every bar). `build_managed_policy_timeline_from_projection`
+and `ManagedPolicyTimeline.state_for_time` are **not removed** — they
+remain the parity/oracle representation the incremental path is
+proven against (bar-for-bar, on the same corpus, in
+`test_managed_policy_incremental_parity.py`), and remain reachable
+only via the existing explicit `allow_legacy_managed_replay_fallback`
+opt-in (5.2's OLD-vs-NEW oracle mode) — never the production
+historical hot path. `state_for_time`'s own O(states)-per-call cost
+was never fixed and does not need to be: it only runs on the
+oracle-only path now.
+
+Normative language: Historical Research execution SHALL NOT eagerly
+materialize managed state from a trade's entry through the remainder
+of the requested market range. Candidate execution cost SHALL NOT
+scale with trades x remaining range. `ManagedPolicyTimeline` MAY
+remain as a parity/oracle representation but SHALL NOT be used as the
+production historical hot path.
+
 ## Risks / Trade-offs
 
 - [Risk] New vectorized SE-side evaluator diverges subtly from
