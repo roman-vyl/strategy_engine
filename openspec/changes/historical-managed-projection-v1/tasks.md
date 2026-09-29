@@ -258,9 +258,40 @@
       is ~13.7x faster again on the *same* candidate/window — the win
       now scales with how much cheaper the eliminated pathology's
       replacement is, not saturating around the RS-side eager-build
-      cost. 8352-candidate-batch-scale timing is still not measured
-      (that requires the 138-candidate run next, and beyond that the
-      full historical batch scale this change targets).
+      cost.
+
+      **138-candidate RSI87 Stage-1 acceptance workload, live, post-D7
+      (this is the real research batch that originally surfaced this
+      entire investigation — estimated at ~17 days on the old
+      per-trade `/managed-replay` path, never completed).** Ran the
+      exact previously-approved grid (Primary 96 + Control A 18 +
+      Control B 24 = 138, `full_available` BTCUSDT.P 5m, ADX/DI→proven,
+      break-even stop, RSI 87/13 runtime exit, confirm_bars=1) through
+      `RunBatchExperiment` + `MaterializeBacktestProjectionOutcome`
+      with `allow_legacy_managed_replay_fallback=False` (default,
+      production path, no oracle override) against the same local
+      Engine instance and real market-data-service:
+
+      - **452.7s (~7.5 minutes) for all 138 candidates**, one shared
+        `/range-batch` call, **zero** `/managed-replay` calls across
+        the entire batch.
+      - 78,207 total realised trades across the 138 candidates (340 to
+        1,008 trades per candidate) — the exact trade-count scale this
+        change exists to decouple Engine cost from.
+      - `BatchExperimentResult`: `status=completed`,
+        `completed_count=138`, `failed_count=0`.
+      - All three required operational assertions PASS: (A)
+        `managed_replay_calls == 0`; (B) no fail-closed
+        `UpstreamServiceError` propagated; (C) 138/138 candidates
+        completed, 0 failures to account for.
+      - Request materialized and persisted to
+        `BBB_data/research/runs/lab_ema500_managed_rsi87_stage1_request.json`
+        *before* execution (138 unique candidate ids re-validated at
+        load time) — reproducible even if interrupted, unlike the
+        original attempt which left zero artifacts when killed.
+        Results persisted at
+        `BBB_data/research/runs/batches/lab_ema500_managed_rsi87_stage1/`
+        (`request.json`, `summary.json`, `manifest.json`).
 - [x] 5.4 Achieved as a side effect of the 5.1 design: there is no
       separate default/flag to switch — any candidate whose spec sets
       `exit_management.mode == "managed"` automatically gets a
