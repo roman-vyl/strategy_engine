@@ -126,23 +126,80 @@
       arbitration winner, fill price/timing, or any required persisted
       field — a disclosed, intentional gap for a future pass, not a
       5.2 blocker.
-- [ ] 5.2 NOT done. Requires the live Docker-orchestrated
-      Strategy-Engine/Research-Service stack (per this session's
-      earlier infra work) running a real managed batch end-to-end and
-      diffing full trade records/aggregate metrics against a
-      `/managed-replay`-sourced run of the same candidates. Unit-level
-      coverage exists (`test_single_instance_backtest.py::
-      test_managed_candidate_with_projection_skips_managed_replay_http_call`
-      proves the wiring end-to-end through `RunSingleInstanceBacktest`
-      with a fixture projection, but not against a real Engine/oracle
-      pair).
-- [x] 5.3 (partial) `test_managed_candidate_with_projection_skips_managed_replay_http_call`
-      proves zero Strategy Engine managed-replay requests for one
-      managed candidate through the real `RunSingleInstanceBacktest`
-      seam. NOT done: instrumenting `ValidateStrategySpec`/feature-
-      plan/indicator-range call counts specifically, and confirming
-      O(1) against a real multi-hundred-trade candidate (needs the
-      live stack, same as 5.2).
+- [x] 5.2 DONE, live. Ran a real EMA500-anchor-stack managed candidate
+      (ADX(14)≥25+DI-aligned→proven→disable TP; break_even_stop at
+      proven; RSI(14) 87/13 runtime exit, confirm_bars=1 — the same
+      shape as the RSI87 Stage-1 spec that triggered this whole
+      investigation) against a locally-run instance of this branch's
+      Strategy Engine (commit `e95a252`) and the real market-data-
+      service, over two windows: `A_short` (2025-07-01..2025-09-01, 7
+      trades) and `B_long` (2023-01-01..2025-09-01, 196 trades). Each
+      window run twice through the real `RunSingleInstanceBacktest`
+      seam — OLD (`allow_legacy_managed_replay_fallback=True`, forced
+      oracle override, see D-note below) vs NEW (default) — and
+      diffed trade-for-trade on every execution-semantic field (side,
+      entry/exit bar_index+time_ms+price, quantity, gross/net pnl,
+      equity_before/after, exit_candidate_type, exit_rule_id, R
+      multiples). **All 203 trades across both windows matched exactly
+      on every semantic field.** Two disclosed diagnostic-only
+      differences confirmed present, exactly as predicted by the 5.1
+      audit, on the trades where they apply: `exit_reason`/
+      `exit_component_id` (stop-exit trades) and, newly found during
+      this run, `exit_kind`'s literal string on *runtime*-exit trades
+      (OLD carries the raw spec string, e.g. `"signal"`; NEW carries
+      the canonical representative of the resolved `exit_class`
+      bucket, e.g. `"market_close"` — see the D-note below for why
+      this is inert). Zero `exit_candidate_type` mismatches anywhere —
+      arbitration outcome is unaffected.
+
+      **D-note (design correction found live):** the initial 5.1
+      `allow_legacy_managed_replay_fallback` implementation only
+      triggered the legacy path when `managed` was *absent* — running
+      it against a real candidate (where `managed` is always present)
+      silently took the NEW path regardless of the flag, defeating the
+      oracle comparison. Fixed in `_resolve_managed_timeline`:
+      `allow_legacy_managed_replay_fallback=True` now *forces* the
+      legacy path even when `managed` is present (a genuine override,
+      not just a missing-projection rescue). Covered by a new test,
+      `test_c2_explicit_opt_in_overrides_a_present_projection_too`.
+      Production default (`False`) behavior is unchanged by this fix.
+
+      **New audit finding — `exit_kind` joins the disclosed-gap list.**
+      Traced the same way as 5.1's component_id audit: the managed
+      runtime-exit `exit_kind` string only ever feeds
+      `_runtime_candidate_type(exit_kind)` (already proven identical-
+      bucket by construction between `historical_managed_projection.py`'s
+      `_runtime_exit_class` and `managed_policy.py`'s own
+      `_runtime_candidate_type`) and the `reason` string/storage —
+      confirmed via the same `grep -rn "\.exit_kind\b"` sweep as the
+      component_id audit: every other reader is the *unrelated*
+      static-exit-policy `exit_kind` (`stop_loss`/`take_profit`/
+      `signal` attribution validation), not this one. Zero behavioral
+      consequence, confirmed live across 90 runtime-exit trades in
+      `B_long`, not just by static trace.
+- [x] 5.3 DONE, live. Table (NEW path, real HTTP call counts from the
+      Strategy Engine access log, not a fixture):
+
+      | window  | trades | `/range` calls | `/managed-replay` calls |
+      |---------|--------|-----------------|--------------------------|
+      | A_short | 7      | 1               | 0                        |
+      | B_long  | 196    | 1               | 0                        |
+
+      `/range` internally runs `ValidateStrategySpec` ->
+      `BuildStrategyFeaturePlan` -> `EvaluateIndicatorRange` exactly
+      once per HTTP call (that invariant is what I7/I8 already
+      established and is unrelated to this change) — one call per
+      window, at a ~28x trade-count spread (7 -> 196), directly proves
+      those three steps run candidate-level, not trade-level, for the
+      real code path. For contrast, the OLD oracle's real call counts
+      on the same two windows: `managed-replay` = 7 and 196
+      respectively (exactly one per opened trade, confirming the
+      eliminated pathology is real, not theoretical) — and wall time:
+      `A_short` OLD 4.9s vs NEW 1.4s; `B_long` OLD 2012.5s (~33.5 min)
+      vs NEW 199.0s (~3.3 min), a ~10x speedup already visible on a
+      *single* 196-trade candidate over 2.7 years — well short of
+      8352-candidate-batch scale, but the shape of the win is now
+      measured live, not projected.
 - [x] 5.4 Achieved as a side effect of the 5.1 design: there is no
       separate default/flag to switch — any candidate whose spec sets
       `exit_management.mode == "managed"` automatically gets a
