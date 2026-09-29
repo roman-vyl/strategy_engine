@@ -91,14 +91,41 @@
 - [x] 5.1 Wired in `research_service/execution/projection_loop.py::
       _resolve_managed_timeline`: when
       `projection_index.projection.managed` is present, builds the
-      timeline locally (zero Strategy Engine calls); otherwise falls
-      back to the existing per-position `managed_replay_provider`
-      (`/managed-replay`). This fallback *is* the comparison path 5.1
-      originally asked for a "switch" for — no separate manual toggle
-      was needed since presence of `managed` on the projection already
-      selects the path. `materialize_backtest_projection.py` needed no
-      changes: its `_managed_provider` closure is simply never invoked
-      once `managed` is present.
+      timeline locally (zero Strategy Engine calls).
+
+      **Hardened after independent code review** (production blocker):
+      the fallback to per-trade `/managed-replay` is no longer silent.
+      A caller that supplies `managed_replay_provider` (i.e. requested
+      managed execution) but whose acquired projection carries no
+      `managed` now gets `UpstreamServiceError` — the eliminated
+      O(trades x full-history) path can never be silently re-entered
+      in production. The old per-trade path survives only behind an
+      explicit, code-level opt-in
+      (`allow_legacy_managed_replay_fallback=True`, set at
+      `RunSingleInstanceBacktest`/`MaterializeBacktestProjectionOutcome`/
+      `Container` construction — never a request-body field, never a
+      global default), for parity/oracle test scenarios only. See
+      `tests/test_managed_projection_fail_closed.py` (A: projection
+      present → local path, zero calls; B: projection absent → fails
+      closed, zero calls; C: explicit opt-in → legacy path restored)
+      and `test_managed_policy_from_projection.py::
+      test_confirm_bars_positive_boundary_arms_exactly_on_the_nth_consecutive_bar`.
+      Component-attribution impact audit (`active_stop_component_id`/
+      `active_take_component_id`/`runtime_exit_components` always
+      `None` on the projection path): traced every consumer
+      (`execution/managed_policy.py::collect_managed_exit_candidates`
+      is the only one; feeds `ExitCandidate.component_id` and the
+      `active_stop` reason-string suffix only) through arbitration
+      (`unified_exits.py::arbitrate_unified_exit_candidates`, tie-break
+      key is `(priority, reason)` — the stop candidate is structurally
+      singular per bar so this tie-break is never actually exercised
+      by it) to persistence (`accounting/contracts.py::
+      TradeRecord.exit_component_id`, already-nullable, zero other
+      readers in the codebase) to the API surface (no route exposes
+      it). Confirmed: cosmetic/diagnostic only, does not affect
+      arbitration winner, fill price/timing, or any required persisted
+      field — a disclosed, intentional gap for a future pass, not a
+      5.2 blocker.
 - [ ] 5.2 NOT done. Requires the live Docker-orchestrated
       Strategy-Engine/Research-Service stack (per this session's
       earlier infra work) running a real managed batch end-to-end and
