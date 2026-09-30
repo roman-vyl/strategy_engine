@@ -13,6 +13,7 @@ from strategy_engine.domain.market import MarketFrame
 from strategy_engine.domain.node_identity import NodeSpec, node_spec
 from strategy_engine.domain.ranges import timeframe_duration_ms
 from strategy_engine.domain.validity import Validity
+from strategy_engine.indicators import feature_kinds as _feature_kinds
 from strategy_engine.indicators.contracts import (
     FeatureFrame,
     IndicatorPlan,
@@ -236,38 +237,28 @@ def resolve_feature(
     """
 
     timeframe = _validate_feature_timeframe(feature, base_timeframe=base_timeframe)
-    if feature.kind == "ema":
-        validate_ema_feature(feature)
-    elif feature.kind == "atr":
-        validate_atr_feature(feature)
-    elif feature.kind == "rsi":
-        validate_rsi_feature(feature)
-    elif feature.kind in {"adx", "di_plus", "di_minus"}:
-        validate_adx_dmi_feature(feature)
-    elif feature.kind == "atr_distance":
-        validate_atr_distance_feature(feature)
-        dependency_id = feature.dependencies[0]
-        dependency = upstream.get(dependency_id)
-        if dependency is None:
-            raise InvalidRequestError(
-                "atr_distance dependency has not been evaluated",
-                output_id=feature.output_id,
-                dependency=dependency_id,
-            )
-        return node_spec(
-            "indicator.atr_distance",
-            version=INDICATOR_NODE_VERSION,
-            params={
-                "timeframe": timeframe,
-                "multiplier": _atr_distance_multiplier(feature),
-            },
-            upstream={"atr": dependency},
-        )
-    else:
+    contract = _feature_kinds.find_feature_kind(feature.kind)
+    if contract is None:
         raise InvalidRequestError(
             "range evaluator received unsupported indicator kind",
             output_id=feature.output_id,
             kind=feature.kind,
+        )
+    contract.validate(feature)
+    if contract.dependency_role is not None:
+        dependency_id = feature.dependencies[0]
+        dependency = upstream.get(dependency_id)
+        if dependency is None:
+            raise InvalidRequestError(
+                f"{feature.kind} dependency has not been evaluated",
+                output_id=feature.output_id,
+                dependency=dependency_id,
+            )
+        return node_spec(
+            f"indicator.{feature.kind}",
+            version=INDICATOR_NODE_VERSION,
+            params={"timeframe": timeframe, **contract.identity_params(feature)},
+            upstream={contract.dependency_role: dependency},
         )
     return node_spec(
         f"indicator.{feature.kind}",
@@ -275,7 +266,7 @@ def resolve_feature(
         params={
             "timeframe": timeframe,
             "source": feature.source,
-            "period": _feature_period(feature),
+            **contract.identity_params(feature),
         },
     )
 

@@ -107,6 +107,7 @@ def evaluate_ema_pullback_frame(
         direction_blockers,
         context=memo_context,
         identities=memo.setups if memo else None,
+        bundle=contexts,
     )
     triggers = evaluate_triggers(
         strategy.raw_spec,
@@ -178,7 +179,7 @@ def resolve_ema_pullback_frame(
     contexts = resolve_context_bundle(raw_spec, planned, features)
     gates = resolve_context_consumption(raw_spec, contexts)
     direction_blockers = resolve_direction_and_blockers(raw_spec, planned, features, gates)
-    setups = resolve_setups(raw_spec, planned, features, gates, direction_blockers)
+    setups = resolve_setups(raw_spec, planned, features, gates, direction_blockers, contexts)
     triggers = resolve_triggers(raw_spec, planned, features, setups)
     exit_policy = resolve_exit_policy(raw_spec, planned, features, contexts)
     return EmaPullbackIdentity(
@@ -228,7 +229,9 @@ def resolve_memoized_stages(
     except Exception:
         return MemoizedStageIdentities(None, None, None)
     try:
-        setups = resolve_setups(raw_spec, planned, features, gates, direction_blockers)
+        setups = resolve_setups(
+            raw_spec, planned, features, gates, direction_blockers, contexts
+        )
     except Exception:
         return MemoizedStageIdentities(direction_blockers, None, None)
     try:
@@ -262,6 +265,15 @@ def memoized_stage_consumptions(stages: MemoizedStageIdentities) -> tuple[NodeSp
             consumed.append(setup.local)
             if setup.width_prefix is not None:
                 consumed.append(setup.width_prefix)
+            # A composite consumes its children from inside its own compute
+            # (like the width prefix): predicted per composite consumption,
+            # released by the root when the composite is served from memo.
+            for child in setup.children:
+                consumed.append(child.local)
+                if child.width_prefix is not None:
+                    consumed.append(child.width_prefix)
+                if child.predicate is not None:
+                    consumed += child.predicate.nested
             consumed.append(setup.final)
         consumed += (side_setups.setups_ok, side_setups.pre_trigger_allowed)
     for side_trigger in stages.triggers or ():

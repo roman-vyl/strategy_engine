@@ -9,16 +9,23 @@ from typing import Any, cast
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.node_identity import NodeSpec
 from strategy_engine.indicators.contracts import IndicatorPlan, PlannedFeature
+from strategy_engine.indicators.feature_kinds import feature_kind, feature_kinds
 from strategy_engine.indicators.implementations.range_evaluator import (
     resolve_feature,
     resolve_indicator_plan,
 )
+from strategy_engine.strategies.ema_pullback.composite_spec import (
+    COMPOSITE_SETUP,
+    child_setup_item,
+    parse_composite_setup,
+)
+from strategy_engine.strategies.ema_pullback.predicates import parse_predicate
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     require_non_empty_instance_id,
     resolve_exit_rule_groups,
 )
 
-_ALLOWED_KINDS = {"ema", "atr", "atr_distance", "rsi", "adx", "di_plus", "di_minus"}
+_ALLOWED_KINDS = frozenset(contract.kind for contract in feature_kinds())
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,24 +81,24 @@ def _positive_int(value: Any, path: str) -> int:
     return cast(int, value)
 
 
+def _label(kind: str, timeframe: str, period: int) -> str:
+    return feature_kind(kind).label(timeframe, "close", {"period": period}, ())
+
+
 def _ema_id(timeframe: str, period: int) -> str:
-    return f"ema_close_{timeframe}_{period}"
+    return _label("ema", timeframe, period)
 
 
 def _atr_id(timeframe: str, period: int) -> str:
-    return f"atr_close_{timeframe}_{period}"
+    return _label("atr", timeframe, period)
 
 
 def _rsi_id(timeframe: str, period: int) -> str:
-    return f"rsi_close_{timeframe}_{period}"
+    return _label("rsi", timeframe, period)
 
 
 def _adx_id(kind: str, timeframe: str, period: int) -> str:
-    return f"{kind}_close_{timeframe}_{period}"
-
-
-def _multiplier_token(multiplier: float) -> str:
-    return str(float(multiplier)).replace(".", "_")
+    return _label(kind, timeframe, period)
 
 
 def _ema(raw: Any, path: str) -> tuple[str, str, int]:
@@ -215,17 +222,13 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
     exit_columns: dict[str, str] = {}
     ema_columns: dict[tuple[str, int], str] = {}
     setup_columns: dict[str, dict[str, str]] = {}
-    setups = _sequence(root.get("setups"), "setups")
-    for index, setup_raw in enumerate(setups):
-        setup = _mapping(setup_raw, f"setups[{index}]")
-        params = _mapping(setup.get("params", {}), f"setups[{index}].params")
-        component_id = str(setup.get("component_id", ""))
-        instance_id = str(setup.get("instance_id", ""))
+
+    def plan_setup_columns(
+        component_id: str, instance_id: str, params: Mapping[str, Any], path: str
+    ) -> None:
         if component_id == "anchor_stack_width_setup":
             timeframe = str(params.get("atr_timeframe", "base"))
-            period = _positive_int(
-                params.get("atr_period", 14), f"setups[{index}].params.atr_period"
-            )
+            period = _positive_int(params.get("atr_period", 14), f"{path}.params.atr_period")
             setup_columns[instance_id] = {
                 "fast": fast,
                 "anchor": anchor,
@@ -234,6 +237,39 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
             }
         elif component_id == "ema_bounce_counter_setup":
             setup_columns[instance_id] = {"fast": fast, "anchor": anchor, "slow": slow}
+
+    # Predicate feature operands are planned after every existing consumer
+    # (design D6/D7): a predicate never takes over a label an existing
+    # consumer would have planned, and fails closed when the label it asks
+    # for already holds a different feature.
+    predicate_features: list[PlannedFeature] = []
+    setups = _sequence(root.get("setups"), "setups")
+    for index, setup_raw in enumerate(setups):
+        setup = _mapping(setup_raw, f"setups[{index}]")
+        params = _mapping(setup.get("params", {}), f"setups[{index}].params")
+        component_id = str(setup.get("component_id", ""))
+        instance_id = str(setup.get("instance_id", ""))
+        if component_id == COMPOSITE_SETUP:
+            composite = parse_composite_setup(setup, f"setups[{index}]")
+            for child_index, child in enumerate(composite.children):
+                if child.predicate is not None:
+                    predicate_features.extend(
+                        parse_predicate(
+                            child.predicate,
+                            f"setups[{index}].params.children[{child_index}].predicate",
+                            context_refs=htf_columns,
+                        ).features()
+                    )
+                    continue
+                child_item = child_setup_item(composite, child)
+                plan_setup_columns(
+                    child_item["component_id"],
+                    child_item["instance_id"],
+                    child_item["params"],
+                    f"setups[{index}].params.children[{child_index}].setup",
+                )
+        else:
+            plan_setup_columns(component_id, instance_id, params, f"setups[{index}]")
 
     rsi_columns: dict[tuple[str, int], str] = {}
     adx_dmi_columns: dict[tuple[str, int], dict[str, str]] = {}
@@ -248,7 +284,9 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
         period = _positive_int(payload.get("period", 14), f"exits[{index}].distance.period")
         multiplier = float(cast(int | float | str, payload.get("multiplier")))
         base_id = add_atr(timeframe, period)
-        distance_id = f"{base_id}_x{_multiplier_token(multiplier)}"
+        distance_id = feature_kind("atr_distance").label(
+            timeframe, None, {"multiplier": multiplier}, (base_id,)
+        )
         add(
             PlannedFeature(
                 distance_id,
@@ -349,6 +387,18 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
                     f"runtime_exits[{index}].params.{field_name}",
                     ema_columns,
                 )
+
+    if predicate_features:
+        planned_by_label = {feature.output_id: feature for feature in features}
+        for feature in predicate_features:
+            existing = planned_by_label.get(feature.output_id)
+            if existing is not None and existing != feature:
+                raise InvalidRequestError(
+                    "predicate feature collides with a different planned feature",
+                    output_id=feature.output_id,
+                )
+            add(feature)
+            planned_by_label[feature.output_id] = feature
 
     return EmaPullbackFeaturePlan(
         indicator_plan=IndicatorPlan("bbb_v1", tuple(features)),

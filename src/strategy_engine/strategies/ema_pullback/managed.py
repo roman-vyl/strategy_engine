@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.values import normalized_decimal_text
-from strategy_engine.indicators.contracts import FeatureFrame
+from strategy_engine.indicators.contracts import FeatureFrame, FeatureFrameLike
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 
 _PHASES = ("initial_risk", "proven", "protected", "runner", "exhaustion")
@@ -234,7 +234,7 @@ def _int(value: Any, path: str) -> int:
     return int(value)
 
 
-def _series(frame: FeatureFrame, output_id: str) -> tuple[float | None, ...]:
+def _series(frame: FeatureFrameLike, output_id: str) -> tuple[float | None, ...]:
     values = frame.series.get(output_id)
     if values is None:
         return tuple(None for _ in frame.time_ms)
@@ -256,7 +256,7 @@ SeriesCache = dict[str, tuple[float | None, ...]]
 
 
 def _cached_series(
-    cache: SeriesCache, frame: FeatureFrame, output_id: str
+    cache: SeriesCache, frame: FeatureFrameLike, output_id: str
 ) -> tuple[float | None, ...]:
     cached = cache.get(output_id)
     if cached is None:

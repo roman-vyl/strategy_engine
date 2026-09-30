@@ -11,6 +11,11 @@ from collections.abc import Mapping
 from typing import Any
 
 from strategy_engine.domain.errors import InvalidRequestError
+from strategy_engine.strategies.ema_pullback.composite_spec import (
+    composite_items,
+    require_no_internal_key_collision,
+)
+from strategy_engine.strategies.ema_pullback.predicates import parse_predicate
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     BLOCKER_SUPPORTED,
     DIRECTION_SUPPORTED,
@@ -90,6 +95,10 @@ def check_ema_pullback_static_semantics(raw_spec: Mapping[str, Any]) -> None:
             (setup.get("instance_id"), f"setups[{index}].instance_id")
         )
     require_unique_instance_ids("setups", tuple(setup_identity_pairs))
+    contexts = raw_spec.get("contexts") or {}
+    _check_composite_setups(
+        setups, frozenset(str(ref) for ref in contexts) if isinstance(contexts, Mapping) else None
+    )
 
     exit_rule_groups = resolve_exit_rule_groups(raw_spec)
     exit_identity_pairs: list[tuple[object, str]] = []
@@ -106,3 +115,25 @@ def check_ema_pullback_static_semantics(raw_spec: Mapping[str, Any]) -> None:
             path = f"trade_management.exit_policy.{group}.exits[{index}].instance_id"
             exit_identity_pairs.append((rule.get("instance_id"), path))
     require_unique_instance_ids("trade_management.exit_policy", tuple(exit_identity_pairs))
+
+
+def _check_composite_setups(
+    setups: tuple[object, ...], context_refs: frozenset[str] | None
+) -> None:
+    """Structural validation of every `composite_setup` (design D1, D12)."""
+
+    items = tuple(_mapping(item, f"setups[{index}]") for index, item in enumerate(setups))
+    composites = composite_items(items)
+    if not composites:
+        return
+    for spec in composites:
+        for child in spec.children:
+            if child.predicate is not None:
+                parse_predicate(
+                    child.predicate,
+                    f"setup[{spec.instance_id}].{child.child_id}.predicate",
+                    context_refs=context_refs,
+                )
+    require_no_internal_key_collision(
+        tuple(str(item.get("instance_id", "")) for item in items), composites
+    )

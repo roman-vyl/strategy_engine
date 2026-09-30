@@ -18,6 +18,18 @@ from dataclasses import dataclass
 from typing import Any
 
 from strategy_engine.domain.errors import InvalidRequestError
+from strategy_engine.strategies.ema_pullback.composite_spec import (
+    COMPOSITE_SETUP,
+    child_setup_item,
+    parse_composite_setup,
+)
+from strategy_engine.strategies.ema_pullback.predicates import (
+    AnyPredicate,
+    Predicate,
+    StatePredicate,
+    TemporalPredicate,
+    parse_predicate,
+)
 from strategy_engine.strategies.live_calculation.contracts import HistoryRequirement
 
 
@@ -43,6 +55,38 @@ _BOUNCE_HISTORY_TIERS: tuple[_BounceHistoryTier, ...] = (
 )
 
 _BASE = "base"
+
+
+def _predicate_history(predicate: AnyPredicate, where: str) -> list[HistoryRequirement]:
+    """History policy of one composite predicate child (design D4):
+    - `compare`/`range`/`state` read only the current bar: an explicit
+      zero-additional entry (indicator and context EMA warm-up is already
+      counted from the plan by the per-feature policies);
+    - `temporal` adds `bars - 1` base bars on top of its inner predicate.
+    Anything else fails closed."""
+
+    if isinstance(predicate, (Predicate, StatePredicate)):
+        return [
+            HistoryRequirement(
+                timeframe=_BASE,
+                bars=0,
+                reason=f"{where} predicate reads the current bar only (no additional history)",
+            )
+        ]
+    if isinstance(predicate, TemporalPredicate):
+        inner = _predicate_history(predicate.of, where)
+        return [
+            HistoryRequirement(
+                timeframe=_BASE,
+                bars=predicate.bars - 1 + max(item.bars for item in inner),
+                reason=(
+                    f"{where} temporal {predicate.mode} bars={predicate.bars} - 1 "
+                    "on top of its inner predicate"
+                ),
+            )
+        ]
+    raise InvalidRequestError("no registered live history policy for predicate", child=where)
+
 
 _ZERO_LOOKBACK_BLOCKERS = {"no_blockers", "counter_candle_blocker"}
 _ZERO_LOOKBACK_TRIGGERS = {"touch_anchor"}
@@ -187,59 +231,82 @@ class EmaPullbackLiveCalculationRequirements:
         out: list[HistoryRequirement] = []
         for index, setup_raw in enumerate(_sequence(root.get("setups"), "setups")):
             setup = _mapping(setup_raw, f"setups[{index}]")
-            params = _mapping(setup.get("params", {}), f"setups[{index}].params")
-            component_id = str(setup.get("component_id", ""))
-            if component_id == "untouched_anchor_setup":
-                lookback = int(params.get("lookback", 50))
-                active_bars = int(params.get("active_bars", 3))
-                # touch_active at target can be driven by a first_touch up to
-                # (active_bars - 1) bars before target, and that first_touch's
-                # own untouched_prior needs `lookback` bars of touch history
-                # before *it* -- so the earliest touch data needed precedes
-                # target by lookback + active_bars - 1, not just lookback.
-                bars = lookback + active_bars - 1
-                out.append(
-                    HistoryRequirement(
-                        timeframe=_BASE,
-                        bars=bars,
-                        reason=(
-                            f"setups[{index}] untouched_anchor_setup lookback={lookback} "
-                            f"+ active_bars={active_bars} - 1 (touch_active can be driven by "
-                            "a first_touch up to active_bars-1 bars before target, which "
-                            "itself needs lookback bars of touch history before it)"
-                        ),
+            if str(setup.get("component_id", "")) == COMPOSITE_SETUP:
+                composite = parse_composite_setup(setup, f"setups[{index}]")
+                for child_index, child in enumerate(composite.children):
+                    if child.predicate is not None:
+                        out += _predicate_history(
+                            parse_predicate(
+                                child.predicate,
+                                f"setups[{index}].params.children[{child_index}].predicate",
+                            ),
+                            f"setups[{index}].{child.child_id}",
+                        )
+                        continue
+                    out += self._semantic_setup(
+                        root, child_setup_item(composite, child), index
                     )
+                continue
+            out += self._semantic_setup(root, setup, index)
+        return out
+
+    def _semantic_setup(
+        self, root: Mapping[str, Any], setup: Mapping[str, Any], index: int
+    ) -> list[HistoryRequirement]:
+        out: list[HistoryRequirement] = []
+        params = _mapping(setup.get("params", {}), f"setups[{index}].params")
+        component_id = str(setup.get("component_id", ""))
+        if component_id == "untouched_anchor_setup":
+            lookback = int(params.get("lookback", 50))
+            active_bars = int(params.get("active_bars", 3))
+            # touch_active at target can be driven by a first_touch up to
+            # (active_bars - 1) bars before target, and that first_touch's
+            # own untouched_prior needs `lookback` bars of touch history
+            # before *it* -- so the earliest touch data needed precedes
+            # target by lookback + active_bars - 1, not just lookback.
+            bars = lookback + active_bars - 1
+            out.append(
+                HistoryRequirement(
+                    timeframe=_BASE,
+                    bars=bars,
+                    reason=(
+                        f"setups[{index}] untouched_anchor_setup lookback={lookback} "
+                        f"+ active_bars={active_bars} - 1 (touch_active can be driven by "
+                        "a first_touch up to active_bars-1 bars before target, which "
+                        "itself needs lookback bars of touch history before it)"
+                    ),
                 )
-            elif component_id == "anchor_stack_width_setup":
-                lookback = int(params.get("width_lookback_bars", 80))
-                out.append(
-                    HistoryRequirement(
-                        timeframe=_BASE,
-                        bars=lookback,
-                        reason=(
-                            f"setups[{index}] anchor_stack_width_setup "
-                            f"width_lookback_bars={lookback}"
-                        ),
-                    )
+            )
+        elif component_id == "anchor_stack_width_setup":
+            lookback = int(params.get("width_lookback_bars", 80))
+            out.append(
+                HistoryRequirement(
+                    timeframe=_BASE,
+                    bars=lookback,
+                    reason=(
+                        f"setups[{index}] anchor_stack_width_setup "
+                        f"width_lookback_bars={lookback}"
+                    ),
                 )
-            elif component_id == "ema_bounce_counter_setup":
-                anchor_period = self._anchor_ema_period(root, index)
-                tier = self._select_bounce_tier(anchor_period, index)
-                out.append(
-                    HistoryRequirement(
-                        timeframe=_BASE,
-                        bars=tier.history_bars,
-                        reason=(
-                            f"ema_bounce_counter_setup: anchor_period={anchor_period}, "
-                            f"selected V1 empirical history tier={tier.history_bars} base bars"
-                        ),
-                    )
+            )
+        elif component_id == "ema_bounce_counter_setup":
+            anchor_period = self._anchor_ema_period(root, index)
+            tier = self._select_bounce_tier(anchor_period, index)
+            out.append(
+                HistoryRequirement(
+                    timeframe=_BASE,
+                    bars=tier.history_bars,
+                    reason=(
+                        f"ema_bounce_counter_setup: anchor_period={anchor_period}, "
+                        f"selected V1 empirical history tier={tier.history_bars} base bars"
+                    ),
                 )
-            else:
-                raise InvalidRequestError(
-                    "no registered live history policy for setup component",
-                    component_id=component_id,
-                )
+            )
+        else:
+            raise InvalidRequestError(
+                "no registered live history policy for setup component",
+                component_id=component_id,
+            )
         return out
 
     def _anchor_ema_period(self, root: Mapping[str, Any], index: int) -> int:
