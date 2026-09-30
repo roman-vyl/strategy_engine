@@ -26,21 +26,21 @@ from group 0 runs again at the end of every group.
 
 ## 1. Static contract and parser
 
-- [ ] 1.1 `composite_spec.py`:
+- [x] 1.1 `composite_spec.py`:
       - the structure parser takes a child parser (design D2);
       - `composite_setup` passes its current child parser, and its
         behavior and messages are unchanged;
       - add the phase child parser (`predicate` | `condition` with the
         four-atom allowlist);
       - add an optional `condition` field on `CompositeChild`.
-- [ ] 1.2 `static_semantics.py`: validate every
+- [x] 1.2 `static_semantics.py`: validate every
       `composite_phase_condition` in `phase_rules` (design D1, D10):
       - structure and references;
       - predicates through `parse_predicate` with `context_refs`;
       - the atom allowlist;
       - no nesting, no setup children, no unknown fields.
       Atomic rules are not newly validated.
-- [ ] 1.3 Unit tests:
+- [x] 1.3 Unit tests:
       - one rejection per rule in design D1, including a bare predicate
         as `condition`, a nested composite, `mfe_r`, a setup child, an
         unreferenced child, bad `k` and `/` in ids;
@@ -50,10 +50,10 @@ from group 0 runs again at the end of every group.
 
 ## 2. Shared fold and single-trade replay
 
-- [ ] 2.1 Extract the `adx_di_threshold` long/short series formula from
+- [x] 2.1 Extract the `adx_di_threshold` long/short series formula from
       `historical_managed_projection.py` into one function. The atomic
       projection rule uses it, and its output stays byte-identical.
-- [ ] 2.2 New `managed_composite.py`: `fold_phase_paths` (design D4).
+- [x] 2.2 New `managed_composite.py`: `fold_phase_paths` (design D4).
       It builds:
       - per-child market arrays, from `evaluate_predicate` or the
         extracted series;
@@ -61,7 +61,7 @@ from group 0 runs again at the end of every group.
       - the trade `require` list;
       - `at_least` terms whenever the `at_least` contains a trade child
         (trade-only or mixed). Only an all-market `at_least` is folded.
-- [ ] 2.3 `managed.py`:
+- [x] 2.3 `managed.py`:
       - composite branch reached from `_phase_met` through a per-call
         fold cache, built once per call per composite rule for the
         trade side;
@@ -69,11 +69,11 @@ from group 0 runs again at the end of every group.
       - `phase_changed` metadata `path_id` and `children` (design D5);
       - optional `bundle` parameter;
       - atomic conditions keep their code path.
-- [ ] 2.4 Bundle wiring (design D7):
+- [x] 2.4 Bundle wiring (design D7):
       - `live_projections/open_trade.py` passes `evaluation.contexts`;
       - `application/evaluate_managed_replay.py` builds the bundle only
         when a composite contains a `state` predicate.
-- [ ] 2.5 Tests:
+- [x] 2.5 Tests:
       - the owner's case through `/managed-replay` (HTTP) and live
         open-trade;
       - path attribution;
@@ -103,15 +103,15 @@ from group 0 runs again at the end of every group.
 
 ## 4. Planning and live history
 
-- [ ] 4.1 `feature_plan.py`:
+- [x] 4.1 `feature_plan.py`:
       - predicate children of composite phase conditions join
         `predicate_features`, planned last with the existing collision
         check;
       - atom children use the existing atom branches (design D9).
-- [ ] 4.2 `live_calculation_requirements.py`: a composite contributes
+- [x] 4.2 `live_calculation_requirements.py`: a composite contributes
       its children, through `_predicate_history` for predicates and the
       existing zero entries for atoms. Anything unknown fails closed.
-- [ ] 4.3 Tests:
+- [x] 4.3 Tests:
       - shared ADX column with `composite_setup`;
       - a collision fails closed;
       - temporal history is `bars − 1`;

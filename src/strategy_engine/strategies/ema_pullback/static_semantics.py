@@ -13,6 +13,7 @@ from typing import Any
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.strategies.ema_pullback.composite_spec import (
     composite_items,
+    phase_rule_composites,
     require_no_internal_key_collision,
 )
 from strategy_engine.strategies.ema_pullback.predicates import parse_predicate
@@ -96,9 +97,11 @@ def check_ema_pullback_static_semantics(raw_spec: Mapping[str, Any]) -> None:
         )
     require_unique_instance_ids("setups", tuple(setup_identity_pairs))
     contexts = raw_spec.get("contexts") or {}
-    _check_composite_setups(
-        setups, frozenset(str(ref) for ref in contexts) if isinstance(contexts, Mapping) else None
+    context_refs = (
+        frozenset(str(ref) for ref in contexts) if isinstance(contexts, Mapping) else None
     )
+    _check_composite_setups(setups, context_refs)
+    _check_composite_phase_conditions(raw_spec, context_refs)
 
     exit_rule_groups = resolve_exit_rule_groups(raw_spec)
     exit_identity_pairs: list[tuple[object, str]] = []
@@ -137,3 +140,36 @@ def _check_composite_setups(
     require_no_internal_key_collision(
         tuple(str(item.get("instance_id", "")) for item in items), composites
     )
+
+
+def _check_composite_phase_conditions(
+    raw_spec: Mapping[str, Any], context_refs: frozenset[str] | None
+) -> None:
+    """Structural validation of every `composite_phase_condition`
+    (`composite-managed-phase-condition-v1` design D1, D10). Atomic phase
+    rules are not validated here, exactly as before."""
+
+    trade_management = raw_spec.get("trade_management")
+    if not isinstance(trade_management, Mapping):
+        return
+    exit_management = trade_management.get("exit_management")
+    if not isinstance(exit_management, Mapping):
+        return
+    rules = exit_management.get("phase_rules")
+    for index, rule in enumerate(rules if isinstance(rules, (list, tuple)) else ()):
+        condition = rule.get("condition") if isinstance(rule, Mapping) else None
+        # A predicate is never a phase_rule condition by itself (design D1).
+        if isinstance(condition, Mapping) and "kind" in condition:
+            raise InvalidRequestError(
+                "a predicate is not a phase_rule condition; "
+                "use it as a composite_phase_condition child",
+                path=f"phase_rules[{index}].condition",
+            )
+    for index, spec in phase_rule_composites(exit_management):
+        for child in spec.children:
+            if child.predicate is not None:
+                parse_predicate(
+                    child.predicate,
+                    f"phase_rules[{index}].condition.{child.child_id}.predicate",
+                    context_refs=context_refs,
+                )

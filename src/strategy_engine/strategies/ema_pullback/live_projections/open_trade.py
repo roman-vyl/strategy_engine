@@ -161,6 +161,7 @@ class EmaPullbackOpenTradeProjectionAdapter:
             initial_stop_price=parse_decimal_text(receipt.initial_stop_price),
             initial_take_price=parse_decimal_text(receipt.initial_take_price),
             target_time_ms=request.target_bar_open_time_ms,
+            bundle=evaluation.contexts,
         )
         standard = _standard_signal_candidates(
             evaluation,

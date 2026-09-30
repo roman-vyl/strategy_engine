@@ -15,8 +15,10 @@ from strategy_engine.indicators.implementations.range_evaluator import (
     resolve_indicator_plan,
 )
 from strategy_engine.strategies.ema_pullback.composite_spec import (
+    COMPOSITE_PHASE_CONDITION,
     COMPOSITE_SETUP,
     child_setup_item,
+    parse_composite_phase_condition,
     parse_composite_setup,
 )
 from strategy_engine.strategies.ema_pullback.predicates import parse_predicate
@@ -336,13 +338,12 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
     exit_management = _mapping(
         trade_management.get("exit_management", {}), "trade_management.exit_management"
     )
-    for index, phase_rule_raw in enumerate(exit_management.get("phase_rules", ()) or ()):
-        phase_rule = _mapping(phase_rule_raw, f"phase_rules[{index}]")
-        condition = _mapping(phase_rule.get("condition"), f"phase_rules[{index}].condition")
+
+    def plan_phase_atom(condition: Mapping[str, Any], path: str) -> None:
         component_id = str(condition.get("component_id", ""))
-        params = _mapping(condition.get("params", {}), f"phase_rules[{index}].condition.params")
+        params = _mapping(condition.get("params", {}), f"{path}.params")
         if component_id == "mfe_atr":
-            atr = _mapping(params.get("atr"), f"phase_rules[{index}].condition.params.atr")
+            atr = _mapping(params.get("atr"), f"{path}.params.atr")
             add_atr(
                 str(atr.get("timeframe", "base")),
                 _positive_int(atr.get("period"), "phase_rule.atr.period"),
@@ -353,6 +354,32 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
                 _positive_int(params.get("period"), "phase_rule.period"),
                 adx_dmi_columns,
             )
+
+    for index, phase_rule_raw in enumerate(exit_management.get("phase_rules", ()) or ()):
+        phase_rule = _mapping(phase_rule_raw, f"phase_rules[{index}]")
+        condition = _mapping(phase_rule.get("condition"), f"phase_rules[{index}].condition")
+        if str(condition.get("component_id", "")) == COMPOSITE_PHASE_CONDITION:
+            # composite-managed-phase-condition-v1 design D9: predicate
+            # children join the predicate features (planned last, collision
+            # checked); atom children use the atom planning above.
+            phase_composite = parse_composite_phase_condition(
+                condition, f"phase_rules[{index}].condition"
+            )
+            for child in phase_composite.children:
+                child_path = f"phase_rules[{index}].condition.params.children.{child.child_id}"
+                if child.predicate is not None:
+                    predicate_features.extend(
+                        parse_predicate(
+                            child.predicate,
+                            f"{child_path}.predicate",
+                            context_refs=htf_columns,
+                        ).features()
+                    )
+                else:
+                    assert child.condition is not None
+                    plan_phase_atom(child.condition, f"{child_path}.condition")
+            continue
+        plan_phase_atom(condition, f"phase_rules[{index}].condition")
 
     for index, stop_raw in enumerate(exit_management.get("stop_management", ()) or ()):
         stop = _mapping(stop_raw, f"stop_management[{index}]")

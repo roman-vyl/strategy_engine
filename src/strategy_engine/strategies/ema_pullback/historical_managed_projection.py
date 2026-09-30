@@ -42,6 +42,7 @@ from strategy_engine.strategies.ema_pullback.managed import (
     _items,
     _mapping,
 )
+from strategy_engine.strategies.ema_pullback.managed_composite import adx_di_series
 
 _NAN = float("nan")
 
@@ -87,32 +88,9 @@ def build_historical_managed_projection(
         params = _mapping(condition.get("params", {}), "phase condition params")
 
         if component_id == "adx_di_threshold":
-            key = (
-                str(params.get("timeframe", "")),
-                _int(params.get("period"), "adx_di_threshold.period"),
-            )
-            columns = plan.adx_dmi_columns.get(key, {})
-            adx_values = _cached_series(cache, frame, columns.get("adx", ""))
-            plus_values = _cached_series(cache, frame, columns.get("di_plus", ""))
-            minus_values = _cached_series(cache, frame, columns.get("di_minus", ""))
-            adx_threshold = _float(
-                params.get("adx_threshold"), "adx_di_threshold.adx_threshold", positive=True
-            )
-            require = params.get("require_di_alignment", True)
-            long_series: list[bool] = []
-            short_series: list[bool] = []
-            for adx, plus, minus in zip(adx_values, plus_values, minus_values, strict=True):
-                if adx is None or plus is None or minus is None:
-                    long_series.append(False)
-                    short_series.append(False)
-                    continue
-                ok = adx >= adx_threshold
-                long_series.append(ok and (not require or plus > minus))
-                short_series.append(ok and (not require or minus > plus))
+            long_series, short_series = adx_di_series(params, frame, plan, cache)
             condition_id = f"phase:{rule_id}:condition"
-            conditions[condition_id] = ManagedConditionSeries(
-                tuple(long_series), tuple(short_series)
-            )
+            conditions[condition_id] = ManagedConditionSeries(long_series, short_series)
             rules.append(
                 ManagedPhaseTransitionRule(
                     kind="phase_transition",

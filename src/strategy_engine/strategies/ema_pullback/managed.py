@@ -6,12 +6,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from math import isfinite
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.values import normalized_decimal_text
 from strategy_engine.indicators.contracts import FeatureFrame, FeatureFrameLike
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
+
+if TYPE_CHECKING:
+    from strategy_engine.strategies.ema_pullback.contexts import ContextBundle
+    from strategy_engine.strategies.ema_pullback.managed_composite import FoldedComposite
 
 _PHASES = ("initial_risk", "proven", "protected", "runner", "exhaustion")
 Side = Literal["long", "short"]
@@ -359,6 +363,59 @@ def _phase_met(
     raise InvalidRequestError("unsupported phase condition", component_id=component_id)
 
 
+def _fold_composite_rules(
+    phase_rules: tuple[Mapping[str, Any], ...],
+    frame: FeatureFrame,
+    plan: EmaPullbackFeaturePlan,
+    side: Side,
+    bundle: ContextBundle | None,
+    series_cache: SeriesCache,
+) -> dict[int, FoldedComposite]:
+    folds: dict[int, FoldedComposite] = {}
+    for rule_index, rule in enumerate(phase_rules):
+        condition = rule.get("condition")
+        if not isinstance(condition, Mapping) or (
+            str(condition.get("component_id", "")) != "composite_phase_condition"
+        ):
+            continue
+        from strategy_engine.strategies.ema_pullback.managed_composite import (
+            fold_phase_paths,
+            parse_if_composite,
+        )
+
+        spec = parse_if_composite(condition, f"phase_rules[{rule_index}].condition")
+        assert spec is not None
+        folds[rule_index] = fold_phase_paths(
+            spec, frame, plan, side, bundle=bundle, series_cache=series_cache
+        )
+    return folds
+
+
+def _composite_phase_met(
+    folded: FoldedComposite,
+    *,
+    state: ManagedTradeState,
+    index: int,
+    frame: FeatureFrame,
+    plan: EmaPullbackFeaturePlan,
+    series_cache: SeriesCache,
+) -> tuple[bool, dict[str, object]]:
+    from strategy_engine.strategies.ema_pullback.managed_composite import composite_met
+
+    return composite_met(
+        folded,
+        index,
+        lambda condition: _phase_met(
+            condition,
+            state=state,
+            index=index,
+            frame=frame,
+            plan=plan,
+            series_cache=series_cache,
+        )[0],
+    )
+
+
 def _runtime_signal(
     rule: Mapping[str, Any],
     *,
@@ -425,6 +482,7 @@ def _evaluate_managed_replay_core(
     initial_stop_price: float | None = None,
     target_index: int | None = None,
     require_managed_mode: bool = True,
+    bundle: ContextBundle | None = None,
 ) -> ManagedCalculationResult:
     management = _mapping(raw_spec.get("trade_management", {}), "trade_management")
     config = _mapping(management.get("exit_management", {}), "exit_management")
@@ -460,23 +518,38 @@ def _evaluate_managed_replay_core(
     # Lives only for the duration of this call -- see _cached_series' docstring
     # comment above for the correctness invariant this relies on.
     series_cache: SeriesCache = {}
+    # composite_phase_condition (composite-managed-phase-condition-v1 D4/D5):
+    # every composite rule's market children are folded once per call for
+    # the trade side; atomic rules keep their existing path.
+    folds = _fold_composite_rules(phase_rules, frame, plan, side, bundle, series_cache)
     for index in range(evaluation_start_index, target_index + 1):
         bar = frame.market_bars[index]
         high, low, close = float(bar.high), float(bar.low), float(bar.close)
         _update_extremes(state, index=index, high=high, low=low)
         time_ms = frame.time_ms[index]
-        for rule in phase_rules:
+        for rule_index, rule in enumerate(phase_rules):
             to_phase = str(rule.get("to_phase", ""))
             if _rank(to_phase) <= _rank(state.phase):
                 continue
-            met, diagnostics = _phase_met(
-                _mapping(rule.get("condition"), "phase rule condition"),
-                state=state,
-                index=index,
-                frame=frame,
-                plan=plan,
-                series_cache=series_cache,
-            )
+            folded = folds.get(rule_index)
+            if folded is not None:
+                met, diagnostics = _composite_phase_met(
+                    folded,
+                    state=state,
+                    index=index,
+                    frame=frame,
+                    plan=plan,
+                    series_cache=series_cache,
+                )
+            else:
+                met, diagnostics = _phase_met(
+                    _mapping(rule.get("condition"), "phase rule condition"),
+                    state=state,
+                    index=index,
+                    frame=frame,
+                    plan=plan,
+                    series_cache=series_cache,
+                )
             if not met:
                 continue
             old = state.phase
@@ -653,6 +726,7 @@ def evaluate_managed_replay(
     side: Side,
     entry_time_ms: int,
     entry_price: float,
+    bundle: ContextBundle | None = None,
 ) -> ManagedReplayResult:
     """Preserve the public managed-replay entry-bar semantics."""
 
@@ -667,6 +741,7 @@ def evaluate_managed_replay(
             entry_price=entry_price,
             evaluation_start_offset=0,
             require_managed_mode=True,
+            bundle=bundle,
         ),
     )
 
@@ -682,6 +757,7 @@ def evaluate_start_after_entry_managed_projection(
     initial_stop_price: Decimal | float,
     initial_take_price: Decimal | float,
     target_time_ms: int,
+    bundle: ContextBundle | None = None,
 ) -> StartAfterEntryManagedProjection:
     """Replay open-trade management strictly after entry using plan-price basis."""
 
@@ -717,6 +793,7 @@ def evaluate_start_after_entry_managed_projection(
         initial_stop_price=float(initial_stop_decimal),
         target_index=target_index,
         require_managed_mode=False,
+        bundle=bundle,
     )
     desired_stop_price = (
         initial_stop_decimal

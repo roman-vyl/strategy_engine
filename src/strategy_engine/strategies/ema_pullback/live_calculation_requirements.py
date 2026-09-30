@@ -19,8 +19,10 @@ from typing import Any
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.strategies.ema_pullback.composite_spec import (
+    COMPOSITE_PHASE_CONDITION,
     COMPOSITE_SETUP,
     child_setup_item,
+    parse_composite_phase_condition,
     parse_composite_setup,
 )
 from strategy_engine.strategies.ema_pullback.predicates import (
@@ -487,18 +489,10 @@ class EmaPullbackLiveCalculationRequirements:
             phase_rule = _mapping(phase_rule_raw, f"phase_rules[{index}]")
             condition = _mapping(phase_rule.get("condition"), f"phase_rules[{index}].condition")
             component_id = str(condition.get("component_id", ""))
-            if component_id in _ZERO_LOOKBACK_PHASE_RULE_COMPONENTS:
-                out.append(
-                    _zero(
-                        f"phase_rules[{index}] {component_id}: current-bar-relative-to-entry "
-                        "check, indicator warm-up already counted separately"
-                    )
-                )
+            if component_id == COMPOSITE_PHASE_CONDITION:
+                out += self._composite_phase_condition(condition, index)
             else:
-                raise InvalidRequestError(
-                    "no registered live history policy for phase_rule component",
-                    component_id=component_id,
-                )
+                out.append(self._phase_atom(component_id, f"phase_rules[{index}]"))
 
         for index, stop_raw in enumerate(
             _sequence(exit_management.get("stop_management"), "exit_management.stop_management")
@@ -537,4 +531,41 @@ class EmaPullbackLiveCalculationRequirements:
                     component_id=component_id,
                 )
 
+        return out
+
+    def _phase_atom(self, component_id: str, where: str) -> HistoryRequirement:
+        if component_id in _ZERO_LOOKBACK_PHASE_RULE_COMPONENTS:
+            return _zero(
+                f"{where} {component_id}: current-bar-relative-to-entry "
+                "check, indicator warm-up already counted separately"
+            )
+        raise InvalidRequestError(
+            "no registered live history policy for phase_rule component",
+            component_id=component_id,
+        )
+
+    def _composite_phase_condition(
+        self, condition: Mapping[str, Any], index: int
+    ) -> list[HistoryRequirement]:
+        """composite-managed-phase-condition-v1 task 4.2: the composite
+        contributes its children -- predicates through `_predicate_history`,
+        atoms through the existing zero entries; anything unknown fails
+        closed."""
+
+        out: list[HistoryRequirement] = []
+        composite = parse_composite_phase_condition(condition, f"phase_rules[{index}].condition")
+        for child in composite.children:
+            where = f"phase_rules[{index}].{child.child_id}"
+            if child.predicate is not None:
+                out += _predicate_history(
+                    parse_predicate(
+                        child.predicate,
+                        f"phase_rules[{index}].condition.params.children.{child.child_id}"
+                        ".predicate",
+                    ),
+                    where,
+                )
+            else:
+                assert child.condition is not None
+                out.append(self._phase_atom(str(child.condition.get("component_id", "")), where))
         return out
