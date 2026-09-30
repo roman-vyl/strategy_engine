@@ -15,6 +15,7 @@ from strategy_engine.strategies.ema_pullback.composite_spec import (
     composite_items,
     require_no_internal_key_collision,
 )
+from strategy_engine.strategies.ema_pullback.predicates import parse_predicate
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     BLOCKER_SUPPORTED,
     DIRECTION_SUPPORTED,
@@ -123,9 +124,8 @@ def _check_composite_setups(setups: tuple[object, ...]) -> None:
     for spec in composites:
         for child in spec.children:
             if child.predicate is not None:
-                raise InvalidRequestError(
-                    "composite predicate children are not supported yet",
-                    child_id=child.child_id,
+                parse_predicate(
+                    child.predicate, f"setup[{spec.instance_id}].{child.child_id}.predicate"
                 )
     require_no_internal_key_collision(
         tuple(str(item.get("instance_id", "")) for item in items), composites

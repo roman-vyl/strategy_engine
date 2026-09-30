@@ -23,6 +23,12 @@ from strategy_engine.strategies.ema_pullback.composite_spec import (
     child_setup_item,
     parse_composite_setup,
 )
+from strategy_engine.strategies.ema_pullback.predicates import (
+    Compare,
+    Predicate,
+    Range,
+    parse_predicate,
+)
 from strategy_engine.strategies.live_calculation.contracts import HistoryRequirement
 
 
@@ -48,6 +54,25 @@ _BOUNCE_HISTORY_TIERS: tuple[_BounceHistoryTier, ...] = (
 )
 
 _BASE = "base"
+
+
+def _predicate_history(predicate: Predicate, where: str) -> list[HistoryRequirement]:
+    """A non-temporal predicate reads only the current bar: an explicit
+    zero-additional entry (its indicator warm-up is already counted from
+    the plan). An unrecognized predicate fails closed."""
+
+    for condition in (predicate.long, predicate.short):
+        if condition is not None and not isinstance(condition, (Compare, Range)):
+            raise InvalidRequestError(
+                "no registered live history policy for predicate", child=where
+            )
+    return [
+        HistoryRequirement(
+            timeframe=_BASE,
+            bars=0,
+            reason=f"{where} predicate reads the current bar only (no additional history)",
+        )
+    ]
 
 _ZERO_LOOKBACK_BLOCKERS = {"no_blockers", "counter_candle_blocker"}
 _ZERO_LOOKBACK_TRIGGERS = {"touch_anchor"}
@@ -194,12 +219,16 @@ class EmaPullbackLiveCalculationRequirements:
             setup = _mapping(setup_raw, f"setups[{index}]")
             if str(setup.get("component_id", "")) == COMPOSITE_SETUP:
                 composite = parse_composite_setup(setup, f"setups[{index}]")
-                for child in composite.children:
-                    if child.setup is None:
-                        raise InvalidRequestError(
-                            "no registered live history policy for composite predicate child",
-                            child_id=child.child_id,
+                for child_index, child in enumerate(composite.children):
+                    if child.predicate is not None:
+                        out += _predicate_history(
+                            parse_predicate(
+                                child.predicate,
+                                f"setups[{index}].params.children[{child_index}].predicate",
+                            ),
+                            f"setups[{index}].{child.child_id}",
                         )
+                        continue
                     out += self._semantic_setup(
                         root, child_setup_item(composite, child), index
                     )

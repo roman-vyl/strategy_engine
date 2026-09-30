@@ -19,6 +19,7 @@ from strategy_engine.indicators.market_arrays import frame_market_arrays
 from strategy_engine.strategies.ema_pullback.composite_spec import (
     COMPOSITE_SETUP,
     CompositeSpec,
+    child_instance_key,
     child_setup_item,
     parse_composite_setup,
 )
@@ -37,6 +38,12 @@ from strategy_engine.strategies.ema_pullback.direction_blockers import (
 )
 from strategy_engine.strategies.ema_pullback.feature_plan import (
     EmaPullbackFeaturePlan,
+)
+from strategy_engine.strategies.ema_pullback.predicates import (
+    PredicateIdentity,
+    evaluate_predicate,
+    parse_predicate,
+    resolve_predicate,
 )
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     SETUP_SUPPORTED,
@@ -567,12 +574,23 @@ def _composite_core(
     child_masks: list[tuple[bool, ...]] = []
     arrays: dict[str, np.ndarray] = {}
     for index, child in enumerate(spec.children):
-        if child.setup is None:
-            raise InvalidRequestError(
-                "composite predicate children are not supported yet", child_id=child.child_id
-            )
-        item = child_setup_item(spec, child)
         child_identity = children[index] if children is not None else None
+        if child.predicate is not None:
+            predicate_mask = evaluate_predicate(
+                parse_predicate(child.predicate, f"setup[{spec.instance_id}].{child.child_id}"),
+                frame,
+                side,
+                context=context,
+                identity=child_identity.predicate if child_identity else None,
+            )
+            if len(predicate_mask) != length:
+                raise InvalidRequestError(
+                    "composite child mask length mismatch", child_id=child.child_id
+                )
+            child_masks.append(tuple(predicate_mask.tolist()))
+            arrays[child.child_id] = predicate_mask
+            continue
+        item = child_setup_item(spec, child)
         component_id, instance_id, params = _setup_head(item, side)
         compute = _semantic_setup_compute(
             component_id,
@@ -778,6 +796,8 @@ class SetupIdentity:
     final: NodeSpec
     width_prefix: NodeSpec | None = None
     children: tuple[SetupIdentity, ...] = ()
+    # Set only for a composite predicate child (its column nodes).
+    predicate: PredicateIdentity | None = None
 
 
 def resolve_setup_local(
@@ -868,10 +888,22 @@ def _resolve_composite(
     positions = {child.child_id: index for index, child in enumerate(spec.children)}
     children: list[SetupIdentity] = []
     for child in spec.children:
-        if child.setup is None:
-            raise InvalidRequestError(
-                "composite predicate children are not supported yet", child_id=child.child_id
+        if child.predicate is not None:
+            predicate = resolve_predicate(
+                parse_predicate(child.predicate, f"setup[{instance_id}].{child.child_id}"),
+                feature_ids,
+                side,
             )
+            children.append(
+                SetupIdentity(
+                    instance_id=child_instance_key(spec.instance_id, child.child_id),
+                    side=side,
+                    local=predicate.local,
+                    final=predicate.local,
+                    predicate=predicate,
+                )
+            )
+            continue
         child_item = child_setup_item(spec, child)
         local, prefix = resolve_setup_local(child_item, plan, feature_ids, side)
         children.append(

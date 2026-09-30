@@ -31,8 +31,8 @@ every group.
 
 - [x] 1.1 Add `composite_setup` to `SETUP_SUPPORTED`
       (`raw_spec_identity.py`).
-- [ ] 1.2 (structure done in `composite_spec.py`; predicate-child validation lands
-      with group 4) Implement market-data-free validation of the composite shape
+- [ ] 1.2 (structure, `compare`/`range` done; `state` `context_ref` and temporal
+      `of` validation land with group 5) Implement market-data-free validation of the composite shape
       in `static_semantics.py` (design D1, D2, D3, D12):
       - children, paths and references;
       - no unreferenced children, no nested composite, no nested
@@ -99,7 +99,7 @@ every group.
 
 ## 4. Predicates over canonical features
 
-- [ ] 4.1 New `predicates.py`: parse feature, price and constant
+- [x] 4.1 New `predicates.py`: parse feature, price and constant
       operands.
       - Feature operands are opaque requests resolved only via
         `plan_feature_request` (design D13).
@@ -108,21 +108,21 @@ every group.
       - Add an architecture test: `predicates.py` contains no
         indicator-kind string literals and imports nothing from
         `indicators/implementations`.
-- [ ] 4.2 `feature_plan.py`: plan predicate feature operands via the
+- [x] 4.2 `feature_plan.py`: plan predicate feature operands via the
       existing `add()`.
-- [ ] 4.3 Label collision check (design D7): the requested identity
+- [x] 4.3 Label collision check (design D7): the requested identity
       must equal the identity under the label, otherwise
       `InvalidRequestError`.
-- [ ] 4.4 Memoized `predicate.column` node: one float64 read-only
+- [x] 4.4 Memoized `predicate.column` node: one float64 read-only
       array per feature identity, NaN for missing (design D8).
-- [ ] 4.5 `compare` and `range`, vectorized. Non-finite values give
+- [x] 4.5 `compare` and `range`, vectorized. Non-finite values give
       False (D5). Predicates are side-free by default; the short side
       differs only through an explicit `short` override (D3).
-- [ ] 4.6 Resolve twins for column, compare and range. A side-free
+- [x] 4.6 Resolve twins for column, compare and range. A side-free
       predicate has no side in its identity.
-- [ ] 4.7 Live history: an explicit zero-additional entry for
+- [x] 4.7 Live history: an explicit zero-additional entry for
       non-temporal predicates.
-- [ ] 4.8 Tests:
+- [x] 4.8 Tests:
       - each class on hand-built frames against a naive per-bar
         reference implemented in the test;
       - HTF operand values equal the aligned plan column;
@@ -130,7 +130,7 @@ every group.
         once;
       - EMA source collision fails closed;
       - three predicates on one column cause one conversion.
-- [ ] 4.9 Run the group 0 regression gate.
+- [x] 4.9 Run the group 0 regression gate.
 
 ## 5. Context state and temporal predicates
 

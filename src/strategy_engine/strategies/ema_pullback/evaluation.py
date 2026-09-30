@@ -269,6 +269,8 @@ def memoized_stage_consumptions(stages: MemoizedStageIdentities) -> tuple[NodeSp
                 consumed.append(child.local)
                 if child.width_prefix is not None:
                     consumed.append(child.width_prefix)
+                if child.predicate is not None:
+                    consumed += child.predicate.columns
             consumed.append(setup.final)
         consumed += (side_setups.setups_ok, side_setups.pre_trigger_allowed)
     for side_trigger in stages.triggers or ():

@@ -19,6 +19,7 @@ from strategy_engine.strategies.ema_pullback.composite_spec import (
     child_setup_item,
     parse_composite_setup,
 )
+from strategy_engine.strategies.ema_pullback.predicates import parse_predicate
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     require_non_empty_instance_id,
     resolve_exit_rule_groups,
@@ -237,6 +238,11 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
         elif component_id == "ema_bounce_counter_setup":
             setup_columns[instance_id] = {"fast": fast, "anchor": anchor, "slow": slow}
 
+    # Predicate feature operands are planned after every existing consumer
+    # (design D6/D7): a predicate never takes over a label an existing
+    # consumer would have planned, and fails closed when the label it asks
+    # for already holds a different feature.
+    predicate_features: list[PlannedFeature] = []
     setups = _sequence(root.get("setups"), "setups")
     for index, setup_raw in enumerate(setups):
         setup = _mapping(setup_raw, f"setups[{index}]")
@@ -246,7 +252,13 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
         if component_id == COMPOSITE_SETUP:
             composite = parse_composite_setup(setup, f"setups[{index}]")
             for child_index, child in enumerate(composite.children):
-                if child.setup is None:
+                if child.predicate is not None:
+                    predicate_features.extend(
+                        parse_predicate(
+                            child.predicate,
+                            f"setups[{index}].params.children[{child_index}].predicate",
+                        ).features()
+                    )
                     continue
                 child_item = child_setup_item(composite, child)
                 plan_setup_columns(
@@ -374,6 +386,18 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
                     f"runtime_exits[{index}].params.{field_name}",
                     ema_columns,
                 )
+
+    if predicate_features:
+        planned_by_label = {feature.output_id: feature for feature in features}
+        for feature in predicate_features:
+            existing = planned_by_label.get(feature.output_id)
+            if existing is not None and existing != feature:
+                raise InvalidRequestError(
+                    "predicate feature collides with a different planned feature",
+                    output_id=feature.output_id,
+                )
+            add(feature)
+            planned_by_label[feature.output_id] = feature
 
     return EmaPullbackFeaturePlan(
         indicator_plan=IndicatorPlan("bbb_v1", tuple(features)),
