@@ -2,7 +2,9 @@
 
 ## Purpose
 Compute, without any I/O, a bounded history start timestamp that is sufficient, under a set of configured indicator-convergence and strategy-semantic warm-up policies, to evaluate a given live strategy spec at a target bar — so the live acquisition path stops reading history that scales with total accumulated market-data depth.
+
 ## Requirements
+
 ### Requirement: Pure history-start planning
 
 The planner SHALL compute a bounded history start (`from_ms`) from a strategy spec's indicator plan, the base timeframe, the strategy's event/lookback requirements, and a caller-supplied history anchor timestamp.
@@ -144,3 +146,33 @@ This capability's outputs SHALL be described and consumed as "bounded, policy-su
 - **WHEN** the spec includes a strategy component whose state is not bounded by a fixed lookback
 - **THEN** the planner SHALL apply that component's configured conservative bounded warm-up
 - **AND** SHALL NOT claim the resulting `from_ms` is the provably minimal history required for identical output to a full-history calculation.
+
+### Requirement: History policy for composite setup children
+
+The live history planner SHALL resolve `composite_setup` by recursing
+into its children:
+
+- **Semantic setup children** SHALL contribute exactly the requirement
+  their existing component policy contributes.
+- **Non-temporal predicates** SHALL contribute an explicit
+  zero-additional-history entry; their indicator warm-up is already
+  counted from the plan.
+- **Temporal predicates** SHALL contribute `bars − 1` additional base
+  bars on top of their inner predicate.
+- **An unrecognized child, predicate class or mode** SHALL make the
+  planner fail closed.
+
+#### Scenario: Temporal window on a higher-timeframe condition
+
+- **WHEN** a composite contains `held_for 36` over a `state` predicate
+  on a `1h` context
+- **THEN** the resolved requirements SHALL include 35 additional base
+  bars for that predicate
+- **AND** the `1h` provider EMA warm-up SHALL be counted by the
+  existing per-feature policy.
+
+#### Scenario: Unknown predicate class
+
+- **WHEN** a composite child carries a predicate class with no history
+  policy
+- **THEN** the planner SHALL fail closed.

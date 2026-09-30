@@ -3,7 +3,9 @@
 ## Purpose
 
 Define deterministic EMA Pullback setup evaluation, stateful behavior, context ordering, setup composition, accumulated-stage readiness, and diagnostic evidence.
+
 ## Requirements
+
 ### Requirement: Stateful bounce semantics
 
 The EMA bounce counter SHALL preserve trend episode transitions, pending bounce windows, completed/effective counts, maximum-bounce admission, and reset behavior exactly. Batch range evaluation SHALL process bars in ascending order.
@@ -62,3 +64,25 @@ The engine SHALL implement `untouched_anchor_setup`, `ema_bounce_counter_setup`,
 
 - **WHEN** any supported setup receives identical inputs
 - **THEN** its bar-aligned mask and trace SHALL be deterministic for those inputs.
+
+### Requirement: Composite setup is a supported setup
+
+The engine SHALL support `composite_setup` in addition to
+`untouched_anchor_setup`, `ema_bounce_counter_setup` and
+`anchor_stack_width_setup`, as specified by
+`ema-pullback-composite-setup-v1`. `composite_setup` SHALL participate
+in context consumption order, setup composition, evidence and
+determinism exactly like the other supported setups.
+
+#### Scenario: Gate a composite setup with context
+
+- **WHEN** a `composite_setup` declares `context_consumption`
+- **THEN** its composite local mask SHALL be calculated before the
+  context gate
+- **AND** the gate SHALL only filter the resulting local mask.
+
+#### Scenario: Existing setups are unaffected
+
+- **WHEN** a spec declares no `composite_setup`
+- **THEN** setup masks, traces and `pre_trigger_allowed` SHALL be
+  bit-identical to the evaluation before this change.

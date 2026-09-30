@@ -172,5 +172,5 @@ every group.
 
 ## 7. Spec sync
 
-- [ ] 7.1 After review, sync the delta specs into `openspec/specs/` and
+- [x] 7.1 After review, sync the delta specs into `openspec/specs/` and
       archive the change.
