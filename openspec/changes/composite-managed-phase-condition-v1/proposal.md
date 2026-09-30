@@ -29,7 +29,9 @@ market logic.
   predicate, `adx_di_threshold`) or "trade metric ≥ per-bar threshold"
   (`mfe_atr`, `mfe_pct`, `bars_in_trade`).
 - So a path decomposes into one candidate-wide market mask plus
-  per-trade thresholds. A mixed N-of-M keeps its terms separate.
+  per-trade thresholds. An N-of-M with any trade child (trade-only
+  or mixed) keeps its terms separate. Only an all-market N-of-M
+  folds into the mask.
 - A prototype compared the real `managed.py` replay loop against a
   reference projection consumer: 400 trades, 1182 transitions, three
   paths including a mixed N-of-M, 0 mismatches including path
@@ -80,7 +82,8 @@ ManagedPhaseTransitionRule =
   - `path_id`;
   - an optional folded market `condition_id`;
   - trade `thresholds` (`distance_id` + `trade_metric`, ANDed);
-  - an optional mixed `at_least` over market and trade terms.
+  - an optional `at_least` over its terms, present whenever the
+    N-of-M contains a trade child.
 - Atomic rules keep their current form byte for byte. There is no
   migration to one-element paths.
 - No projection consumer exists yet in Research, so the contract is

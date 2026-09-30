@@ -44,7 +44,8 @@ from group 0 runs again at the end of every group.
       - one rejection per rule in design D1, including a bare predicate
         as `condition`, a nested composite, `mfe_r`, a setup child, an
         unreferenced child, bad `k` and `/` in ids;
-      - acceptance of the owner's case and of a mixed `at_least`;
+      - acceptance of the owner's case, a mixed `at_least` and a
+        trade-only `at_least`;
       - `composite_setup` tests stay green unchanged.
 
 ## 2. Shared fold and single-trade replay
@@ -58,7 +59,8 @@ from group 0 runs again at the end of every group.
         extracted series;
       - folded `require` masks, with market-only `at_least` folded in;
       - the trade `require` list;
-      - mixed `at_least` terms.
+      - `at_least` terms whenever the `at_least` contains a trade child
+        (trade-only or mixed). Only an all-market `at_least` is folded.
 - [ ] 2.3 `managed.py`:
       - composite branch reached from `_phase_met` through a per-call
         fold cache, built once per call per composite rule for the
@@ -139,11 +141,13 @@ from group 0 runs again at the end of every group.
 
 - [ ] 6.1 Extend `tests/test_ema_pullback_historical_managed_projection.py`:
       the reference consumer implements the `paths` rule (design D6).
-      Add the composite corpus from design D12. The (bar, `rule_id`,
+      Add the composite corpus from design D12, including the explicit
+      trade-only case `at_least 2 of [bars_in_trade, mfe_pct, mfe_atr]`. The (bar, `rule_id`,
       `path_id`) transitions must equal `evaluate_managed_replay` for
       every side and entry.
 - [ ] 6.2 Fault controls. Both must make the corpus fail:
       - a consumer that ignores the trade terms of a mixed `at_least`;
+      - a consumer that drops a trade-only `at_least`;
       - a consumer that ignores `thresholds`.
 - [ ] 6.3 `benchmark-report.md`:
       - A/B against `main` on atomic managed specs: identical

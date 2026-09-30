@@ -178,8 +178,11 @@ the projection possible.**
     ANDed with `count ≥ k` here. The value is `None` if the path has no
     market part;
   - `trade_require`: the trade children of `require`, in order;
-  - `mixed_at_least`: `k` plus its terms, each either a market array or
-    a trade child. Present only when `at_least` mixes kinds;
+  - `at_least`: `k` plus its terms, each either a market array or a
+    trade child. Present whenever the path's `at_least` contains at
+    least one trade child, whether it is trade-only or mixed. Only an
+    `at_least` made entirely of market children is folded into
+    `market` and never appears here;
   - the per-child market arrays, used for attribution only.
 
   Market arrays come from `evaluate_predicate` for predicates, and from
@@ -191,8 +194,9 @@ the projection possible.**
   - calls `fold_phase_paths` once per call per composite rule, for the
     trade side only;
   - on each bar checks the paths in declared order: `market[i]`, then
-    each trade child through the existing `_phase_met`, then the mixed
-    count;
+    each trade child through the existing `_phase_met`, then the
+    `at_least` count (market terms read at `i`, trade terms through
+    `_phase_met`);
   - takes the first true path.
 - The projection calls `fold_phase_paths` for both sides and emits the
   arrays (D6).
@@ -242,13 +246,18 @@ ManagedTransitionTerm(condition_id | (distance_id, trade_metric))   # exactly on
   attributes `path_id`.
 - Id convention (opaque to consumers):
   - `phase:{rule_id}:path:{path_id}:condition` for a folded mask;
-  - `phase:{rule_id}:child:{child_id}:condition|distance` for mixed
+  - `phase:{rule_id}:child:{child_id}:condition|distance` for `at_least`
     terms and trade thresholds.
 
   A trade child used by several paths has one distance entry.
 - Wire size: one condition series per path, however many market
-  children it folds. Only mixed `at_least` market terms travel
-  individually.
+  children it folds. Only the market terms of an `at_least` that
+  contains a trade child travel individually.
+- `at_least` classification rule. If an `at_least` has no trade child,
+  it folds into the path's `condition_id`. If it has at least one trade
+  child (trade-only or mixed), it is emitted as
+  `ManagedTransitionAtLeast`. No valid path is left without a projection
+  representation.
 
 **D7. Context bundle.** `state` predicates (directly or inside
 `temporal`) need the `ContextBundle`.
@@ -336,7 +345,9 @@ atomic rules behave exactly as before.
 - Specs covered:
   - the owner's case;
   - a mixed `at_least`;
-  - a pure-market `at_least`;
+  - a pure-market `at_least` (folded);
+  - a trade-only `at_least`: `at_least {k: 2, of: [bars_in_trade,
+    mfe_pct, mfe_atr]}`;
   - a trade-only path;
   - a `state` predicate;
   - a `temporal` predicate;

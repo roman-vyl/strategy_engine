@@ -19,9 +19,12 @@ Each path SHALL carry:
   side;
 - `thresholds`: the trade `require` children, each a `distance_id` with
   a `trade_metric`, all compared with `>=`;
-- an optional `at_least` with `k` and a list of terms. It is present
-  only when its children mix market and trade kinds. Each term is
-  either a `condition_id` or a `distance_id` with a `trade_metric`.
+- an optional `at_least` with `k` and a list of terms. It SHALL be
+  present whenever the path's `at_least` contains at least one trade
+  child, whether trade-only or mixed with market children. Each term is
+  either a `condition_id` or a `distance_id` with a `trade_metric`. An
+  `at_least` whose children are all market SHALL be folded into the
+  path's `condition_id` instead.
 
 A path SHALL be true on a bar iff all of these hold:
 
@@ -45,6 +48,15 @@ SHALL be byte-identical to that before this change.
   path and one distance series for the `mfe_atr` child
 - **AND** a consumer SHALL resolve the path for any trade with one
   series lookup and one scalar comparison per bar.
+
+#### Scenario: Trade-only N-of-M is projected
+
+- **WHEN** a composite path has `at_least {k: 2, of: [bars_in_trade,
+  mfe_pct, mfe_atr]}`
+- **THEN** the path SHALL carry an `at_least` with `k = 2` and three
+  `distance_id` + `trade_metric` terms
+- **AND** a consumer SHALL resolve it with the same transitions as
+  `/managed-replay`.
 
 #### Scenario: Atomic rule unchanged
 

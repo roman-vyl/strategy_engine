@@ -98,6 +98,14 @@ The following SHALL be validated as for `composite_setup`:
 - **THEN** the path SHALL be true on a bar iff `bars` is true and at
   least two of the three are true on that bar.
 
+#### Scenario: Trade-only N-of-M
+
+- **WHEN** a path has `at_least: {k: 2, of: [bars, pct, atr]}` where
+  the children are `bars_in_trade`, `mfe_pct` and `mfe_atr`
+- **THEN** the path SHALL be true on a bar iff at least two of the
+  three are true on that bar, in single-trade replay and in the
+  projection alike.
+
 #### Scenario: Unreferenced child
 
 - **WHEN** a child is not referenced by any path
