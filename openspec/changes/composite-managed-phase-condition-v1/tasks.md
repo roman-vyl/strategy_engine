@@ -3,7 +3,7 @@ from group 0 runs again at the end of every group.
 
 ## 0. Baseline for managed specs
 
-- [ ] 0.1 Extend the declared-invariant gate (`tests/parity/invariants.py`,
+- [x] 0.1 Extend the declared-invariant gate (`tests/parity/invariants.py`,
       `record_invariants.py`, `tests/test_declared_invariants.py`) with
       managed cases recorded on `main` 7b088ae, before any code change.
       The cases have atomic phase rules only and cover all four atoms,
@@ -17,7 +17,7 @@ from group 0 runs again at the end of every group.
       - `/managed-replay` responses (events, per-bar decisions and final
         state) for fixed entries on both sides;
       - live open-trade projection results for fixed receipts.
-- [ ] 0.2 The gate asserts these quantities for specs without
+- [x] 0.2 The gate asserts these quantities for specs without
       `composite_phase_condition` and names the invariant each one
       protects: design D5, D6, D9, D8, and the
       `batch-computation-reuse` requirement "No compute regression for
