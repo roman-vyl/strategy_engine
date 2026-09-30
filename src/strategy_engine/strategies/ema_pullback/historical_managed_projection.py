@@ -23,6 +23,15 @@ from collections.abc import Mapping
 from typing import Literal
 
 from strategy_engine.indicators.contracts import FeatureFrameLike
+from strategy_engine.strategies.contracts import (
+    HistoricalManagedProjection,
+    ManagedConditionSeries,
+    ManagedPhaseTransitionRule,
+    ManagedRule,
+    ManagedRuntimeExitRule,
+    ManagedStopActionRule,
+    ManagedTakeActionRule,
+)
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 from strategy_engine.strategies.ema_pullback.managed import (
     SeriesCache,
@@ -33,20 +42,13 @@ from strategy_engine.strategies.ema_pullback.managed import (
     _items,
     _mapping,
 )
-from strategy_engine.strategies.contracts import (
-    HistoricalManagedProjection,
-    ManagedConditionSeries,
-    ManagedPhaseTransitionRule,
-    ManagedRule,
-    ManagedRuntimeExitRule,
-    ManagedStopActionRule,
-    ManagedTakeActionRule,
-)
 
 _NAN = float("nan")
 
 
-def _runtime_exit_class(exit_kind: str) -> Literal["runtime_protective", "runtime_take", "runtime_close"]:
+def _runtime_exit_class(
+    exit_kind: str,
+) -> Literal["runtime_protective", "runtime_take", "runtime_close"]:
     """Port of `research_service.execution.managed_policy._runtime_candidate_type` --
     kept in exact lockstep with that mapping (design.md D6a)."""
 
@@ -85,12 +87,17 @@ def build_historical_managed_projection(
         params = _mapping(condition.get("params", {}), "phase condition params")
 
         if component_id == "adx_di_threshold":
-            key = (str(params.get("timeframe", "")), _int(params.get("period"), "adx_di_threshold.period"))
+            key = (
+                str(params.get("timeframe", "")),
+                _int(params.get("period"), "adx_di_threshold.period"),
+            )
             columns = plan.adx_dmi_columns.get(key, {})
             adx_values = _cached_series(cache, frame, columns.get("adx", ""))
             plus_values = _cached_series(cache, frame, columns.get("di_plus", ""))
             minus_values = _cached_series(cache, frame, columns.get("di_minus", ""))
-            adx_threshold = _float(params.get("adx_threshold"), "adx_di_threshold.adx_threshold", positive=True)
+            adx_threshold = _float(
+                params.get("adx_threshold"), "adx_di_threshold.adx_threshold", positive=True
+            )
             require = params.get("require_di_alignment", True)
             long_series: list[bool] = []
             short_series: list[bool] = []
@@ -103,7 +110,9 @@ def build_historical_managed_projection(
                 long_series.append(ok and (not require or plus > minus))
                 short_series.append(ok and (not require or minus > plus))
             condition_id = f"phase:{rule_id}:condition"
-            conditions[condition_id] = ManagedConditionSeries(tuple(long_series), tuple(short_series))
+            conditions[condition_id] = ManagedConditionSeries(
+                tuple(long_series), tuple(short_series)
+            )
             rules.append(
                 ManagedPhaseTransitionRule(
                     kind="phase_transition",
@@ -119,7 +128,10 @@ def build_historical_managed_projection(
         if component_id == "mfe_atr":
             atr_threshold = _float(params.get("threshold"), "mfe_atr.threshold", positive=True)
             atr_ref = _mapping(params.get("atr"), "mfe_atr.atr")
-            key = (str(atr_ref.get("timeframe", "")), _int(atr_ref.get("period"), "mfe_atr.atr.period"))
+            key = (
+                str(atr_ref.get("timeframe", "")),
+                _int(atr_ref.get("period"), "mfe_atr.atr.period"),
+            )
             atr_values = _cached_series(cache, frame, _atr_output_id(plan, key[0], key[1]) or "")
             distance_id = f"phase:{rule_id}:distance"
             distances[distance_id] = tuple(
@@ -190,7 +202,9 @@ def build_historical_managed_projection(
                     str(atr_ref.get("timeframe", "base")),
                     int(atr_ref.get("period", params.get("atr_period", 14))),
                 )
-                atr_values = _cached_series(cache, frame, _atr_output_id(plan, key[0], key[1]) or "")
+                atr_values = _cached_series(
+                    cache, frame, _atr_output_id(plan, key[0], key[1]) or ""
+                )
                 buffer_atr = float(params.get("buffer_atr", 0.0))
                 distances[distance_id] = tuple(
                     buffer_atr * atr if atr is not None else _NAN for atr in atr_values
@@ -259,7 +273,9 @@ def build_historical_managed_projection(
             )
         elif component_id == "rsi_signal_exit":
             rsi_ref = _mapping(params.get("rsi"), "runtime rsi")
-            output_id = plan.rsi_columns.get((str(rsi_ref.get("timeframe", "")), int(rsi_ref.get("period", 0))))
+            output_id = plan.rsi_columns.get(
+                (str(rsi_ref.get("timeframe", "")), int(rsi_ref.get("period", 0)))
+            )
             values = _cached_series(cache, frame, output_id or "")
             long_threshold = params.get("long_exit_above")
             short_threshold = params.get("short_exit_below")
@@ -278,8 +294,12 @@ def build_historical_managed_projection(
         elif component_id == "ema_cross_loss_exit":
             fast_ref = _mapping(params.get("fast_ema"), "runtime fast_ema")
             slow_ref = _mapping(params.get("slow_ema"), "runtime slow_ema")
-            fast_id = plan.ema_columns.get((str(fast_ref.get("timeframe", "")), int(fast_ref.get("period", 0))))
-            slow_id = plan.ema_columns.get((str(slow_ref.get("timeframe", "")), int(slow_ref.get("period", 0))))
+            fast_id = plan.ema_columns.get(
+                (str(fast_ref.get("timeframe", "")), int(fast_ref.get("period", 0)))
+            )
+            slow_id = plan.ema_columns.get(
+                (str(slow_ref.get("timeframe", "")), int(slow_ref.get("period", 0)))
+            )
             fast_values = _cached_series(cache, frame, fast_id or "")
             slow_values = _cached_series(cache, frame, slow_id or "")
             conditions[condition_id] = ManagedConditionSeries(
@@ -306,4 +326,6 @@ def build_historical_managed_projection(
             )
         )
 
-    return HistoricalManagedProjection(conditions=conditions, distances=distances, rules=tuple(rules))
+    return HistoricalManagedProjection(
+        conditions=conditions, distances=distances, rules=tuple(rules)
+    )

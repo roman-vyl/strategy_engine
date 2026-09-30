@@ -58,7 +58,6 @@ def _replay_from_projection(
     active_stop_price: float | None = None
     active_take_profile = "initial"
     best_price = entry_price
-    worst_price = entry_price
     out: list[tuple[str, float | None, str, tuple[str, ...]]] = []
 
     for index in range(entry_index, target_index + 1):
@@ -107,7 +106,11 @@ def _replay_from_projection(
             active_stop_price = (
                 chosen
                 if active_stop_price is None
-                else (max(active_stop_price, chosen) if side == "long" else min(active_stop_price, chosen))
+                else (
+                    max(active_stop_price, chosen)
+                    if side == "long"
+                    else min(active_stop_price, chosen)
+                )
             )
 
         for rule in take_rules:
@@ -276,7 +279,9 @@ def _frame(raw: dict[str, object], n: int = 10) -> tuple[FeatureFrame, object]:
             return tuple("2" for _ in range(n))
         if kind == "rsi":
             # Deterministic pseudo-RSI walk so both long/short confirm windows exercise.
-            values = [50 + (10 if closes[i] > closes[i - 1] else -10) if i > 0 else 50 for i in range(n)]
+            values = [
+                50 + (10 if closes[i] > closes[i - 1] else -10) if i > 0 else 50 for i in range(n)
+            ]
             return tuple(str(v) for v in values)
         if kind == "ema":
             return tuple(str(source[i]) for i in range(n))
@@ -284,13 +289,20 @@ def _frame(raw: dict[str, object], n: int = 10) -> tuple[FeatureFrame, object]:
             if kind == "adx":
                 return tuple("30" for _ in range(n))
             if kind == "di_plus":
-                return tuple(("25" if closes[i] >= closes[i - 1] else "10") if i > 0 else "25" for i in range(n))
-            return tuple(("10" if closes[i] >= closes[i - 1] else "25") if i > 0 else "10" for i in range(n))
+                return tuple(
+                    ("25" if closes[i] >= closes[i - 1] else "10") if i > 0 else "25"
+                    for i in range(n)
+                )
+            return tuple(
+                ("10" if closes[i] >= closes[i - 1] else "25") if i > 0 else "10" for i in range(n)
+            )
         raise AssertionError(kind)
 
     series: dict[str, tuple[str | None, ...]] = {}
     for feature in plan.indicator_plan.features:
-        series[feature.output_id] = series_for(feature.kind, feature.timeframe, feature.parameters.get("period", 0))
+        series[feature.output_id] = series_for(
+            feature.kind, feature.timeframe, feature.parameters.get("period", 0)
+        )
 
     return (
         FeatureFrame(
@@ -351,8 +363,12 @@ def test_projection_matches_managed_replay_bar_for_bar(side: str, entry_index: i
             assert projected[1] is not None and abs(projected[1] - expected[1]) < 1e-9, (
                 f"bar {i}: stop {projected[1]!r} != {expected[1]!r}"
             )
-        assert projected[2] == expected[2], f"bar {i}: take_profile {projected[2]!r} != {expected[2]!r}"
-        assert set(projected[3]) == set(expected[3]), f"bar {i}: runtime_exits {projected[3]!r} != {expected[3]!r}"
+        assert projected[2] == expected[2], (
+            f"bar {i}: take_profile {projected[2]!r} != {expected[2]!r}"
+        )
+        assert set(projected[3]) == set(expected[3]), (
+            f"bar {i}: runtime_exits {projected[3]!r} != {expected[3]!r}"
+        )
 
 
 def test_non_managed_spec_produces_no_projection() -> None:
