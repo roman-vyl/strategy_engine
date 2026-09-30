@@ -155,10 +155,10 @@ from group 0 runs again at the end of every group.
       - composite overhead per candidate (projection build) and per
         replay call (fold);
       - projection size per path.
-- [ ] 6.4 `make verify` green.
+- [x] 6.4 `make verify` green.
 
 ## 7. Sync and archive
 
 - [x] 7.1 Sync the deltas into `openspec/specs/`. Validate with
       `openspec validate --strict`.
-- [ ] 7.2 Archive the change after owner approval.
+- [x] 7.2 Archive the change after owner approval.
