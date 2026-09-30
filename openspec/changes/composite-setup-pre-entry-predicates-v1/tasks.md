@@ -31,8 +31,7 @@ every group.
 
 - [x] 1.1 Add `composite_setup` to `SETUP_SUPPORTED`
       (`raw_spec_identity.py`).
-- [ ] 1.2 (structure, `compare`/`range` done; `state` `context_ref` and temporal
-      `of` validation land with group 5) Implement market-data-free validation of the composite shape
+- [x] 1.2 Implement market-data-free validation of the composite shape
       in `static_semantics.py` (design D1, D2, D3, D12):
       - children, paths and references;
       - no unreferenced children, no nested composite, no nested
@@ -134,27 +133,27 @@ every group.
 
 ## 5. Context state and temporal predicates
 
-- [ ] 5.1 `evaluation.py`: pass the `ContextBundle` into
+- [x] 5.1 `evaluation.py`: pass the `ContextBundle` into
       `evaluate_setups`, and `resolve_context_bundle` identities into
       `resolve_setups` (design D9).
-- [ ] 5.2 `state` predicate: read the bundle state for `context_ref`
+- [x] 5.2 `state` predicate: read the bundle state for `context_ref`
       and map it per side through `resolve_htf_regime`. No EMA
       computation.
-- [ ] 5.3 `temporal` `held_for` and `within` in O(n), independent of N,
+- [x] 5.3 `temporal` `held_for` and `within` in O(n), independent of N,
       through a cumulative sum and a shifted difference (design D4).
       `held_for` is False while fewer than N bars exist; `within` uses
       a shortened window.
-- [ ] 5.4 Resolve twins for `state` and `temporal`.
-- [ ] 5.5 Live history: `bars − 1` additional base bars per temporal
+- [x] 5.4 Resolve twins for `state` and `temporal`.
+- [x] 5.5 Live history: `bars − 1` additional base bars per temporal
       predicate.
-- [ ] 5.6 Tests:
+- [x] 5.6 Tests:
       - the spec scenarios for `held_for`, `within` and the start of
         history;
       - `state` long/short mapping;
       - a mixed 5m/15m/1h/4h composite on real market fixture data
         against a naive per-bar reference;
       - memoized vs non-memoized bit-exact.
-- [ ] 5.7 Run the group 0 regression gate.
+- [x] 5.7 Run the group 0 regression gate.
 
 ## 6. End-to-end and cost verification
 

@@ -95,7 +95,10 @@ def check_ema_pullback_static_semantics(raw_spec: Mapping[str, Any]) -> None:
             (setup.get("instance_id"), f"setups[{index}].instance_id")
         )
     require_unique_instance_ids("setups", tuple(setup_identity_pairs))
-    _check_composite_setups(setups)
+    contexts = raw_spec.get("contexts") or {}
+    _check_composite_setups(
+        setups, frozenset(str(ref) for ref in contexts) if isinstance(contexts, Mapping) else None
+    )
 
     exit_rule_groups = resolve_exit_rule_groups(raw_spec)
     exit_identity_pairs: list[tuple[object, str]] = []
@@ -114,7 +117,9 @@ def check_ema_pullback_static_semantics(raw_spec: Mapping[str, Any]) -> None:
     require_unique_instance_ids("trade_management.exit_policy", tuple(exit_identity_pairs))
 
 
-def _check_composite_setups(setups: tuple[object, ...]) -> None:
+def _check_composite_setups(
+    setups: tuple[object, ...], context_refs: frozenset[str] | None
+) -> None:
     """Structural validation of every `composite_setup` (design D1, D12)."""
 
     items = tuple(_mapping(item, f"setups[{index}]") for index, item in enumerate(setups))
@@ -125,7 +130,9 @@ def _check_composite_setups(setups: tuple[object, ...]) -> None:
         for child in spec.children:
             if child.predicate is not None:
                 parse_predicate(
-                    child.predicate, f"setup[{spec.instance_id}].{child.child_id}.predicate"
+                    child.predicate,
+                    f"setup[{spec.instance_id}].{child.child_id}.predicate",
+                    context_refs=context_refs,
                 )
     require_no_internal_key_collision(
         tuple(str(item.get("instance_id", "")) for item in items), composites

@@ -257,6 +257,7 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
                         parse_predicate(
                             child.predicate,
                             f"setups[{index}].params.children[{child_index}].predicate",
+                            context_refs=htf_columns,
                         ).features()
                     )
                     continue

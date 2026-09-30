@@ -187,7 +187,7 @@ def _with_predicate(predicate: dict[str, Any]) -> Spec:
         pytest.param({**P_ADX, "left": {"price": "close", "const": 1}}, id="two-operand-kinds"),
         pytest.param({"kind": "not", "of": P_ADX}, id="negation"),
         pytest.param(
-            {"kind": "state", "context_ref": "htf", "in": ["aligned"]}, id="state-until-group-5"
+            {"kind": "state", "context_ref": "htf", "in": ["aligned"]}, id="state-undeclared-context"
         ),
     ],
 )

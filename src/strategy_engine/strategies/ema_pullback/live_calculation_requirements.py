@@ -24,9 +24,10 @@ from strategy_engine.strategies.ema_pullback.composite_spec import (
     parse_composite_setup,
 )
 from strategy_engine.strategies.ema_pullback.predicates import (
-    Compare,
+    AnyPredicate,
     Predicate,
-    Range,
+    StatePredicate,
+    TemporalPredicate,
     parse_predicate,
 )
 from strategy_engine.strategies.live_calculation.contracts import HistoryRequirement
@@ -56,23 +57,36 @@ _BOUNCE_HISTORY_TIERS: tuple[_BounceHistoryTier, ...] = (
 _BASE = "base"
 
 
-def _predicate_history(predicate: Predicate, where: str) -> list[HistoryRequirement]:
-    """A non-temporal predicate reads only the current bar: an explicit
-    zero-additional entry (its indicator warm-up is already counted from
-    the plan). An unrecognized predicate fails closed."""
+def _predicate_history(predicate: AnyPredicate, where: str) -> list[HistoryRequirement]:
+    """History policy of one composite predicate child (design D4):
+    - `compare`/`range`/`state` read only the current bar: an explicit
+      zero-additional entry (indicator and context EMA warm-up is already
+      counted from the plan by the per-feature policies);
+    - `temporal` adds `bars - 1` base bars on top of its inner predicate.
+    Anything else fails closed."""
 
-    for condition in (predicate.long, predicate.short):
-        if condition is not None and not isinstance(condition, (Compare, Range)):
-            raise InvalidRequestError(
-                "no registered live history policy for predicate", child=where
+    if isinstance(predicate, (Predicate, StatePredicate)):
+        return [
+            HistoryRequirement(
+                timeframe=_BASE,
+                bars=0,
+                reason=f"{where} predicate reads the current bar only (no additional history)",
             )
-    return [
-        HistoryRequirement(
-            timeframe=_BASE,
-            bars=0,
-            reason=f"{where} predicate reads the current bar only (no additional history)",
-        )
-    ]
+        ]
+    if isinstance(predicate, TemporalPredicate):
+        inner = _predicate_history(predicate.of, where)
+        return [
+            HistoryRequirement(
+                timeframe=_BASE,
+                bars=predicate.bars - 1 + max(item.bars for item in inner),
+                reason=(
+                    f"{where} temporal {predicate.mode} bars={predicate.bars} - 1 "
+                    "on top of its inner predicate"
+                ),
+            )
+        ]
+    raise InvalidRequestError("no registered live history policy for predicate", child=where)
+
 
 _ZERO_LOOKBACK_BLOCKERS = {"no_blockers", "counter_candle_blocker"}
 _ZERO_LOOKBACK_TRIGGERS = {"touch_anchor"}

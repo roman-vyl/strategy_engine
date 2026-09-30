@@ -27,6 +27,7 @@ from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
     GateIdentity,
 )
+from strategy_engine.strategies.ema_pullback.contexts import ContextBundle
 from strategy_engine.strategies.ema_pullback.direction_blockers import (
     SideDirectionBlockerIdentity,
     SideDirectionBlockers,
@@ -566,6 +567,7 @@ def _composite_core(
     *,
     context: EvaluationContext | None,
     children: tuple[SetupIdentity, ...] | None,
+    bundle: ContextBundle | None = None,
 ) -> CompositeCore:
     """Evaluate every child once, then every path, vectorized: a path is
     AND(require) AND (count(of) >= k); the composite is the OR of paths."""
@@ -582,6 +584,7 @@ def _composite_core(
                 side,
                 context=context,
                 identity=child_identity.predicate if child_identity else None,
+                bundle=bundle,
             )
             if len(predicate_mask) != length:
                 raise InvalidRequestError(
@@ -668,6 +671,7 @@ def _setup(
     *,
     context: EvaluationContext | None = None,
     identity: SetupIdentity | None = None,
+    bundle: ContextBundle | None = None,
 ) -> SetupMask:
     component_id, instance_id, params = _setup_head(item, side)
     if component_id == COMPOSITE_SETUP:
@@ -683,6 +687,7 @@ def _setup(
                 side,
                 context=context,
                 children=identity.children if identity else None,
+                bundle=bundle,
             ),
         )
         local, trace = core.local, _composite_trace(spec, core)
@@ -726,6 +731,7 @@ def evaluate_setups(
     *,
     context: EvaluationContext | None = None,
     identities: tuple[SideSetupIdentity, ...] | None = None,
+    bundle: ContextBundle | None = None,
 ) -> tuple[SideSetupEvaluation, ...]:
     """`context` + `identities` (the `resolve_setups` twin of this exact
     call; batch-computation-reuse 4.6): every setup-component, width-prefix
@@ -750,6 +756,7 @@ def evaluate_setups(
                 context_records,
                 context=context,
                 identity=ids.setups[item_index] if ids else None,
+                bundle=bundle,
             )
             for item_index, item in enumerate(setup_items)
         )
@@ -878,6 +885,7 @@ def _resolve_composite(
     plan: EmaPullbackFeaturePlan,
     feature_ids: Mapping[str, NodeSpec],
     side: str,
+    contexts: Mapping[str, NodeSpec] | None = None,
 ) -> tuple[NodeSpec, tuple[SetupIdentity, ...]]:
     """`(composite local identity, child identities)`. Children are ordered
     upstream roles and paths reference them by position, so neither
@@ -893,6 +901,7 @@ def _resolve_composite(
                 parse_predicate(child.predicate, f"setup[{instance_id}].{child.child_id}"),
                 feature_ids,
                 side,
+                contexts,
             )
             children.append(
                 SetupIdentity(
@@ -938,13 +947,14 @@ def resolve_setup_identity_for_side(
     feature_ids: Mapping[str, NodeSpec],
     gates: tuple[GateIdentity, ...],
     side: str,
+    contexts: Mapping[str, NodeSpec] | None = None,
 ) -> SetupIdentity:
     """The full identity of one setup item for one side (plain or composite)."""
 
     component_id, instance_id = _setup_identity(item)
     gate = gate_node_for(gates, role="setup", instance_id=instance_id, side=side)
     if component_id == COMPOSITE_SETUP:
-        local, children = _resolve_composite(item, plan, feature_ids, side)
+        local, children = _resolve_composite(item, plan, feature_ids, side, contexts)
         return SetupIdentity(
             instance_id=instance_id,
             side=side,
@@ -976,6 +986,7 @@ def resolve_setups(
     feature_ids: Mapping[str, NodeSpec],
     gates: tuple[GateIdentity, ...],
     direction_blockers: tuple[SideDirectionBlockerIdentity, ...],
+    contexts: Mapping[str, NodeSpec] | None = None,
 ) -> tuple[SideSetupIdentity, ...]:
     """Identity twin of `evaluate_setups` (per side of `direction_blockers`)."""
 
@@ -983,7 +994,9 @@ def resolve_setups(
     outputs: list[SideSetupIdentity] = []
     for prior in direction_blockers:
         setups = [
-            resolve_setup_identity_for_side(item, plan, feature_ids, gates, prior.side)
+            resolve_setup_identity_for_side(
+                item, plan, feature_ids, gates, prior.side, contexts
+            )
             for item in setup_items
         ]
         setups_ok = and_masks_node("mask.all", tuple(setup.final for setup in setups))

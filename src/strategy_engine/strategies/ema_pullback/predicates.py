@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import functools
 import math
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
-from typing import Any
+from collections.abc import Callable, Collection, Mapping
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -28,6 +28,9 @@ from strategy_engine.indicators.contracts import FeatureFrameLike, PlannedFeatur
 from strategy_engine.indicators.evaluation_context import EvaluationContext, compute_through
 from strategy_engine.indicators.feature_kinds import plan_feature_request
 from strategy_engine.indicators.market_arrays import frame_market_arrays
+
+if TYPE_CHECKING:
+    from strategy_engine.strategies.ema_pullback.contexts import ContextBundle
 
 PREDICATE_NODE_VERSION = 1
 
@@ -90,6 +93,34 @@ class Predicate:
                 if operand.feature is not None:
                     out.append(operand.feature)
         return tuple(out)
+
+
+@dataclass(frozen=True, slots=True)
+class StatePredicate:
+    """HTF regime of a declared context, side-relative through the existing
+    regime resolution (design D3, D9). Reads the context bundle only."""
+
+    context_ref: str
+    regimes: tuple[str, ...]  # sorted, unique subset of aligned/countertrend/neutral
+
+    def features(self) -> tuple[PlannedFeature, ...]:
+        return ()
+
+
+@dataclass(frozen=True, slots=True)
+class TemporalPredicate:
+    """`held_for` / `within` over a non-temporal predicate, in base bars
+    (design D4)."""
+
+    mode: str
+    bars: int
+    of: Predicate | StatePredicate
+
+    def features(self) -> tuple[PlannedFeature, ...]:
+        return self.of.features()
+
+
+AnyPredicate = Predicate | StatePredicate | TemporalPredicate
 
 
 def _operands(condition: Condition | None) -> tuple[Operand, ...]:
@@ -188,16 +219,68 @@ _CLASS_FIELDS: dict[str, tuple[set[str], set[str]]] = {
 }
 
 
-def parse_predicate(raw: object, path: str) -> Predicate:
+_REGIMES = frozenset({"aligned", "countertrend", "neutral"})
+_TEMPORAL_MODES = frozenset({"held_for", "within"})
+
+
+def _state(
+    payload: Mapping[str, Any], path: str, context_refs: Collection[str] | None
+) -> StatePredicate:
+    _only_fields(payload, {"kind", "context_ref", "in"}, path)
+    context_ref = payload.get("context_ref")
+    if not isinstance(context_ref, str) or not context_ref:
+        raise InvalidRequestError(f"{path}.context_ref must be a non-empty string")
+    if context_refs is not None and context_ref not in context_refs:
+        raise InvalidRequestError(
+            f"{path}.context_ref is not declared in contexts", context_ref=context_ref
+        )
+    regimes = payload.get("in")
+    if (
+        not isinstance(regimes, list)
+        or not regimes
+        or any(item not in _REGIMES for item in regimes)
+        or len(set(regimes)) != len(regimes)
+    ):
+        raise InvalidRequestError(
+            f"{path}.in must be a non-empty unique subset of aligned, countertrend, neutral"
+        )
+    return StatePredicate(context_ref, tuple(sorted(regimes)))
+
+
+def _temporal(
+    payload: Mapping[str, Any], path: str, context_refs: Collection[str] | None
+) -> TemporalPredicate:
+    _only_fields(payload, {"kind", "mode", "bars", "of"}, path)
+    mode = payload.get("mode")
+    if mode not in _TEMPORAL_MODES:
+        raise InvalidRequestError(f"{path}.mode must be held_for or within", mode=mode)
+    bars = payload.get("bars")
+    if isinstance(bars, bool) or not isinstance(bars, int) or bars < 1:
+        raise InvalidRequestError(f"{path}.bars must be a positive integer", bars=bars)
+    inner = parse_predicate(payload.get("of"), f"{path}.of", context_refs=context_refs)
+    if isinstance(inner, TemporalPredicate):
+        raise InvalidRequestError(f"{path}.of must not be temporal")
+    return TemporalPredicate(str(mode), bars, inner)
+
+
+def parse_predicate(
+    raw: object, path: str, *, context_refs: Collection[str] | None = None
+) -> AnyPredicate:
     """Parse and validate one predicate object. Feature operands are
-    validated by the canonical feature-kind contract, never here."""
+    validated by the canonical feature-kind contract, never here.
+    `context_refs`: the spec's declared contexts (None skips that check;
+    evaluation then fails closed on an unknown context)."""
 
     payload = _mapping(raw, path)
     kind = payload.get("kind")
-    if kind in {"state", "temporal"}:
-        raise InvalidRequestError(f"{path}.kind is not supported yet", kind=kind)
+    if kind == "state":
+        return _state(payload, path, context_refs)
+    if kind == "temporal":
+        return _temporal(payload, path, context_refs)
     if kind not in _CLASS_FIELDS:
-        raise InvalidRequestError(f"{path}.kind must be compare or range", kind=kind)
+        raise InvalidRequestError(
+            f"{path}.kind must be compare, range, state or temporal", kind=kind
+        )
     fields, overridable = _CLASS_FIELDS[kind]
     _only_fields(payload, {"kind", "short", *fields}, path)
     parse = _compare if kind == "compare" else _range
@@ -275,25 +358,87 @@ def _evaluate_condition(
     return mask
 
 
+def _state_mask(
+    predicate: StatePredicate, frame: FeatureFrameLike, side: str, bundle: ContextBundle | None
+) -> np.ndarray:
+    from strategy_engine.strategies.ema_pullback.context_consumption import resolve_htf_regime
+
+    output = next(
+        (item for item in (bundle.outputs if bundle else ()) if item.context_ref
+         == predicate.context_ref),
+        None,
+    )
+    if output is None:
+        raise InvalidRequestError(
+            "state predicate context is not evaluated", context_ref=predicate.context_ref
+        )
+    mask = np.zeros(len(frame.time_ms), dtype=bool)
+    for raw_state, raw_mask in (("up", output.up), ("down", output.down),
+                                ("neutral", output.neutral)):
+        if resolve_htf_regime(raw_state, side) in predicate.regimes:
+            mask |= np.asarray(raw_mask, dtype=bool)
+    mask.flags.writeable = False
+    return mask
+
+
+def _window_mask(mode: str, bars: int, inner: np.ndarray) -> np.ndarray:
+    """O(n) in the number of bars, independent of `bars`: the count of true
+    bars in each trailing window from a cumulative sum and a shifted
+    difference. `held_for` needs a full window of `bars` true bars (False
+    while fewer bars exist); `within` uses the shortened initial window."""
+
+    length = len(inner)
+    cumulative = np.zeros(length + 1, dtype=np.int64)
+    np.cumsum(inner, out=cumulative[1:])
+    starts = np.maximum(np.arange(1, length + 1) - bars, 0)
+    counts = cumulative[1:] - cumulative[starts]
+    mask = counts == bars if mode == "held_for" else counts > 0
+    mask.flags.writeable = False
+    return mask
+
+
+def _evaluate(
+    predicate: AnyPredicate,
+    frame: FeatureFrameLike,
+    side: str,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    if isinstance(predicate, Predicate):
+        column_ids = identity.column_ids if identity is not None else None
+        return _evaluate_condition(predicate.for_side(side), frame, context, column_ids)
+    if isinstance(predicate, StatePredicate):
+        return _state_mask(predicate, frame, side, bundle)
+    inner = evaluate_predicate(
+        predicate.of,
+        frame,
+        side,
+        context=context,
+        identity=identity.inner if identity is not None else None,
+        bundle=bundle,
+    )
+    return _window_mask(predicate.mode, predicate.bars, inner)
+
+
 def evaluate_predicate(
-    predicate: Predicate,
+    predicate: AnyPredicate,
     frame: FeatureFrameLike,
     side: str,
     *,
     context: EvaluationContext | None = None,
     identity: PredicateIdentity | None = None,
+    bundle: ContextBundle | None = None,
 ) -> np.ndarray:
     """The predicate's read-only bool mask on the base timeline for `side`.
     Non-finite operands are False (design D5)."""
 
     if side not in _SIDES:
         raise InvalidRequestError("trade side must be long or short", side=side)
-    condition = predicate.for_side(side)
-    column_ids = identity.column_ids if identity is not None else None
     return compute_through(
         context,
         identity.local if identity is not None else None,
-        functools.partial(_evaluate_condition, condition, frame, context, column_ids),
+        functools.partial(_evaluate, predicate, frame, side, context, identity, bundle),
     )
 
 
@@ -302,13 +447,15 @@ def evaluate_predicate(
 
 @dataclass(frozen=True, slots=True)
 class PredicateIdentity:
-    """`local` is the predicate node for one side; `columns` are the column
-    nodes its compute consumes, in consumption order (predicted by the memo
-    pre-pass once per `local` consumption, like the width prefix)."""
+    """`local` is the predicate node for one side. `nested` are the nodes
+    its compute consumes (column arrays; for a temporal predicate its inner
+    predicate and that one's nested nodes), predicted by the memo pre-pass
+    once per `local` consumption, like the width prefix."""
 
     local: NodeSpec
-    columns: tuple[NodeSpec, ...]
-    column_ids: Mapping[str, NodeSpec]
+    nested: tuple[NodeSpec, ...] = ()
+    column_ids: Mapping[str, NodeSpec] = field(default_factory=dict)
+    inner: PredicateIdentity | None = None
 
 
 def column_node(feature: NodeSpec) -> NodeSpec:
@@ -326,16 +473,46 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
 
 
 def resolve_predicate(
-    predicate: Predicate,
+    predicate: AnyPredicate,
     feature_ids: Mapping[str, NodeSpec],
     side: str,
+    contexts: Mapping[str, NodeSpec] | None = None,
 ) -> PredicateIdentity:
-    """Identity twin of `evaluate_predicate`. A predicate without a `short`
-    override is side-free: its identity carries no side and is shared by
-    both sides."""
+    """Identity twin of `evaluate_predicate`. A `compare`/`range` without a
+    `short` override is side-free: its identity carries no side and is
+    shared by both sides. `state` carries the side; `temporal` inherits its
+    inner predicate's."""
 
     if side not in _SIDES:
         raise InvalidRequestError("trade side must be long or short", side=side)
+    if isinstance(predicate, StatePredicate):
+        context = (contexts or {}).get(predicate.context_ref)
+        if context is None:
+            raise InvalidRequestError(
+                "state predicate context is not declared", context_ref=predicate.context_ref
+            )
+        return PredicateIdentity(
+            node_spec(
+                "predicate.state",
+                version=PREDICATE_NODE_VERSION,
+                params={"in": predicate.regimes},
+                upstream={"context": context},
+                side=side,
+            )
+        )
+    if isinstance(predicate, TemporalPredicate):
+        inner = resolve_predicate(predicate.of, feature_ids, side, contexts)
+        return PredicateIdentity(
+            node_spec(
+                "predicate.temporal",
+                version=PREDICATE_NODE_VERSION,
+                params={"mode": predicate.mode, "bars": predicate.bars},
+                upstream={"of": inner.local},
+                side=inner.local.side,
+            ),
+            nested=(inner.local, *inner.nested),
+            inner=inner,
+        )
     condition = predicate.for_side(side)
     upstream: dict[str, NodeSpec] = {}
     columns: list[NodeSpec] = []
