@@ -61,9 +61,28 @@ or component.
   - `at_least {k, of}` is an N-of-M;
   - the composite is the OR over its paths.
 
+**Canonical feature-kind contract.** This is a minimal extension of
+the indicator layer, in the new module `indicators/feature_kinds.py`.
+- It holds one entry per kind: schema, default source, whether the kind
+  is requestable, validator, label and identity parameters.
+- `IndicatorRegistry`, the planner's allowed kinds and labels, and the
+  `resolve_feature` identity all derive from it, so their outputs for
+  existing kinds stay unchanged.
+- Predicates resolve feature operands only through this contract. They
+  own no knowledge of kinds, sources or parameters.
+- Extension invariant: a new canonical kind (math, contract entry and
+  warm-up policy) becomes a predicate operand without a new `*_setup`,
+  without a change to predicates or to `composite_setup`, and without
+  a second registry.
+
+**Side semantics.** Predicates are side-free by default, and the short
+side differs only through an explicit `short` override. There is no
+automatic inversion. `state aligned/countertrend` remains side-relative
+through the existing `resolve_htf_regime`.
+
 **Plumbing:**
 - `feature_plan` plans the predicate features through the existing
-  `add()` with the existing labels. A request whose identity differs
+  `add()`, with labels from the canonical contract. A request whose identity differs
   from the feature already stored under its label fails closed.
 - `evaluate_setups` and `resolve_setups` receive the already-built
   context bundle and its identities.
@@ -120,6 +139,10 @@ or component.
 
 ## Impact
 
+- `strategy_engine/indicators/feature_kinds.py` (new): the canonical
+  feature-kind contract. `service/registries.py` (`IndicatorRegistry`)
+  and `range_evaluator.resolve_feature` delegate to it, with unchanged
+  outputs for existing kinds.
 - `strategy_engine/strategies/ema_pullback/predicates.py` (new):
   - predicate parsing and validation;
   - compute and resolve twins;

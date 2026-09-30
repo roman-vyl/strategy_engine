@@ -74,13 +74,18 @@ The layer SHALL support exactly the following classes:
 
 A feature reference SHALL name:
 
-- a `kind` among `ema`, `rsi`, `atr`, `adx`, `di_plus`, `di_minus`;
+- a `kind`;
 - an optional `timeframe`, default `base`;
-- a positive integer `period`;
-- for `ema` only, an optional `source`, default `close`.
+- an optional `source`;
+- a `params` object.
 
-Any other class, operator, operand or kind SHALL be rejected. In
-particular the layer SHALL reject:
+Its validity, the `source` default and the valid `params` SHALL be
+decided by the canonical feature-kind contract (see the requirement
+"Feature operands resolve through the canonical feature-kind
+contract"), not by the predicate layer.
+
+Any other class, operator or operand SHALL be rejected. In particular
+the layer SHALL reject:
 
 - negation;
 - equality on numeric values;
@@ -153,15 +158,17 @@ Temporal windows SHALL count base bars.
 ### Requirement: Side semantics
 
 A predicate SHALL evaluate identically for long and short unless it
-declares otherwise:
+declares an explicit `short` override. The override is allowed on
+`compare` and `range` only, and replaces the listed fields for the
+short side.
 
-- a `short` override on `compare` or `range` replaces the listed
-  fields for the short side;
-- `side_relative: true` on a `compare` whose operands are both
-  non-constant swaps the operands for the short side.
+The layer SHALL NOT invert any predicate automatically for the short
+side. A `side_relative` flag, or any equivalent automatic operand
+swap, SHALL be rejected.
 
-`short` and `side_relative` SHALL NOT be combined. `state` SHALL be
-side-relative by construction.
+`state` SHALL remain side-relative, because `aligned`, `countertrend`
+and `neutral` are the semantics of the existing HTF regime
+resolution.
 
 #### Scenario: Short override
 
@@ -169,11 +176,16 @@ side-relative by construction.
 - **THEN** it SHALL evaluate `rsi < 70` for long and `rsi > 30` for
   short.
 
-#### Scenario: Side-relative feature order
+#### Scenario: Feature order differs by side via explicit override
 
-- **WHEN** a predicate is `ema100 > ema500` with `side_relative: true`
+- **WHEN** a predicate is `ema100 > ema500` with `short: {op: "<"}`
 - **THEN** it SHALL evaluate `ema100 > ema500` for long and
-  `ema500 > ema100` for short.
+  `ema100 < ema500` for short.
+
+#### Scenario: Automatic inversion is rejected
+
+- **WHEN** a predicate declares `side_relative: true`
+- **THEN** static validation SHALL reject the spec.
 
 ### Requirement: Non-finite values are not satisfied
 
@@ -196,3 +208,90 @@ series of the base frame's length.
 
 - **WHEN** the same predicate is evaluated twice on identical inputs
 - **THEN** both results SHALL be identical.
+
+### Requirement: Feature operands resolve through the canonical feature-kind contract
+
+The indicator layer SHALL expose one canonical feature-kind contract.
+For each kind it SHALL provide:
+
+- its schema;
+- its default `source`;
+- whether it is requestable as a standalone operand, which is false
+  for kinds that require feature dependencies;
+- its validator;
+- its column label;
+- the parameters that enter its identity.
+
+The following SHALL derive their knowledge of kinds from this
+contract, and SHALL NOT keep their own lists:
+
+- `IndicatorRegistry` (`list_definitions`, `get_schema`,
+  `validate_feature`);
+- the feature planner's allowed kinds and label functions;
+- `resolve_feature` identity parameters.
+
+For every kind existing before this change, the following SHALL be
+unchanged:
+
+- schemas;
+- validation errors;
+- labels;
+- node identities.
+
+The predicate layer SHALL resolve feature operands only through this
+contract. It SHALL NOT contain any of the following:
+
+- indicator-kind names;
+- per-kind source rules;
+- per-kind parameter rules;
+- a list of kinds.
+
+#### Scenario: Unknown or non-requestable kind
+
+- **WHEN** a feature operand names a kind the contract does not know,
+  or one it marks as not requestable
+- **THEN** the spec SHALL be rejected with the contract's error.
+
+#### Scenario: Source and parameters decided by the kind contract
+
+- **WHEN** a feature operand for `rsi` supplies `source: open`
+- **THEN** the spec SHALL be rejected by the RSI kind contract's own
+  validator
+- **AND** the predicate layer SHALL contain no RSI-specific rule
+  producing that rejection.
+
+#### Scenario: Existing kinds unchanged by the contract
+
+- **WHEN** a spec without `composite_setup` is planned and resolved
+  after this change
+- **THEN** its labels, `plan_hash` and feature identities SHALL equal
+  those before this change.
+
+### Requirement: Extension invariant for new feature kinds
+
+When the indicator layer adds a new canonical feature kind, it SHALL
+provide three things: its math in the canonical evaluator, a
+feature-kind contract entry, and a warm-up policy.
+
+Once it does, the kind SHALL be usable as a predicate operand, at any
+supported timeframe and with the canonical completed-bar alignment,
+without any of the following:
+
+- a new setup component;
+- a change to the predicate layer;
+- a change to the `composite_setup` evaluator;
+- a second indicator registry, math or alignment layer.
+
+Every parameter of the new kind that changes its values SHALL be part
+of its identity.
+
+#### Scenario: Bollinger upper band as an operand
+
+- **WHEN** the indicator layer adds a `bb_upper` kind with
+  `{period, std}`, together with its math, contract entry and warm-up
+  policy
+- **THEN** `compare {left: {price: close}, op: ">", right: {feature:
+  {kind: bb_upper, timeframe: 1h, params: {period: 20, std: 2}}}}` SHALL
+  be a valid predicate
+- **AND** `bb_upper` with `std` 2 and `std` 2.5 SHALL have different
+  identities.

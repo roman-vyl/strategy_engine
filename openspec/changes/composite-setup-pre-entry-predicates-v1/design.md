@@ -106,10 +106,10 @@ setups:
           predicate: {kind: temporal, mode: held_for, bars: 36,
                       of: {kind: state, context_ref: htf_1h, in: [aligned]}}
         - child_id: adx1h_25
-          predicate: {kind: compare, left: {feature: {kind: adx, timeframe: 1h, period: 14}},
+          predicate: {kind: compare, left: {feature: {kind: adx, timeframe: 1h, params: {period: 14}}},
                       op: ">=", right: {const: 25}}
         - child_id: rsi5m_lt70
-          predicate: {kind: compare, left: {feature: {kind: rsi, timeframe: 5m, period: 14}},
+          predicate: {kind: compare, left: {feature: {kind: rsi, timeframe: 5m, params: {period: 14}}},
                       op: "<", right: {const: 70}, short: {op: ">", right: {const: 30}}}
       paths:
         - path_id: developed
@@ -145,12 +145,19 @@ Rules:
 **D2. Predicate model.**
 
 Operands:
-- `{feature: {kind, timeframe?, source?, period}}`:
-  - `kind ∈ {ema, rsi, atr, adx, di_plus, di_minus}`, the planner's
-    existing kinds except `atr_distance`;
-  - `timeframe` defaults to `base`;
-  - `source` is allowed only for `ema` and defaults to `close`;
-  - `period` is a positive integer.
+- `{feature: {kind, timeframe?, source?, params}}`:
+  - the predicate layer treats this as an opaque canonical feature
+    request;
+  - it resolves the request through the canonical feature-kind contract
+    (D13): which kinds exist, which are requestable as an operand,
+    which `source` values and `params` are valid, the default `source`,
+    the column label and the identity;
+  - `timeframe` defaults to `base`; its validity is the evaluator's
+    existing rule.
+  - The v1 requestable set is exactly what the contract marks
+    requestable today: `ema`, `rsi`, `atr`, `adx`, `di_plus`,
+    `di_minus`. `atr_distance` is not requestable because it declares a
+    feature dependency. The predicate layer does not restate this list.
 - `{price: open|high|low|close}`: the current base bar, read from
   `market_arrays`.
 - `{const: number}`.
@@ -180,15 +187,19 @@ expressions inside a predicate. Logic lives only in paths.
 
 - A predicate is side-free by default: the same condition for long and
   short.
-- A `short` override (`compare` and `range` only) replaces the listed
+- If the short side must differ, the only mechanism is an explicit
+  `short` override (`compare` and `range` only). It replaces the listed
   fields for the short side:
   - `op`, `left` and `right` for `compare`;
   - `min` and `max` for `range`.
-- `side_relative: true` applies to `compare` only, when both operands
-  are non-constant. For short it swaps `left` and `right`, so
-  `EMA100 > EMA500` on long becomes `EMA500 > EMA100` on short.
-  `side_relative` and `short` are mutually exclusive.
-- `state` is side-relative by construction.
+
+  Example: `EMA100 > EMA500` for long and `EMA100 < EMA500` for short
+  is written as `short: {op: "<"}`.
+- There is no automatic inversion of any predicate. `side_relative`
+  or any similar flag is rejected.
+- `state` is side-relative because it reuses the existing
+  `resolve_htf_regime` semantics (`aligned`/`countertrend`). It is not
+  a new inversion mechanism.
 - A side-free predicate's identity has no side, so it is computed once
   for both sides. This follows the precedent of the width prefix.
 
@@ -220,8 +231,8 @@ validity already reflects indicator warm-up.
 
 - `build_feature_plan_from_canonical_spec` walks
   `setups[*].params.children` of `composite_setup` items. For each
-  feature operand it calls the existing `add()` with the existing label
-  function for the kind. A predicate request therefore shares the
+  feature operand it asks the canonical contract (D13) for a normalized
+  `PlannedFeature`, then passes it to the existing `add()`. A predicate request therefore shares the
   column, plan entry and identity with any existing consumer of the
   same feature.
 - Semantic setup children are planned by the existing per-component
@@ -268,7 +279,7 @@ Identity nodes:
 | Node | Params | Upstream | side |
 |---|---|---|---|
 | `predicate.column` | — | feature identity | none |
-| `predicate.compare` | `op`; constants; `price` field names | operand identities | set only for `short` or `side_relative` predicates |
+| `predicate.compare` | `op`; constants; `price` field names | operand identities | set only for predicates with a `short` override |
 | `predicate.range` | `min`, `max` | operand identity | set only for `short` predicates |
 | `predicate.state` | sorted `in` | context node | the side |
 | `predicate.temporal` | `mode`, `bars` | inner predicate | inherited |
@@ -308,6 +319,87 @@ data:
 - no `/` in ids, no nested gate, no nested composite.
 
 Timeframe-vs-base divisibility remains a plan-time check, as today.
+
+**D13. Canonical feature-kind contract (minimal extension of the indicator layer).**
+
+*Problem.* Today, knowledge about each feature kind is spread over
+four places, each with its own `if/elif` per kind:
+
+- `_ALLOWED_KINDS` and the label functions (`_ema_id`, `_rsi_id`,
+  `_atr_id`, `_adx_id`) and the source default in `feature_plan.py`;
+- the validators and schemas in `service/registries.py`
+  (`IndicatorRegistry`);
+- the identity params (only `period`) in `resolve_feature`.
+
+A predicate layer built on the current API would need a fifth copy
+(kinds, sources, params). That is exactly the second registry the
+owner forbids.
+
+*Extension.* A new module `strategy_engine/indicators/feature_kinds.py`
+becomes the single canonical source of per-kind knowledge. It lives in
+the indicator layer, next to the math.
+
+```
+FeatureKindContract:
+  kind: str
+  schema: the existing public schema dict (moved from service/registries.py)
+  default_source: str | None        # applied when a request omits source
+  requestable: bool                 # False when the kind needs feature dependencies (atr_distance)
+  validate(PlannedFeature) -> None  # the existing per-kind validator
+  label(timeframe, source, params) -> str   # reproduces today's labels exactly
+  identity_params(PlannedFeature) -> Mapping  # every semantic parameter; for existing kinds == {period}
+
+feature_kind(kind) -> FeatureKindContract           # unknown kind fails closed
+feature_kinds() -> tuple[FeatureKindContract, ...]
+plan_feature_request(kind, timeframe, source?, params) -> PlannedFeature
+    # applies default_source, validates, builds the label; the only entry point predicates use
+```
+
+*Rewiring. The observable behaviour of existing specs does not change:*
+
+- `IndicatorRegistry` (`list_definitions`, `get_schema`,
+  `validate_feature`) delegates to `feature_kinds()`. Its responses
+  stay identical.
+- `feature_plan._ALLOWED_KINDS` is derived from `feature_kinds()`. The
+  label functions delegate to `label`, and the resulting labels stay
+  identical.
+- `resolve_feature` builds identity params as
+  `{timeframe, source, **identity_params}`. For every existing kind
+  this equals today's `{timeframe, source, period}`, so identities stay
+  identical. `atr_distance` keeps its explicit dependency identity.
+- Unchanged: the math dispatch in `_compute_feature`, `align_completed_to_base`
+  and the warm-up policies in `indicator_requirements.py`. They are
+  already the canonical math, alignment and warm-up, which the
+  predicate layer only consumes. The warm-up planner already fails
+  closed on unknown kinds.
+
+*Predicate layer:*
+
+- `predicates.py` calls only `plan_feature_request` and
+  `resolve_feature`.
+- It contains no kind names, no source rules and no parameter rules.
+- An architecture test enforces this: `predicates.py` has no
+  indicator-kind string literals and imports nothing from
+  `indicators/implementations`.
+
+*Extension invariant.* Adding a new canonical feature kind (for
+example Bollinger `bb_upper`, `bb_middle`, `bb_lower` with
+`{period, std}`) requires exactly these steps, all in the indicator
+layer:
+
+1. The math branch in `evaluate_native`.
+2. A `FeatureKindContract` entry.
+3. A warm-up policy.
+
+After that the kind is automatically a valid predicate operand at any
+supported timeframe, with canonical HTF alignment. It needs:
+
+- no `*_setup` component;
+- no change to `predicates.py` or to the `composite_setup` evaluator;
+- no second registry, math or alignment layer.
+
+`std` enters the identity through `identity_params`, so BB(20, 2) and
+BB(20, 2.5) never share a memo entry.
 
 ## Risks / Trade-offs
 

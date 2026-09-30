@@ -6,8 +6,9 @@ Feature references inside `composite_setup` children SHALL be planned
 as ordinary `PlannedFeature` entries of the strategy's single
 `IndicatorPlan`:
 
-- they SHALL use the same kind-specific labels and the same
-  deduplication as every other planned feature;
+- they SHALL be normalized, validated and labelled by the canonical
+  feature-kind contract, which also produces the labels of every other
+  planned feature, and deduplicated by the same `add()`;
 - semantic setup children SHALL be planned by their existing
   per-component planning under the internal key
   `"{instance_id}/{child_id}"`.

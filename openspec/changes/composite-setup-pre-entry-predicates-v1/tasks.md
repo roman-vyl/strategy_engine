@@ -4,14 +4,28 @@ every group.
 
 ## 0. Baseline
 
-- [ ] 0.1 Record the pre-change baseline on the current `main`:
-      - parity corpus outputs;
-      - memo compute counts per node family
-        (`tests/parity/test_all_families_memo.py` style);
-      - `plan_hash` for every corpus spec.
-- [ ] 0.2 Add a regression test that compares these against the
-      baseline for specs without `composite_setup` (bit-exact outputs,
-      identical counts, identical `plan_hash`).
+- [ ] 0.1 Record the pre-change baseline on the current `main` for the
+      existing parity corpus (specs without `composite_setup`). Record
+      only the quantities this change promises to keep invariant:
+      - the public strategy evaluation result as already compared by
+        the parity harness (`tests/parity/compare.py`): decision masks,
+        entries and exit results;
+      - `plan_hash` and the ordered plan feature labels;
+      - the multiset of memoized node identities and the compute
+        counts per node family (`tests/parity/test_all_families_memo.py`
+        style);
+      - `IndicatorRegistry` responses (`list_definitions`, `get_schema`)
+        and `resolve_feature` identities for every existing kind.
+- [ ] 0.2 Add a regression test that asserts exactly these invariants
+      against the baseline for specs without `composite_setup`.
+      - The artifact SHALL NOT be a snapshot of whole internal
+        serializations. Trace key order, reprs, debug-only fields,
+        timings and unrelated wire fields are out.
+      - A change unrelated to this change's invariants must not break
+        it.
+      - Each asserted quantity names the invariant it protects: design
+        D6, D13, and the `batch-computation-reuse` no-regression
+        requirement.
 
 ## 1. Static contract and validation
 
@@ -22,9 +36,11 @@ every group.
       - children, paths and references;
       - no unreferenced children, no nested composite, no nested
         `instance_id`/`context_consumption`, no `/` in ids;
-      - predicate classes, ops, operand shapes, kinds, periods and
-        `context_ref` existence;
-      - `short`/`side_relative` exclusivity;
+      - predicate classes, ops, operand shapes and `context_ref`
+        existence; feature operands are validated through the canonical
+        feature-kind contract (design D13), not by local rules;
+      - `short` override only on `compare`/`range`; `side_relative` or
+        any automatic inversion flag is rejected;
       - temporal `of` is non-temporal.
 - [ ] 1.3 Unit tests: one rejection test per validation rule, plus
       acceptance of the owner's example spec (two paths, HTF, ADX
@@ -54,26 +70,58 @@ every group.
         `unforeseen_consumptions`.
 - [ ] 2.6 Run the group 0 regression gate.
 
-## 3. Predicates over canonical features
+## 3. Canonical feature-kind contract (indicator layer, design D13)
 
-- [ ] 3.1 New `predicates.py`: parsing of feature, price and constant
-      operands. Feature operands map to `PlannedFeature` through the
-      existing label functions.
-- [ ] 3.2 `feature_plan.py`: plan predicate feature operands via the
+- [ ] 3.1 Add `indicators/feature_kinds.py` with one `FeatureKindContract`
+      per existing kind (`ema`, `atr`, `atr_distance`, `rsi`, `adx`,
+      `di_plus`, `di_minus`). Each entry holds the schema (moved from
+      `service/registries.py`), the default source, the `requestable`
+      flag, the existing validator, the label and the identity params.
+      Also add `feature_kind()`, `feature_kinds()` and
+      `plan_feature_request()`.
+- [ ] 3.2 Make `IndicatorRegistry` delegate to `feature_kinds()`.
+      Responses and validation errors must stay unchanged.
+- [ ] 3.3 In `feature_plan.py`, derive `_ALLOWED_KINDS` from the
+      contract and route the label functions through
+      `FeatureKindContract.label`. Labels must stay unchanged.
+- [ ] 3.4 In `resolve_feature`, build identity params as
+      `{timeframe, source, **identity_params}`. Identities of existing
+      kinds must stay unchanged, and `atr_distance` keeps its explicit
+      dependency identity.
+- [ ] 3.5 Tests:
+      - registry responses, labels and identities of every existing
+        kind are unchanged (group 0 artifacts);
+      - an unknown kind fails closed;
+      - a test-only contract entry for a fake kind with an extra
+        parameter gets distinct identities per parameter value.
+- [ ] 3.6 Run the group 0 regression gate.
+
+## 4. Predicates over canonical features
+
+- [ ] 4.1 New `predicates.py`: parse feature, price and constant
+      operands.
+      - Feature operands are opaque requests resolved only via
+        `plan_feature_request` (design D13).
+      - The module has no kind names, no source rules and no parameter
+        rules.
+      - Add an architecture test: `predicates.py` contains no
+        indicator-kind string literals and imports nothing from
+        `indicators/implementations`.
+- [ ] 4.2 `feature_plan.py`: plan predicate feature operands via the
       existing `add()`.
-- [ ] 3.3 Label collision check (design D7): the requested identity
+- [ ] 4.3 Label collision check (design D7): the requested identity
       must equal the identity under the label, otherwise
       `InvalidRequestError`.
-- [ ] 3.4 Memoized `predicate.column` node: one float64 read-only
+- [ ] 4.4 Memoized `predicate.column` node: one float64 read-only
       array per feature identity, NaN for missing (design D8).
-- [ ] 3.5 `compare` and `range`, vectorized. Non-finite values give
-      False (D5). Side handling covers side-free, `short` override and
-      `side_relative` (D3).
-- [ ] 3.6 Resolve twins for column, compare and range. A side-free
+- [ ] 4.5 `compare` and `range`, vectorized. Non-finite values give
+      False (D5). Predicates are side-free by default; the short side
+      differs only through an explicit `short` override (D3).
+- [ ] 4.6 Resolve twins for column, compare and range. A side-free
       predicate has no side in its identity.
-- [ ] 3.7 Live history: an explicit zero-additional entry for
+- [ ] 4.7 Live history: an explicit zero-additional entry for
       non-temporal predicates.
-- [ ] 3.8 Tests:
+- [ ] 4.8 Tests:
       - each class on hand-built frames against a naive per-bar
         reference implemented in the test;
       - HTF operand values equal the aligned plan column;
@@ -81,47 +129,47 @@ every group.
         once;
       - EMA source collision fails closed;
       - three predicates on one column cause one conversion.
-- [ ] 3.9 Run the group 0 regression gate.
+- [ ] 4.9 Run the group 0 regression gate.
 
-## 4. Context state and temporal predicates
+## 5. Context state and temporal predicates
 
-- [ ] 4.1 `evaluation.py`: pass the `ContextBundle` into
+- [ ] 5.1 `evaluation.py`: pass the `ContextBundle` into
       `evaluate_setups`, and `resolve_context_bundle` identities into
       `resolve_setups` (design D9).
-- [ ] 4.2 `state` predicate: read the bundle state for `context_ref`
+- [ ] 5.2 `state` predicate: read the bundle state for `context_ref`
       and map it per side through `resolve_htf_regime`. No EMA
       computation.
-- [ ] 4.3 `temporal` `held_for` and `within` in O(n), independent of N,
+- [ ] 5.3 `temporal` `held_for` and `within` in O(n), independent of N,
       through a cumulative sum and a shifted difference (design D4).
       `held_for` is False while fewer than N bars exist; `within` uses
       a shortened window.
-- [ ] 4.4 Resolve twins for `state` and `temporal`.
-- [ ] 4.5 Live history: `bars − 1` additional base bars per temporal
+- [ ] 5.4 Resolve twins for `state` and `temporal`.
+- [ ] 5.5 Live history: `bars − 1` additional base bars per temporal
       predicate.
-- [ ] 4.6 Tests:
+- [ ] 5.6 Tests:
       - the spec scenarios for `held_for`, `within` and the start of
         history;
       - `state` long/short mapping;
       - a mixed 5m/15m/1h/4h composite on real market fixture data
         against a naive per-bar reference;
       - memoized vs non-memoized bit-exact.
-- [ ] 4.7 Run the group 0 regression gate.
+- [ ] 5.7 Run the group 0 regression gate.
 
-## 5. End-to-end and cost verification
+## 6. End-to-end and cost verification
 
-- [ ] 5.1 Owner example end-to-end. Run the two-path spec (HTF held,
+- [ ] 6.1 Owner example end-to-end. Run the two-path spec (HTF held,
       ADX 1h/5m, RSI, `at_least`) through `/range-batch`. Check the
       final masks and `winning_path` against the naive reference.
-- [ ] 5.2 Wall-clock A/B on the `batch-computation-reuse` benchmark
+- [ ] 6.2 Wall-clock A/B on the `batch-computation-reuse` benchmark
       workload (BTCUSDT.P 5m, real sweep requests) for specs without
       `composite_setup`. There must be no regression beyond noise.
       Record the numbers in `benchmark-report.md`.
-- [ ] 5.3 Composite overhead measurement. Compare a single-child
+- [ ] 6.3 Composite overhead measurement. Compare a single-child
       composite with the plain setup: feature compute counts must be
       equal. Record the time difference.
-- [ ] 5.4 Lint, format, typecheck and the full test suite.
+- [ ] 6.4 Lint, format, typecheck and the full test suite.
 
-## 6. Spec sync
+## 7. Spec sync
 
-- [ ] 6.1 After review, sync the delta specs into `openspec/specs/` and
+- [ ] 7.1 After review, sync the delta specs into `openspec/specs/` and
       archive the change.
