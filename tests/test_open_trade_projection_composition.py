@@ -69,7 +69,8 @@ def _evaluation(*, always: tuple[bool, ...], aligned: tuple[bool, ...]):
                 "neutral": (False,) * len(always),
             },
             rule_evidence=evidence,
-        )
+        ),
+        contexts=None,
     )
 
 

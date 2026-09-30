@@ -12,6 +12,7 @@ from strategy_engine.strategies.contracts import (
     InitialProtectionLeg,
     ManagedConditionSeries,
     ManagedRule,
+    ManagedTransitionPath,
     SignalExitEvent,
     SignalExitProjection,
     StrategyDecisionEvent,
@@ -159,6 +160,30 @@ def _serialize_distance(value: float) -> float | None:
     return value if isfinite(value) else None
 
 
+def _serialize_path(path: ManagedTransitionPath) -> dict[str, object]:
+    return {
+        "path_id": path.path_id,
+        "condition_id": path.condition_id,
+        "thresholds": [
+            {"distance_id": item.distance_id, "trade_metric": item.trade_metric}
+            for item in path.thresholds
+        ],
+        "at_least": None
+        if path.at_least is None
+        else {
+            "k": path.at_least.k,
+            "terms": [
+                {
+                    "condition_id": term.condition_id,
+                    "distance_id": term.distance_id,
+                    "trade_metric": term.trade_metric,
+                }
+                for term in path.at_least.terms
+            ],
+        },
+    }
+
+
 def _serialize_rule(rule: ManagedRule) -> dict[str, object]:
     """`historical-managed-projection-v1`'s discriminated `rules[]` wire
     shape (design.md D6a): a `kind` tag plus that variant's own opaque/
@@ -166,7 +191,7 @@ def _serialize_rule(rule: ManagedRule) -> dict[str, object]:
     parameter."""
 
     if rule.kind == "phase_transition":
-        return {
+        wire: dict[str, object] = {
             "kind": "phase_transition",
             "rule_id": rule.rule_id,
             "target_phase": rule.target_phase,
@@ -174,6 +199,11 @@ def _serialize_rule(rule: ManagedRule) -> dict[str, object]:
             "distance_id": rule.distance_id,
             "trade_metric": rule.trade_metric,
         }
+        # Omitted for atomic rules: their bytes stay unchanged
+        # (composite-managed-phase-condition-v1 design D6).
+        if rule.paths is not None:
+            wire["paths"] = [_serialize_path(path) for path in rule.paths]
+        return wire
     if rule.kind == "take_action":
         return {
             "kind": "take_action",

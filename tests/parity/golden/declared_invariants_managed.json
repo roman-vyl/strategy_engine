@@ -1,0 +1,162 @@
+{
+ "cases": {
+  "managed_atomic_rules": {
+   "batch": {
+    "nodes": {
+     "identities": {
+      "1058ddca449d1b2fd09ff871a0e83971b73503dc0e7beb62005a70ab1e1284aa": 1,
+      "178142c91c61d36baeec7a237d5df8eac5bada560d508b38501d3af44f5b089f": 1,
+      "1a7ba0c80f87fdcd3699d8c2dc10a5929f6e79b9aa7187237c3b0c4d7f277213": 1,
+      "1cf0139bef9185c3f6772727f79d76e5198a8a67a3f4415784e4bf0100e8f597": 1,
+      "20a3c40181cff5d30ac98cd920bbfe8f7ccce2bb5dd8365213279b5757b5c6f4": 1,
+      "210df99e6414647477316fd2b95cf00727c80001b8f92b89517f936f6f148763": 1,
+      "271f3a42f9d74717538fb241e2529964c8feaa30d2766743bbd59a9c5abe7cce": 1,
+      "31afb54f31fd86c87cefde3cbdf1965bbfe161ef888cc2e5ed7cdf202bf9040e": 1,
+      "33fda67d50f2d6374e53d25b2ca777da283195e95b49a33ed07f24411107f5d5": 1,
+      "34c84a7ffb2ec5f741f161781b27db2bef252d2599be9d0120f995554ac75235": 1,
+      "364c80d2c21c4ec767f3d713b306347904c5571dfe25e1951b96438f07c1e577": 1,
+      "3974c1bbd1b5b9c077fae48d93934755cf376abbaa2425becf8fd9eae1b881eb": 1,
+      "3d7487ccabbbff7b5b8ad5cf56564089a7c2417fadcec9fc4565f93a53fb1c40": 1,
+      "45aecee752f86c19209fe0dda5be81017ab13dc72e252e8c9f21ca8400da66c4": 1,
+      "4631092828543304a30e8280646ab2db2fe8ba40ef3acd7637d8c609118be4e7": 1,
+      "477f77bb1d636d846983d2a44b5a2b56a179475e405da56fb0cc35a77a7d8ab8": 1,
+      "4950f24758800bdc38b000f9b188e7d1fba68d341f62bcfb7b233e5604072057": 1,
+      "5124104ae1264d1b809052b33ad1355a9d8239a9e05c1b31178fad4ace56e542": 1,
+      "5241705d85a0e70aa32c6d1b571c83b0ffc8b159f5c8ced6e8545cd2481e267f": 1,
+      "5925b73f8c6ff271cfb64df39c0800557b8fa1980af686cdbd3590506b7a1ba8": 1,
+      "5b0def89834d7c0c486d5f92501507a7ab0bfc2c7f5cbd4b963b4b742faa1a6a": 1,
+      "5ffebdefeefa6208ec292987d21f7f5649b074a094baedb4db8f4a06d7f55739": 1,
+      "6c48e2bdfff380311fbeb4b53f611ffe15885916b72a3b36e8de13f1161c704c": 1,
+      "6dbb7e389e3eb4317a3321919ea76274e8907e4a386150a621085d5170300e46": 1,
+      "728473f4a158042bbaa728023ee406d442c7c1ffcd9a69f32ce74f1173629f40": 1,
+      "742b9569d6d0ca0aa095c777b32ad05523bc3773d260763e8b29f7561ec5e042": 1,
+      "7fa6ddb4c0cd7dc06a800790b3fdd2dce0a13a108b624441bbf082017fbc490d": 1,
+      "7faabbdcfa4648dcc8b1c4d77eb9f461670b1248a36dd49f1d14bfacc2397314": 1,
+      "8021d334ddf56f9a05e9b3ae21e45e00bbc040b0a6cde8e37862026ee28603c0": 1,
+      "85386cdb1db6c1d059c5c5a7227ad3364aceea8f4f693cc69cc0d8e0d0b39ce0": 1,
+      "8b04cb3842a198d77ad35330562415a5fa58e4a56733f37de42a075ce772d68c": 1,
+      "8bcedd67dd52d5fdc9e64b5cc0f4ca9999b6d559a4865d8f770a2e0b9a06891f": 1,
+      "8e80f60dfcb9bc1b8d4cc9f58d01a4a886d5f4f14de35538043ac84974b96872": 1,
+      "9bb9d4a82b59e0314907ed807c1ef02c93fd2f4979910075489fdcff4775d485": 1,
+      "a1038eb78e74fd193def0030c1e662b6b95a6b0dc04d0080e3450ea1d6e531ce": 1,
+      "aa2ed8160fbbb0e9d2da5c75b7e73ceb0cf2dc44b36a2c0cf6f54b9fa79f470b": 1,
+      "aad1918f6db51579f2f7433caf6eee2cfa7a881eaa78272c15e1b06e2b01a585": 1,
+      "b26deac74c366592954434c9e471408ddcc040b5db383cf425bdfb792ab7973e": 1,
+      "b6b6b50b99e724a27e8612df86c89692c4e16b375d6ed16cf5370fd7cea094db": 1,
+      "b9f7d2252cd1ba5a53697209d978f26604f1607566d999389eefbae4b90590f6": 1,
+      "bc769c01fa560fc00bb39e439f5a345051f8cb6da8fc995231a067baf3ce6fb8": 1,
+      "cc5069cf281c8b4c348fc5a4bf15e74171e420613c97b69434129bfd2a79e7dc": 1,
+      "cf3513e9d9524bbb83c5e24aa71d04e32f7c3234d51edf1e49cc09193ca74806": 1,
+      "d4adfad5f2d8ee002e15d0dd4e7ef1b4bf9128458b3abb4d33cde032e8a70e2f": 1,
+      "d5ccc39795ea419b5dd4446fe9e8cf57cf8e10d3e174e883effa2d2cb83d0ac4": 1,
+      "d8e964132f980d1d0fac0594035223f2a842deca457be3afe5ae835fd8c6d500": 1,
+      "e678c60d8041415f389fb568312177cf0ecff81dfb5a9f0c0d1b13e5c6908798": 1,
+      "f3e70c9841288459be64ac19aa67eb4526368b716b00cd3f33aa2887b07acb44": 1,
+      "f91cb622f95dd21d54beaa9f2a81767e8d7eb277ac864d7f6654e589e397d634": 1
+     },
+     "per_family": {
+      "blocker.no_blockers": 1,
+      "direction.ema_anchor_stack_trend": 2,
+      "exit.aggregate.any_signal": 1,
+      "exit.aggregate.min_distance": 2,
+      "exit.aggregate.min_ratio": 2,
+      "exit.aggregate.ready": 1,
+      "exit.distance.atr": 2,
+      "exit.select_bool": 2,
+      "exit.select_float": 4,
+      "indicator.adx": 2,
+      "indicator.atr": 1,
+      "indicator.atr_distance": 2,
+      "indicator.di_minus": 2,
+      "indicator.di_plus": 2,
+      "indicator.ema": 3,
+      "indicator.rsi": 1,
+      "mask.all": 9,
+      "mask.gated": 4,
+      "setup.anchor_stack_width.prefix": 1,
+      "setup.anchor_stack_width_setup": 1,
+      "setup.untouched_anchor_setup": 2,
+      "trigger.touch_anchor": 2
+     }
+    },
+    "plan": [
+     {
+      "plan_hash": "723a82ebcb94f5594b3091379b438934d22d79981c5cb98c0ee5631b2ea6b1f2",
+      "plan_labels": [
+       "ema_close_base_100",
+       "ema_close_base_200",
+       "ema_close_base_500",
+       "atr_close_base_48",
+       "atr_close_base_48_x3_0",
+       "atr_close_base_48_x6_0",
+       "adx_close_1h_14",
+       "di_plus_close_1h_14",
+       "di_minus_close_1h_14",
+       "rsi_close_base_14"
+      ],
+      "variant_index": 0
+     },
+     {
+      "plan_hash": "497cd25886b62c7dc7d99616570498294b9eb1a2879c953cd7234603bc66bbe8",
+      "plan_labels": [
+       "ema_close_base_100",
+       "ema_close_base_200",
+       "ema_close_base_500",
+       "atr_close_base_48",
+       "atr_close_base_48_x3_0",
+       "atr_close_base_48_x6_0",
+       "adx_close_base_14",
+       "di_plus_close_base_14",
+       "di_minus_close_base_14",
+       "rsi_close_base_14"
+      ],
+      "variant_index": 1
+     }
+    ],
+    "public": {
+     "lines": [
+      "83ec486d726e2a8f00f07ae51fa31c1358efad2c487100232a6c28b39f0eb769",
+      "ca9082b41e9cef8cd33357aa62ce22a622f107a8f0e774f1db96916c3127b52e"
+     ],
+     "termination": "complete"
+    }
+   },
+   "open_trade": {
+    "base_adx_unaligned": {
+     "long-3000": "33c136087259d6421c5a00a3c94e0c1ba07a20259b7cdfbe8b02606ff3723c4f",
+     "long-5500": "4b032c72d429e3f0475100423fbc931f8eec620b4202af0b4ab7e1fcbb0e755d",
+     "long-8000": "b95b5221335ff2cb3f9f27d0e6e718e696ae919ce99b7c762f3339eb5c506737",
+     "short-3000": "29fa1d6f4eab85af6688509d48107a4af85c77f5305e7ceb70f08978dbce8444",
+     "short-5500": "012f1285fab7f0ae1a6f44c9bc5e00fe78a8221a2bcc5425811314f600d669c7",
+     "short-8000": "9bb585645cce818800bf74a3ad569603bb7b7168c55a8c1a6ef83be5a185861d"
+    },
+    "htf_adx_aligned": {
+     "long-3000": "12a5bf76087bea4d82e7cbbcc8a69f34fa05ff2a7c45b2f2e94230d7ee20a30e",
+     "long-5500": "5b4e4b16f3dae38c1d94be3b956138aea9d617073c94ec16be389e7e8d9efbfa",
+     "long-8000": "c94b987423b3c463796621c1a6cadd36c7f1e8f99cfd1ac49da78912672a278f",
+     "short-3000": "287ad47beba6fa1dca9f2be87ba1a0291f4da8512f5fb91061ee9631faeae9d5",
+     "short-5500": "babb4d3b00e53675d7027e4ab77387981ac01996f0fad3a68ec313f3e2a4defa",
+     "short-8000": "610c68fc5bc45598118c44da824bbcbccaf9f2d3216efe0ab94115db51551749"
+    }
+   },
+   "replay": {
+    "base_adx_unaligned": {
+     "long-3000": "e6624904698d242871a53fa611f40947a065240ca37e7600ef335624bd6f5d05",
+     "long-5500": "eb1f697c2b269e44b806043eca48cbc74f1f561bcd2f7da0750b8b96db402701",
+     "long-8000": "10f53e0ce03b802762607f6b8ee9d538ce9e30772f0b1f59445cded384403d5f",
+     "short-3000": "9141ccb14fc10baedef984657fcaf23b4a8aaf382d6a25d68006f586941581f2",
+     "short-5500": "c45b2b1f15e92ea25dd3376e79708ec1cdc90ad1540cfb994f59e678e710b8e5",
+     "short-8000": "073ba2f8646126da695f658fd3ef771033f085ae177b339ad56c9dfa2601a6b6"
+    },
+    "htf_adx_aligned": {
+     "long-3000": "c658e45db3a59384f899109283846b9ddd675281a9bee04641fbc1a5c9f25897",
+     "long-5500": "97ef7fdddbd177b678f26f4cc302a0f5bc2b5d26f75591bd19faac8a31dbf096",
+     "long-8000": "5e86f865a874aa4bb3dd6d17e5f0c292335b8838c0c5320ff9d79c6e5e9ece34",
+     "short-3000": "ab6de16388ae9e24e5bb4a6e8af296127680fd67dff6542f519f3b56b67b7708",
+     "short-5500": "03a551ec2a439fd23be4d07c2c17bfaaac4ff110cb43f475dc15912afb254de6",
+     "short-8000": "3dbc2019c56bb83698e95769a153799af21033a1abc0d99885825598824d986a"
+    }
+   }
+  }
+ }
+}

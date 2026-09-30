@@ -20,7 +20,7 @@ candidate this bar" behavior without any special-casing.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.strategies.contracts import (
@@ -31,7 +31,13 @@ from strategy_engine.strategies.contracts import (
     ManagedRuntimeExitRule,
     ManagedStopActionRule,
     ManagedTakeActionRule,
+    ManagedTransitionAtLeast,
+    ManagedTransitionPath,
+    ManagedTransitionTerm,
+    ManagedTransitionThreshold,
+    TradeMetric,
 )
+from strategy_engine.strategies.ema_pullback.composite_spec import COMPOSITE_PHASE_CONDITION
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 from strategy_engine.strategies.ema_pullback.managed import (
     SeriesCache,
@@ -42,6 +48,16 @@ from strategy_engine.strategies.ema_pullback.managed import (
     _items,
     _mapping,
 )
+from strategy_engine.strategies.ema_pullback.managed_composite import (
+    ManagedPredicateIdentities,
+    adx_di_series,
+    fold_phase_paths,
+    parse_if_composite,
+)
+
+if TYPE_CHECKING:
+    from strategy_engine.indicators.evaluation_context import EvaluationContext
+    from strategy_engine.strategies.ema_pullback.contexts import ContextBundle
 
 _NAN = float("nan")
 
@@ -59,14 +75,155 @@ def _runtime_exit_class(
     return "runtime_close"
 
 
+_METRIC: dict[str, TradeMetric] = {
+    "mfe_atr": "mfe_distance",
+    "mfe_pct": "mfe_pct",
+    "bars_in_trade": "bars_since_entry",
+}
+_TRADE_ATOMS = frozenset(_METRIC)
+
+
+def _trade_threshold(
+    component_id: str,
+    params: Mapping[str, object],
+    frame: FeatureFrameLike,
+    plan: EmaPullbackFeaturePlan,
+    cache: SeriesCache,
+    bar_count: int,
+) -> tuple[tuple[float, ...], TradeMetric]:
+    """Per-bar threshold series and the trade metric it gates, for one
+    trade atom -- shared by atomic rules and composite trade children."""
+
+    if component_id == "mfe_atr":
+        atr_threshold = _float(params.get("threshold"), "mfe_atr.threshold", positive=True)
+        atr_ref = _mapping(params.get("atr"), "mfe_atr.atr")
+        key = (
+            str(atr_ref.get("timeframe", "")),
+            _int(atr_ref.get("period"), "mfe_atr.atr.period"),
+        )
+        atr_values = _cached_series(cache, frame, _atr_output_id(plan, key[0], key[1]) or "")
+        return (
+            tuple(
+                atr_threshold * atr if atr is not None and atr > 0 else _NAN for atr in atr_values
+            ),
+            _METRIC[component_id],
+        )
+    if component_id == "mfe_pct":
+        pct_threshold = _float(params.get("threshold"), "mfe_pct.threshold", positive=True)
+        return tuple(pct_threshold for _ in range(bar_count)), _METRIC[component_id]
+    bars_threshold = _int(params.get("threshold"), "bars_in_trade.threshold")
+    return tuple(float(bars_threshold) for _ in range(bar_count)), _METRIC[component_id]
+
+
+def _composite_paths(
+    rule_index: int,
+    rule_id: str,
+    condition: Mapping[str, object],
+    frame: FeatureFrameLike,
+    plan: EmaPullbackFeaturePlan,
+    cache: SeriesCache,
+    bar_count: int,
+    conditions: dict[str, ManagedConditionSeries],
+    distances: dict[str, tuple[float, ...]],
+    *,
+    bundle: ContextBundle | None,
+    context: EvaluationContext | None,
+    identities: ManagedPredicateIdentities | None,
+) -> tuple[ManagedTransitionPath, ...]:
+    """The `paths` variant (design D6): one condition series per path for
+    its folded market part, one distance per trade child, and the terms
+    of an `at_least` that holds a trade child."""
+
+    spec = parse_if_composite(condition, f"phase_rules[{rule_index}].condition")
+    assert spec is not None
+    by_side = {(index, side): children for index, side, children in identities or ()}
+    folds = {
+        side: fold_phase_paths(
+            spec,
+            frame,
+            plan,
+            side,
+            bundle=bundle,
+            context=context if (rule_index, side) in by_side else None,
+            identities=by_side.get((rule_index, side)),
+            series_cache=cache,
+        )
+        for side in ("long", "short")
+    }
+    long_fold, short_fold = folds["long"], folds["short"]
+
+    def market_term(child_id: str) -> str:
+        condition_id = f"phase:{rule_id}:child:{child_id}:condition"
+        if condition_id not in conditions:
+            conditions[condition_id] = ManagedConditionSeries(
+                tuple(long_fold.market_children[child_id].tolist()),
+                tuple(short_fold.market_children[child_id].tolist()),
+            )
+        return condition_id
+
+    def trade_term(child_id: str) -> ManagedTransitionThreshold:
+        # One distance per trade child, however many paths reference it.
+        distance_id = f"phase:{rule_id}:child:{child_id}:distance"
+        atom = spec.child(child_id).condition
+        assert atom is not None
+        component_id = str(atom.get("component_id", ""))
+        if distance_id not in distances:
+            distances[distance_id], _ = _trade_threshold(
+                component_id,
+                _mapping(atom.get("params", {}), "phase condition params"),
+                frame,
+                plan,
+                cache,
+                bar_count,
+            )
+        return ManagedTransitionThreshold(distance_id, _METRIC[component_id])
+
+    paths: list[ManagedTransitionPath] = []
+    for long_path, short_path in zip(long_fold.paths, short_fold.paths, strict=True):
+        condition_id: str | None = None
+        if long_path.market is not None:
+            assert short_path.market is not None
+            condition_id = f"phase:{rule_id}:path:{long_path.path_id}:condition"
+            conditions[condition_id] = ManagedConditionSeries(
+                tuple(long_path.market.tolist()), tuple(short_path.market.tolist())
+            )
+        at_least: ManagedTransitionAtLeast | None = None
+        if long_path.at_least_k is not None:
+            terms: list[ManagedTransitionTerm] = []
+            for ref in long_path.at_least_terms:
+                if ref in long_fold.market_children:
+                    terms.append(ManagedTransitionTerm(market_term(ref), None, None))
+                else:
+                    threshold = trade_term(ref)
+                    terms.append(
+                        ManagedTransitionTerm(None, threshold.distance_id, threshold.trade_metric)
+                    )
+            at_least = ManagedTransitionAtLeast(long_path.at_least_k, tuple(terms))
+        paths.append(
+            ManagedTransitionPath(
+                path_id=long_path.path_id,
+                condition_id=condition_id,
+                thresholds=tuple(trade_term(ref) for ref in long_path.trade_require),
+                at_least=at_least,
+            )
+        )
+    return tuple(paths)
+
+
 def build_historical_managed_projection(
     raw_spec: Mapping[str, object],
     frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
+    *,
+    bundle: ContextBundle | None = None,
+    context: EvaluationContext | None = None,
+    identities: ManagedPredicateIdentities | None = None,
 ) -> HistoricalManagedProjection | None:
     """`None` unless `exit_management.mode == "managed"` -- matches
     `HistoricalManagedProjection`'s own "only present when managed"
-    contract requirement."""
+    contract requirement. `bundle`, `context` and `identities` serve only
+    composite phase conditions: the HTF state of `state` predicates, and
+    memoized predicate children (design D7, D8)."""
 
     management = _mapping(raw_spec.get("trade_management", {}), "trade_management")
     config = _mapping(management.get("exit_management", {}), "exit_management")
@@ -79,40 +236,44 @@ def build_historical_managed_projection(
     distances: dict[str, tuple[float, ...]] = {}
     rules: list[ManagedRule] = []
 
-    for phase_rule in _items(config.get("phase_rules", ()), "phase_rules"):
+    for rule_index, phase_rule in enumerate(_items(config.get("phase_rules", ()), "phase_rules")):
         rule_id = str(phase_rule.get("rule_id", ""))
         target_phase = str(phase_rule.get("to_phase", ""))
         condition = _mapping(phase_rule.get("condition"), f"phase_rules[{rule_id}].condition")
         component_id = str(condition.get("component_id", ""))
         params = _mapping(condition.get("params", {}), "phase condition params")
 
+        if component_id == COMPOSITE_PHASE_CONDITION:
+            rules.append(
+                ManagedPhaseTransitionRule(
+                    kind="phase_transition",
+                    rule_id=rule_id,
+                    target_phase=target_phase,
+                    condition_id=None,
+                    distance_id=None,
+                    trade_metric=None,
+                    paths=_composite_paths(
+                        rule_index,
+                        rule_id,
+                        condition,
+                        frame,
+                        plan,
+                        cache,
+                        bar_count,
+                        conditions,
+                        distances,
+                        bundle=bundle,
+                        context=context,
+                        identities=identities,
+                    ),
+                )
+            )
+            continue
+
         if component_id == "adx_di_threshold":
-            key = (
-                str(params.get("timeframe", "")),
-                _int(params.get("period"), "adx_di_threshold.period"),
-            )
-            columns = plan.adx_dmi_columns.get(key, {})
-            adx_values = _cached_series(cache, frame, columns.get("adx", ""))
-            plus_values = _cached_series(cache, frame, columns.get("di_plus", ""))
-            minus_values = _cached_series(cache, frame, columns.get("di_minus", ""))
-            adx_threshold = _float(
-                params.get("adx_threshold"), "adx_di_threshold.adx_threshold", positive=True
-            )
-            require = params.get("require_di_alignment", True)
-            long_series: list[bool] = []
-            short_series: list[bool] = []
-            for adx, plus, minus in zip(adx_values, plus_values, minus_values, strict=True):
-                if adx is None or plus is None or minus is None:
-                    long_series.append(False)
-                    short_series.append(False)
-                    continue
-                ok = adx >= adx_threshold
-                long_series.append(ok and (not require or plus > minus))
-                short_series.append(ok and (not require or minus > plus))
+            long_series, short_series = adx_di_series(params, frame, plan, cache)
             condition_id = f"phase:{rule_id}:condition"
-            conditions[condition_id] = ManagedConditionSeries(
-                tuple(long_series), tuple(short_series)
-            )
+            conditions[condition_id] = ManagedConditionSeries(long_series, short_series)
             rules.append(
                 ManagedPhaseTransitionRule(
                     kind="phase_transition",
@@ -125,17 +286,10 @@ def build_historical_managed_projection(
             )
             continue
 
-        if component_id == "mfe_atr":
-            atr_threshold = _float(params.get("threshold"), "mfe_atr.threshold", positive=True)
-            atr_ref = _mapping(params.get("atr"), "mfe_atr.atr")
-            key = (
-                str(atr_ref.get("timeframe", "")),
-                _int(atr_ref.get("period"), "mfe_atr.atr.period"),
-            )
-            atr_values = _cached_series(cache, frame, _atr_output_id(plan, key[0], key[1]) or "")
+        if component_id in _TRADE_ATOMS:
             distance_id = f"phase:{rule_id}:distance"
-            distances[distance_id] = tuple(
-                atr_threshold * atr if atr is not None and atr > 0 else _NAN for atr in atr_values
+            distances[distance_id], trade_metric = _trade_threshold(
+                component_id, params, frame, plan, cache, bar_count
             )
             rules.append(
                 ManagedPhaseTransitionRule(
@@ -144,39 +298,7 @@ def build_historical_managed_projection(
                     target_phase=target_phase,
                     condition_id=None,
                     distance_id=distance_id,
-                    trade_metric="mfe_distance",
-                )
-            )
-            continue
-
-        if component_id == "mfe_pct":
-            pct_threshold = _float(params.get("threshold"), "mfe_pct.threshold", positive=True)
-            distance_id = f"phase:{rule_id}:distance"
-            distances[distance_id] = tuple(pct_threshold for _ in range(bar_count))
-            rules.append(
-                ManagedPhaseTransitionRule(
-                    kind="phase_transition",
-                    rule_id=rule_id,
-                    target_phase=target_phase,
-                    condition_id=None,
-                    distance_id=distance_id,
-                    trade_metric="mfe_pct",
-                )
-            )
-            continue
-
-        if component_id == "bars_in_trade":
-            bars_threshold = _int(params.get("threshold"), "bars_in_trade.threshold")
-            distance_id = f"phase:{rule_id}:distance"
-            distances[distance_id] = tuple(float(bars_threshold) for _ in range(bar_count))
-            rules.append(
-                ManagedPhaseTransitionRule(
-                    kind="phase_transition",
-                    rule_id=rule_id,
-                    target_phase=target_phase,
-                    condition_id=None,
-                    distance_id=distance_id,
-                    trade_metric="bars_since_entry",
+                    trade_metric=trade_metric,
                 )
             )
             continue

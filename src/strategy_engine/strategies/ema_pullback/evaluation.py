@@ -39,6 +39,12 @@ from strategy_engine.strategies.ema_pullback.feature_plan import (
     EmaPullbackFeaturePlan,
     resolve_feature_identities,
 )
+from strategy_engine.strategies.ema_pullback.managed_composite import (
+    ManagedPredicateIdentities,
+    has_managed_predicates,
+    managed_predicate_consumptions,
+    resolve_managed_predicates,
+)
 from strategy_engine.strategies.ema_pullback.potential_entries import (
     PotentialEntry,
     project_potential_entries,
@@ -207,6 +213,10 @@ class MemoizedStageIdentities:
     setups: tuple[SideSetupIdentity, ...] | None
     triggers: tuple[SideTriggerIdentity, ...] | None
     exit_policy: ExitPolicyIdentity | None = None
+    # Predicate children of composite phase conditions, consumed by the
+    # managed projection (composite-managed-phase-condition-v1 design D8);
+    # empty for every spec without one.
+    managed: ManagedPredicateIdentities | None = None
 
 
 def resolve_memoized_stages(
@@ -242,7 +252,11 @@ def resolve_memoized_stages(
         exit_policy = resolve_memoized_exit_policy(raw_spec, planned, features, contexts)
     except Exception:
         return MemoizedStageIdentities(direction_blockers, setups, triggers, None)
-    return MemoizedStageIdentities(direction_blockers, setups, triggers, exit_policy)
+    try:
+        managed = resolve_managed_predicates(raw_spec, features, contexts)
+    except Exception:
+        return MemoizedStageIdentities(direction_blockers, setups, triggers, exit_policy, None)
+    return MemoizedStageIdentities(direction_blockers, setups, triggers, exit_policy, managed)
 
 
 def memoized_stage_consumptions(stages: MemoizedStageIdentities) -> tuple[NodeSpec, ...]:
@@ -280,6 +294,8 @@ def memoized_stage_consumptions(stages: MemoizedStageIdentities) -> tuple[NodeSp
         consumed += (side_trigger.trigger, side_trigger.pre_risk_entry_allowed)
     if stages.exit_policy is not None:
         consumed += exit_policy_consumptions(stages.exit_policy)
+    if stages.managed is not None:
+        consumed += managed_predicate_consumptions(stages.managed)
     return tuple(consumed)
 
 
@@ -297,11 +313,39 @@ def _memo_identities(
     (string-serialized) frame's values are not the native values the memo
     holds."""
 
-    if (
+    if not _memoizable(frame, context):
+        return None
+    assert isinstance(frame, NativeFeatureFrame)
+    return resolve_memoized_stages(raw_spec, planned, base_timeframe=frame.market.base_timeframe)
+
+
+def _memoizable(frame: FeatureFrameLike, context: EvaluationContext | None) -> bool:
+    return not (
         context is None
         or not isinstance(frame, NativeFeatureFrame)
         or frame.market_arrays is None
         or frame.market_arrays is not context.market_arrays
-    ):
+    )
+
+
+def managed_memo_identities(
+    raw_spec: Mapping[str, Any],
+    frame: FeatureFrameLike,
+    planned: EmaPullbackFeaturePlan,
+    context: EvaluationContext | None,
+) -> ManagedPredicateIdentities | None:
+    """The managed stage for the projection under the same gate as
+    `_memo_identities`, resolved by the same `resolve_managed_predicates`
+    the pre-pass uses. `None` (no memo) when the gate fails, when no
+    composite phase condition has a predicate child -- then nothing is
+    resolved at all -- or when resolution fails."""
+
+    if not _memoizable(frame, context) or not has_managed_predicates(raw_spec):
         return None
-    return resolve_memoized_stages(raw_spec, planned, base_timeframe=frame.market.base_timeframe)
+    assert isinstance(frame, NativeFeatureFrame)
+    try:
+        features = resolve_feature_identities(planned, base_timeframe=frame.market.base_timeframe)
+        contexts = resolve_context_bundle(raw_spec, planned, features)
+        return resolve_managed_predicates(raw_spec, features, contexts)
+    except Exception:
+        return None
