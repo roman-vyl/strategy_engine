@@ -9,6 +9,7 @@ from typing import Any, cast
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.node_identity import NodeSpec
 from strategy_engine.indicators.contracts import IndicatorPlan, PlannedFeature
+from strategy_engine.indicators.feature_kinds import feature_kind, feature_kinds
 from strategy_engine.indicators.implementations.range_evaluator import (
     resolve_feature,
     resolve_indicator_plan,
@@ -23,7 +24,7 @@ from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     resolve_exit_rule_groups,
 )
 
-_ALLOWED_KINDS = {"ema", "atr", "atr_distance", "rsi", "adx", "di_plus", "di_minus"}
+_ALLOWED_KINDS = frozenset(contract.kind for contract in feature_kinds())
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,24 +80,24 @@ def _positive_int(value: Any, path: str) -> int:
     return cast(int, value)
 
 
+def _label(kind: str, timeframe: str, period: int) -> str:
+    return feature_kind(kind).label(timeframe, "close", {"period": period}, ())
+
+
 def _ema_id(timeframe: str, period: int) -> str:
-    return f"ema_close_{timeframe}_{period}"
+    return _label("ema", timeframe, period)
 
 
 def _atr_id(timeframe: str, period: int) -> str:
-    return f"atr_close_{timeframe}_{period}"
+    return _label("atr", timeframe, period)
 
 
 def _rsi_id(timeframe: str, period: int) -> str:
-    return f"rsi_close_{timeframe}_{period}"
+    return _label("rsi", timeframe, period)
 
 
 def _adx_id(kind: str, timeframe: str, period: int) -> str:
-    return f"{kind}_close_{timeframe}_{period}"
-
-
-def _multiplier_token(multiplier: float) -> str:
-    return str(float(multiplier)).replace(".", "_")
+    return _label(kind, timeframe, period)
 
 
 def _ema(raw: Any, path: str) -> tuple[str, str, int]:
@@ -270,7 +271,9 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
         period = _positive_int(payload.get("period", 14), f"exits[{index}].distance.period")
         multiplier = float(cast(int | float | str, payload.get("multiplier")))
         base_id = add_atr(timeframe, period)
-        distance_id = f"{base_id}_x{_multiplier_token(multiplier)}"
+        distance_id = feature_kind("atr_distance").label(
+            timeframe, None, {"multiplier": multiplier}, (base_id,)
+        )
         add(
             PlannedFeature(
                 distance_id,

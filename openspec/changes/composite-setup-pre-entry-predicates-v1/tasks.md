@@ -73,29 +73,29 @@ every group.
 
 ## 3. Canonical feature-kind contract (indicator layer, design D13)
 
-- [ ] 3.1 Add `indicators/feature_kinds.py` with one `FeatureKindContract`
+- [x] 3.1 Add `indicators/feature_kinds.py` with one `FeatureKindContract`
       per existing kind (`ema`, `atr`, `atr_distance`, `rsi`, `adx`,
       `di_plus`, `di_minus`). Each entry holds the schema (moved from
       `service/registries.py`), the default source, the `requestable`
       flag, the existing validator, the label and the identity params.
       Also add `feature_kind()`, `feature_kinds()` and
       `plan_feature_request()`.
-- [ ] 3.2 Make `IndicatorRegistry` delegate to `feature_kinds()`.
+- [x] 3.2 Make `IndicatorRegistry` delegate to `feature_kinds()`.
       Responses and validation errors must stay unchanged.
-- [ ] 3.3 In `feature_plan.py`, derive `_ALLOWED_KINDS` from the
+- [x] 3.3 In `feature_plan.py`, derive `_ALLOWED_KINDS` from the
       contract and route the label functions through
       `FeatureKindContract.label`. Labels must stay unchanged.
-- [ ] 3.4 In `resolve_feature`, build identity params as
+- [x] 3.4 In `resolve_feature`, build identity params as
       `{timeframe, source, **identity_params}`. Identities of existing
       kinds must stay unchanged, and `atr_distance` keeps its explicit
       dependency identity.
-- [ ] 3.5 Tests:
+- [x] 3.5 Tests:
       - registry responses, labels and identities of every existing
         kind are unchanged (group 0 artifacts);
       - an unknown kind fails closed;
       - a test-only contract entry for a fake kind with an extra
         parameter gets distinct identities per parameter value.
-- [ ] 3.6 Run the group 0 regression gate.
+- [x] 3.6 Run the group 0 regression gate.
 
 ## 4. Predicates over canonical features
 
