@@ -157,17 +157,18 @@ every group.
 
 ## 6. End-to-end and cost verification
 
-- [ ] 6.1 Owner example end-to-end. Run the two-path spec (HTF held,
+- [x] 6.1 Owner example end-to-end. Run the two-path spec (HTF held,
       ADX 1h/5m, RSI, `at_least`) through `/range-batch`. Check the
       final masks and `winning_path` against the naive reference.
-- [ ] 6.2 Wall-clock A/B on the `batch-computation-reuse` benchmark
+- [x] 6.2 (done on the 12,000-bar fixture with a real-sweep-shaped grid;
+      a full-history run on the owner machine is open, see the report) Wall-clock A/B on the `batch-computation-reuse` benchmark
       workload (BTCUSDT.P 5m, real sweep requests) for specs without
       `composite_setup`. There must be no regression beyond noise.
       Record the numbers in `benchmark-report.md`.
-- [ ] 6.3 Composite overhead measurement. Compare a single-child
+- [x] 6.3 Composite overhead measurement. Compare a single-child
       composite with the plain setup: feature compute counts must be
       equal. Record the time difference.
-- [ ] 6.4 Lint, format, typecheck and the full test suite.
+- [x] 6.4 Lint, format, typecheck and the full test suite.
 
 ## 7. Spec sync
 
