@@ -262,6 +262,13 @@ def memoized_stage_consumptions(stages: MemoizedStageIdentities) -> tuple[NodeSp
             consumed.append(setup.local)
             if setup.width_prefix is not None:
                 consumed.append(setup.width_prefix)
+            # A composite consumes its children from inside its own compute
+            # (like the width prefix): predicted per composite consumption,
+            # released by the root when the composite is served from memo.
+            for child in setup.children:
+                consumed.append(child.local)
+                if child.width_prefix is not None:
+                    consumed.append(child.width_prefix)
             consumed.append(setup.final)
         consumed += (side_setups.setups_ok, side_setups.pre_trigger_allowed)
     for side_trigger in stages.triggers or ():

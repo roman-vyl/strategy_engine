@@ -16,6 +16,12 @@ from strategy_engine.domain.node_identity import NodeSpec, node_spec
 from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.indicators.evaluation_context import EvaluationContext, compute_through
 from strategy_engine.indicators.market_arrays import frame_market_arrays
+from strategy_engine.strategies.ema_pullback.composite_spec import (
+    COMPOSITE_SETUP,
+    CompositeSpec,
+    child_setup_item,
+    parse_composite_setup,
+)
 from strategy_engine.strategies.ema_pullback.context_consumption import (
     ContextConsumptionRecord,
     GateIdentity,
@@ -495,6 +501,146 @@ def _setup_columns(plan: EmaPullbackFeaturePlan, instance_id: str) -> dict[str, 
     return columns
 
 
+_SetupCompute = functools.partial[tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]]
+
+
+def _semantic_setup_compute(
+    component_id: str,
+    instance_id: str,
+    params: Mapping[str, Any],
+    frame: FeatureFrameLike,
+    plan: EmaPullbackFeaturePlan,
+    side: str,
+    *,
+    context: EvaluationContext | None,
+    identity: SetupIdentity | None,
+) -> _SetupCompute:
+    """The local computation of one existing semantic setup, exactly as
+    `_setup` dispatched it before `composite_setup` existed (shared by
+    top-level setups and composite setup children)."""
+
+    if component_id == "untouched_anchor_setup":
+        return functools.partial(
+            _untouched_anchor, frame, plan.anchor_columns["anchor"], params, side
+        )
+    if component_id == "ema_bounce_counter_setup":
+        columns = _setup_columns(plan, instance_id)
+        return functools.partial(_ema_bounce_counter, frame, columns, params, side)
+    columns = _setup_columns(plan, instance_id)
+    return functools.partial(
+        _anchor_stack_width,
+        frame,
+        columns,
+        params,
+        context=context,
+        prefix_id=identity.width_prefix if identity else None,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class CompositeCore:
+    """Label-free result of one composite evaluation (the memoized value;
+    design D10/D11): child masks in declared child order, path masks and
+    at-least counts in declared path order, and the index of the first
+    true path per bar (-1 when none)."""
+
+    local: tuple[bool, ...]
+    child_masks: tuple[tuple[bool, ...], ...]
+    path_masks: tuple[tuple[bool, ...], ...]
+    at_least_counts: tuple[tuple[int, ...] | None, ...]
+    winning_index: tuple[int, ...]
+
+
+def _composite_core(
+    spec: CompositeSpec,
+    frame: FeatureFrameLike,
+    plan: EmaPullbackFeaturePlan,
+    side: str,
+    *,
+    context: EvaluationContext | None,
+    children: tuple[SetupIdentity, ...] | None,
+) -> CompositeCore:
+    """Evaluate every child once, then every path, vectorized: a path is
+    AND(require) AND (count(of) >= k); the composite is the OR of paths."""
+
+    length = len(frame.time_ms)
+    child_masks: list[tuple[bool, ...]] = []
+    arrays: dict[str, np.ndarray] = {}
+    for index, child in enumerate(spec.children):
+        if child.setup is None:
+            raise InvalidRequestError(
+                "composite predicate children are not supported yet", child_id=child.child_id
+            )
+        item = child_setup_item(spec, child)
+        child_identity = children[index] if children is not None else None
+        component_id, instance_id, params = _setup_head(item, side)
+        compute = _semantic_setup_compute(
+            component_id,
+            instance_id,
+            params,
+            frame,
+            plan,
+            side,
+            context=context,
+            identity=child_identity,
+        )
+        mask, _trace = compute_through(
+            context, child_identity.local if child_identity else None, compute
+        )
+        if len(mask) != length:
+            raise InvalidRequestError(
+                "composite child mask length mismatch", child_id=child.child_id
+            )
+        child_masks.append(mask)
+        arrays[child.child_id] = np.asarray(mask, dtype=bool)
+    path_masks: list[tuple[bool, ...]] = []
+    counts: list[tuple[int, ...] | None] = []
+    path_arrays: list[np.ndarray] = []
+    for composite_path in spec.paths:
+        path_mask = np.ones(length, dtype=bool)
+        for ref in composite_path.require:
+            path_mask &= arrays[ref]
+        if composite_path.at_least_k is not None:
+            count = np.zeros(length, dtype=np.int64)
+            for ref in composite_path.at_least_of:
+                count += arrays[ref]
+            path_mask &= count >= composite_path.at_least_k
+            counts.append(tuple(count.tolist()))
+        else:
+            counts.append(None)
+        path_arrays.append(path_mask)
+        path_masks.append(tuple(path_mask.tolist()))
+    stacked = np.array(path_arrays, dtype=bool).reshape(len(path_arrays), length)
+    local = np.logical_or.reduce(stacked, axis=0, initial=False)
+    winning = np.where(local, np.argmax(stacked, axis=0), -1)
+    return CompositeCore(
+        local=tuple(local.tolist()),
+        child_masks=tuple(child_masks),
+        path_masks=tuple(path_masks),
+        at_least_counts=tuple(counts),
+        winning_index=tuple(winning.tolist()),
+    )
+
+
+def _composite_trace(spec: CompositeSpec, core: CompositeCore) -> dict[str, tuple[object, ...]]:
+    """Attach this item's labels to the label-free core (outside the memo:
+    two composites with the same structure but different ids share one
+    core yet each get their own labels)."""
+
+    trace: dict[str, tuple[object, ...]] = {}
+    for child, mask in zip(spec.children, core.child_masks, strict=True):
+        trace[f"child:{child.child_id}"] = mask
+    for composite_path, mask, count in zip(
+        spec.paths, core.path_masks, core.at_least_counts, strict=True
+    ):
+        trace[f"path:{composite_path.path_id}"] = mask
+        if count is not None:
+            trace[f"path:{composite_path.path_id}:at_least_count"] = count
+    labels = np.array([item.path_id for item in spec.paths] + [None], dtype=object)
+    trace["winning_path"] = tuple(labels[np.asarray(core.winning_index, dtype=np.int64)].tolist())
+    return trace
+
+
 def _setup(
     item: Mapping[str, Any],
     frame: FeatureFrameLike,
@@ -506,25 +652,27 @@ def _setup(
     identity: SetupIdentity | None = None,
 ) -> SetupMask:
     component_id, instance_id, params = _setup_head(item, side)
-    compute: functools.partial[tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]]
-    if component_id == "untouched_anchor_setup":
-        compute = functools.partial(
-            _untouched_anchor, frame, plan.anchor_columns["anchor"], params, side
+    if component_id == COMPOSITE_SETUP:
+        spec = parse_composite_setup(item, f"setup[{instance_id}]")
+        core = compute_through(
+            context,
+            identity.local if identity else None,
+            functools.partial(
+                _composite_core,
+                spec,
+                frame,
+                plan,
+                side,
+                context=context,
+                children=identity.children if identity else None,
+            ),
         )
-    elif component_id == "ema_bounce_counter_setup":
-        columns = _setup_columns(plan, instance_id)
-        compute = functools.partial(_ema_bounce_counter, frame, columns, params, side)
+        local, trace = core.local, _composite_trace(spec, core)
     else:
-        columns = _setup_columns(plan, instance_id)
-        compute = functools.partial(
-            _anchor_stack_width,
-            frame,
-            columns,
-            params,
-            context=context,
-            prefix_id=identity.width_prefix if identity else None,
+        compute = _semantic_setup_compute(
+            component_id, instance_id, params, frame, plan, side, context=context, identity=identity
         )
-    local, trace = compute_through(context, identity.local if identity else None, compute)
+        local, trace = compute_through(context, identity.local if identity else None, compute)
     gate = _gate_for(records, instance_id=instance_id, side=side)
     final = compute_through(
         context,
@@ -629,6 +777,7 @@ class SetupIdentity:
     local: NodeSpec
     final: NodeSpec
     width_prefix: NodeSpec | None = None
+    children: tuple[SetupIdentity, ...] = ()
 
 
 def resolve_setup_local(
@@ -646,6 +795,8 @@ def resolve_setup_local(
 
     component_id, instance_id, params = _setup_head(item, side)
     kind = f"setup.{component_id}"
+    if component_id == COMPOSITE_SETUP:
+        raise InvalidRequestError("composite_setup resolves through resolve_setup_identity")
     if component_id == "untouched_anchor_setup":
         lookback, active_bars = _untouched_anchor_params(params)
         return (
@@ -702,6 +853,83 @@ def resolve_setup_local(
     return local, prefix
 
 
+def _resolve_composite(
+    item: Mapping[str, Any],
+    plan: EmaPullbackFeaturePlan,
+    feature_ids: Mapping[str, NodeSpec],
+    side: str,
+) -> tuple[NodeSpec, tuple[SetupIdentity, ...]]:
+    """`(composite local identity, child identities)`. Children are ordered
+    upstream roles and paths reference them by position, so neither
+    `instance_id`, `child_id` nor `path_id` enters any identity."""
+
+    _component_id, instance_id, _params = _setup_head(item, side)
+    spec = parse_composite_setup(item, f"setup[{instance_id}]")
+    positions = {child.child_id: index for index, child in enumerate(spec.children)}
+    children: list[SetupIdentity] = []
+    for child in spec.children:
+        if child.setup is None:
+            raise InvalidRequestError(
+                "composite predicate children are not supported yet", child_id=child.child_id
+            )
+        child_item = child_setup_item(spec, child)
+        local, prefix = resolve_setup_local(child_item, plan, feature_ids, side)
+        children.append(
+            SetupIdentity(
+                instance_id=child_item["instance_id"],
+                side=side,
+                local=local,
+                final=local,
+                width_prefix=prefix,
+            )
+        )
+    paths = tuple(
+        (
+            tuple(positions[ref] for ref in composite_path.require),
+            composite_path.at_least_k,
+            tuple(positions[ref] for ref in composite_path.at_least_of),
+        )
+        for composite_path in spec.paths
+    )
+    local = node_spec(
+        f"setup.{COMPOSITE_SETUP}",
+        version=SETUP_NODE_VERSION,
+        params={"paths": paths},
+        upstream={f"child_{index}": child.local for index, child in enumerate(children)},
+    )
+    return local, tuple(children)
+
+
+def resolve_setup_identity_for_side(
+    item: Mapping[str, Any],
+    plan: EmaPullbackFeaturePlan,
+    feature_ids: Mapping[str, NodeSpec],
+    gates: tuple[GateIdentity, ...],
+    side: str,
+) -> SetupIdentity:
+    """The full identity of one setup item for one side (plain or composite)."""
+
+    component_id, instance_id = _setup_identity(item)
+    gate = gate_node_for(gates, role="setup", instance_id=instance_id, side=side)
+    if component_id == COMPOSITE_SETUP:
+        local, children = _resolve_composite(item, plan, feature_ids, side)
+        return SetupIdentity(
+            instance_id=instance_id,
+            side=side,
+            local=local,
+            final=gated_mask_node(local, gate),
+            children=children,
+        )
+    local, prefix = resolve_setup_local(item, plan, feature_ids, side)
+    return SetupIdentity(
+        instance_id=instance_id,
+        side=side,
+        local=local,
+        final=gated_mask_node(local, gate),
+        width_prefix=prefix,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class SideSetupIdentity:
     side: str
@@ -722,20 +950,10 @@ def resolve_setups(
     setup_items = _setup_items(raw_spec)
     outputs: list[SideSetupIdentity] = []
     for prior in direction_blockers:
-        setups: list[SetupIdentity] = []
-        for item in setup_items:
-            local, prefix = resolve_setup_local(item, plan, feature_ids, prior.side)
-            _component_id, instance_id = _setup_identity(item)
-            gate = gate_node_for(gates, role="setup", instance_id=instance_id, side=prior.side)
-            setups.append(
-                SetupIdentity(
-                    instance_id=instance_id,
-                    side=prior.side,
-                    local=local,
-                    final=gated_mask_node(local, gate),
-                    width_prefix=prefix,
-                )
-            )
+        setups = [
+            resolve_setup_identity_for_side(item, plan, feature_ids, gates, prior.side)
+            for item in setup_items
+        ]
         setups_ok = and_masks_node("mask.all", tuple(setup.final for setup in setups))
         outputs.append(
             SideSetupIdentity(

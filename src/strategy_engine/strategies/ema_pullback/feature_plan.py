@@ -13,6 +13,11 @@ from strategy_engine.indicators.implementations.range_evaluator import (
     resolve_feature,
     resolve_indicator_plan,
 )
+from strategy_engine.strategies.ema_pullback.composite_spec import (
+    COMPOSITE_SETUP,
+    child_setup_item,
+    parse_composite_setup,
+)
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     require_non_empty_instance_id,
     resolve_exit_rule_groups,
@@ -215,17 +220,13 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
     exit_columns: dict[str, str] = {}
     ema_columns: dict[tuple[str, int], str] = {}
     setup_columns: dict[str, dict[str, str]] = {}
-    setups = _sequence(root.get("setups"), "setups")
-    for index, setup_raw in enumerate(setups):
-        setup = _mapping(setup_raw, f"setups[{index}]")
-        params = _mapping(setup.get("params", {}), f"setups[{index}].params")
-        component_id = str(setup.get("component_id", ""))
-        instance_id = str(setup.get("instance_id", ""))
+
+    def plan_setup_columns(
+        component_id: str, instance_id: str, params: Mapping[str, Any], path: str
+    ) -> None:
         if component_id == "anchor_stack_width_setup":
             timeframe = str(params.get("atr_timeframe", "base"))
-            period = _positive_int(
-                params.get("atr_period", 14), f"setups[{index}].params.atr_period"
-            )
+            period = _positive_int(params.get("atr_period", 14), f"{path}.params.atr_period")
             setup_columns[instance_id] = {
                 "fast": fast,
                 "anchor": anchor,
@@ -234,6 +235,27 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
             }
         elif component_id == "ema_bounce_counter_setup":
             setup_columns[instance_id] = {"fast": fast, "anchor": anchor, "slow": slow}
+
+    setups = _sequence(root.get("setups"), "setups")
+    for index, setup_raw in enumerate(setups):
+        setup = _mapping(setup_raw, f"setups[{index}]")
+        params = _mapping(setup.get("params", {}), f"setups[{index}].params")
+        component_id = str(setup.get("component_id", ""))
+        instance_id = str(setup.get("instance_id", ""))
+        if component_id == COMPOSITE_SETUP:
+            composite = parse_composite_setup(setup, f"setups[{index}]")
+            for child_index, child in enumerate(composite.children):
+                if child.setup is None:
+                    continue
+                child_item = child_setup_item(composite, child)
+                plan_setup_columns(
+                    child_item["component_id"],
+                    child_item["instance_id"],
+                    child_item["params"],
+                    f"setups[{index}].params.children[{child_index}].setup",
+                )
+        else:
+            plan_setup_columns(component_id, instance_id, params, f"setups[{index}]")
 
     rsi_columns: dict[tuple[str, int], str] = {}
     adx_dmi_columns: dict[tuple[str, int], dict[str, str]] = {}

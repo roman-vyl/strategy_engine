@@ -2,8 +2,7 @@
 
 ### Requirement: Identity twins for predicates and composites
 
-Every predicate, predicate column array, composite path and composite
-local node SHALL have a resolve twin that yields its `NodeSpec` without
+Every predicate, predicate column array and composite local node SHALL have a resolve twin that yields its `NodeSpec` without
 computing it.
 
 - Labels (`instance_id`, `child_id`, `path_id`) SHALL NOT enter any

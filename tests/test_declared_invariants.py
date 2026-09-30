@@ -14,7 +14,6 @@ import json
 from typing import Any
 
 import pytest
-
 from parity.corpus import all_cases
 from parity.invariants import case_invariants, indicator_contract_invariants
 from parity.record_invariants import BASELINE_PATH

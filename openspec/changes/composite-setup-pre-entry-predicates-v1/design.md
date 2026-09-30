@@ -238,8 +238,10 @@ validity already reflects indicator warm-up.
 - Semantic setup children are planned by the existing per-component
   code, keyed by the internal instance key `"{instance_id}/{child_id}"`
   in `setup_columns_by_instance_id`.
-  - A `/` is rejected in user-supplied `instance_id` and `child_id`,
-    so the key cannot collide with a top-level `instance_id`.
+  - A `/` is rejected in a composite's own `instance_id`, `child_id`
+    and `path_id`. A top-level setup `instance_id` equal to an internal
+    key is rejected. Existing specs, whose ids may contain `/`, stay
+    valid.
 - For specs without `composite_setup`, the plan is unchanged: same
   features, same order, same `plan_hash`.
 
@@ -283,11 +285,18 @@ Identity nodes:
 | `predicate.range` | `min`, `max` | operand identity | set only for `short` predicates |
 | `predicate.state` | sorted `in` | context node | the side |
 | `predicate.temporal` | `mode`, `bars` | inner predicate | inherited |
-| `composite.path` | `k` | `require` = frozenset of child identities; `of` = frozenset | — |
-| `setup.composite_setup` (local) | — | paths as ordered roles `path_0..path_{m-1}` | — |
+| `setup.composite_setup` (local) | `paths` = per path `(require positions, k, of positions)` | children as ordered roles `child_0..child_{m-1}` | — (sides enter through child identities) |
 
-- **`composite.path`.** AND and N-of-M are commutative.
-- **Composite local.** Order matters for the `winning_path` trace.
+- **Composite local.**
+  - Children are ordered roles and paths reference them by position.
+    Order matters for the positional core and the `winning_path` trace.
+  - Path masks are computed inside the composite node and are not
+    memoized separately.
+  - The memoized value is label-free: child masks, path masks, at-least
+    counts and the winning path index. Labels (`child:<id>`,
+    `path:<id>`, winning path names) are attached outside the memo, so
+    two composites with the same structure but different ids share one
+    computation.
 - **Semantic children** reuse `resolve_setup_local` unchanged.
 - **Labels.** `instance_id`, `child_id` and `path_id` are labels and
   never enter an identity.

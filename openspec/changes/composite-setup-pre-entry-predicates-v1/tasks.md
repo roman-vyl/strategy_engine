@@ -4,7 +4,7 @@ every group.
 
 ## 0. Baseline
 
-- [ ] 0.1 Record the pre-change baseline on the current `main` for the
+- [x] 0.1 Record the pre-change baseline on the current `main` for the
       existing parity corpus (specs without `composite_setup`). Record
       only the quantities this change promises to keep invariant:
       - the public strategy evaluation result as already compared by
@@ -16,7 +16,7 @@ every group.
         style);
       - `IndicatorRegistry` responses (`list_definitions`, `get_schema`)
         and `resolve_feature` identities for every existing kind.
-- [ ] 0.2 Add a regression test that asserts exactly these invariants
+- [x] 0.2 Add a regression test that asserts exactly these invariants
       against the baseline for specs without `composite_setup`.
       - The artifact SHALL NOT be a snapshot of whole internal
         serializations. Trace key order, reprs, debug-only fields,
@@ -29,9 +29,10 @@ every group.
 
 ## 1. Static contract and validation
 
-- [ ] 1.1 Add `composite_setup` to `SETUP_SUPPORTED`
+- [x] 1.1 Add `composite_setup` to `SETUP_SUPPORTED`
       (`raw_spec_identity.py`).
-- [ ] 1.2 Implement market-data-free validation of the composite shape
+- [ ] 1.2 (structure done in `composite_spec.py`; predicate-child validation lands
+      with group 4) Implement market-data-free validation of the composite shape
       in `static_semantics.py` (design D1, D2, D3, D12):
       - children, paths and references;
       - no unreferenced children, no nested composite, no nested
@@ -42,33 +43,33 @@ every group.
       - `short` override only on `compare`/`range`; `side_relative` or
         any automatic inversion flag is rejected;
       - temporal `of` is non-temporal.
-- [ ] 1.3 Unit tests: one rejection test per validation rule, plus
+- [x] 1.3 Unit tests: one rejection test per validation rule, plus
       acceptance of the owner's example spec (two paths, HTF, ADX
       1h/5m, RSI, `at_least`).
 
 ## 2. Composite skeleton with semantic setup children
 
-- [ ] 2.1 `feature_plan.py`: recurse into composite setup children and
+- [x] 2.1 `feature_plan.py`: recurse into composite setup children and
       plan them by the existing per-component code under the key
       `"{instance_id}/{child_id}"`.
-- [ ] 2.2 `setups.py`:
+- [x] 2.2 `setups.py`:
       - composite branch in `_setup`;
       - semantic child adapter, local mask only, no gate;
       - vectorized path evaluation (`require` AND, `at_least` count ≥ k,
         OR across paths);
       - trace per design D11.
-- [ ] 2.3 `resolve_setup_local`: identities per design D10.
+- [x] 2.3 `resolve_setup_local`: identities per design D10.
       Semantic children reuse the existing local identity unchanged.
-- [ ] 2.4 `live_calculation_requirements.py`: recurse into semantic
+- [x] 2.4 `live_calculation_requirements.py`: recurse into semantic
       children; fail closed on unknown child kinds.
-- [ ] 2.5 Tests:
+- [x] 2.5 Tests:
       - a single-child composite equals the plain setup (mask and
         feature compute count);
       - OR across paths and `at_least` bounds;
       - `winning_path` order;
       - memoized vs non-memoized bit-exact, with zero
         `unforeseen_consumptions`.
-- [ ] 2.6 Run the group 0 regression gate.
+- [x] 2.6 Run the group 0 regression gate.
 
 ## 3. Canonical feature-kind contract (indicator layer, design D13)
 
