@@ -139,17 +139,17 @@ from group 0 runs again at the end of every group.
 
 ## 6. Equivalence and cost
 
-- [ ] 6.1 Extend `tests/test_ema_pullback_historical_managed_projection.py`:
+- [x] 6.1 Extend `tests/test_ema_pullback_historical_managed_projection.py`:
       the reference consumer implements the `paths` rule (design D6).
       Add the composite corpus from design D12, including the explicit
       trade-only case `at_least 2 of [bars_in_trade, mfe_pct, mfe_atr]`. The (bar, `rule_id`,
       `path_id`) transitions must equal `evaluate_managed_replay` for
       every side and entry.
-- [ ] 6.2 Fault controls. Both must make the corpus fail:
+- [x] 6.2 Fault controls. Both must make the corpus fail:
       - a consumer that ignores the trade terms of a mixed `at_least`;
       - a consumer that drops a trade-only `at_least`;
       - a consumer that ignores `thresholds`.
-- [ ] 6.3 `benchmark-report.md`:
+- [x] 6.3 `benchmark-report.md`:
       - A/B against `main` on atomic managed specs: identical
         projection bytes and compute counts, CPU within noise;
       - composite overhead per candidate (projection build) and per

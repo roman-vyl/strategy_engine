@@ -12,7 +12,26 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
-from parity.corpus import _htf_context, _untouched, base_spec
+from parity.composite_phase_corpus import (
+    ADX1H,
+    ADX5,
+    ADX_DI_1H,
+    BARS,
+    DI1H,
+    MFE_ATR,
+    MFE_PCT,
+    STATE1H,
+    _composite,
+    _cond,
+    _gt,
+    _pred,
+    _spec,
+    mixed_at_least,
+    owner_case,
+    state_temporal,
+    trade_only_at_least,
+)
+from parity.corpus import _untouched
 from parity.managed_invariants import _bar, _slice_services
 
 import strategy_engine.strategies.application.evaluate_managed_replay as replay_app
@@ -39,125 +58,6 @@ from strategy_engine.strategies.ema_pullback.static_semantics import (
 Spec = dict[str, Any]
 
 _ENTRY_INDICES = (40, 3000, 5500, 8000)
-
-
-def _feature(kind: str, timeframe: str, period: int = 14) -> dict[str, Any]:
-    return {"feature": {"kind": kind, "timeframe": timeframe, "params": {"period": period}}}
-
-
-def _gt(kind: str, timeframe: str, value: float) -> dict[str, Any]:
-    return {
-        "kind": "compare",
-        "left": _feature(kind, timeframe),
-        "op": ">",
-        "right": {"const": value},
-    }
-
-
-ADX5 = _gt("adx", "5m", 35)
-ADX1H = _gt("adx", "1h", 25)
-DI1H = {
-    "kind": "compare",
-    "left": _feature("di_plus", "1h"),
-    "op": ">",
-    "right": _feature("di_minus", "1h"),
-    "short": {"left": _feature("di_minus", "1h"), "right": _feature("di_plus", "1h")},
-}
-STATE1H = {"kind": "state", "context_ref": "htf_1h", "in": ["aligned"]}
-HELD_ADX1H = {"kind": "temporal", "mode": "held_for", "bars": 6, "of": _gt("adx", "1h", 20)}
-
-MFE_ATR = {
-    "component_id": "mfe_atr",
-    "params": {"threshold": 3.0, "atr": {"timeframe": "base", "period": 14}},
-}
-MFE_PCT = {"component_id": "mfe_pct", "params": {"threshold": 0.01}}
-BARS = {"component_id": "bars_in_trade", "params": {"threshold": 60}}
-ADX_DI_1H = {
-    "component_id": "adx_di_threshold",
-    "params": {
-        "timeframe": "1h",
-        "period": 14,
-        "adx_threshold": 25.0,
-        "require_di_alignment": True,
-    },
-}
-
-
-def _pred(child_id: str, predicate: dict[str, Any]) -> dict[str, Any]:
-    return {"child_id": child_id, "predicate": copy.deepcopy(predicate)}
-
-
-def _cond(child_id: str, condition: dict[str, Any]) -> dict[str, Any]:
-    return {"child_id": child_id, "condition": copy.deepcopy(condition)}
-
-
-def _composite(children: list[dict[str, Any]], paths: list[dict[str, Any]]) -> dict[str, Any]:
-    return {
-        "component_id": "composite_phase_condition",
-        "params": {"children": children, "paths": paths},
-    }
-
-
-def owner_case() -> dict[str, Any]:
-    """(ADX 5m > 35 OR (ADX 1h > 25 AND DI 1h)) AND MFE >= 3 ATR."""
-
-    return _composite(
-        [_pred("adx5", ADX5), _pred("adx1h", ADX1H), _pred("di1h", DI1H), _cond("mfe", MFE_ATR)],
-        [
-            {"path_id": "fast", "require": ["adx5", "mfe"]},
-            {"path_id": "htf", "require": ["adx1h", "di1h", "mfe"]},
-        ],
-    )
-
-
-def mixed_at_least() -> dict[str, Any]:
-    return _composite(
-        [_pred("adx5", ADX5), _pred("di1h", DI1H), _cond("pct", MFE_PCT), _cond("bars", BARS)],
-        [
-            {
-                "path_id": "vote",
-                "require": ["di1h"],
-                "at_least": {"k": 2, "of": ["adx5", "pct", "bars"]},
-            },
-        ],
-    )
-
-
-def trade_only_at_least() -> dict[str, Any]:
-    return _composite(
-        [_cond("bars", BARS), _cond("pct", MFE_PCT), _cond("mfe", MFE_ATR)],
-        [{"path_id": "trade", "at_least": {"k": 2, "of": ["bars", "pct", "mfe"]}}],
-    )
-
-
-def state_temporal() -> dict[str, Any]:
-    return _composite(
-        [_pred("state", STATE1H), _pred("held", HELD_ADX1H), _cond("adx_di", ADX_DI_1H)],
-        [
-            {"path_id": "regime", "require": ["state", "held"]},
-            {"path_id": "atom", "require": ["adx_di"]},
-        ],
-    )
-
-
-def _spec(*conditions: dict[str, Any], to_phases: tuple[str, ...] = ("proven",)) -> Spec:
-    spec = copy.deepcopy(base_spec())
-    spec["contexts"] = {"htf_1h": _htf_context("1h")}
-    spec["trade_management"]["exit_management"] = {
-        "mode": "managed",
-        "phase_rules": [
-            {
-                "rule_id": f"rule-{index}",
-                "to_phase": to_phase,
-                "condition": copy.deepcopy(condition),
-            }
-            for index, (condition, to_phase) in enumerate(zip(conditions, to_phases, strict=True))
-        ],
-        "stop_management": [],
-        "take_management": [],
-        "runtime_exits": [],
-    }
-    return spec
 
 
 # -- 1.3 static contract ---------------------------------------------------------
