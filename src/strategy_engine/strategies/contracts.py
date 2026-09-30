@@ -233,21 +233,70 @@ class ManagedConditionSeries:
     short: tuple[bool, ...]
 
 
+TradeMetric = Literal["bars_since_entry", "mfe_pct", "mfe_distance"]
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedTransitionThreshold:
+    """Trade-state quantity `trade_metric` >= `distances[distance_id][i]`
+    (NaN -> False)."""
+
+    distance_id: str
+    trade_metric: TradeMetric
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedTransitionTerm:
+    """One `at_least` term: exactly one of `condition_id` (market) or
+    (`distance_id`, `trade_metric`) (trade threshold)."""
+
+    condition_id: str | None
+    distance_id: str | None
+    trade_metric: TradeMetric | None
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedTransitionAtLeast:
+    """At least `k` of `terms` true. Present only when the N-of-M holds
+    a trade term; an all-market N-of-M is folded into the path's
+    `condition_id`."""
+
+    k: int
+    terms: tuple[ManagedTransitionTerm, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedTransitionPath:
+    """True on a bar iff `condition_id` (if any) is true for the trade
+    side, every threshold holds and `at_least` (if any) holds
+    (`composite-managed-phase-condition-v1` design D6)."""
+
+    path_id: str
+    condition_id: str | None
+    thresholds: tuple[ManagedTransitionThreshold, ...]
+    at_least: ManagedTransitionAtLeast | None
+
+
 @dataclass(frozen=True, slots=True)
 class ManagedPhaseTransitionRule:
-    """Advances the trade to `target_phase`. Exactly one of
-    `condition_id` (a market-native boolean, e.g. an ADX/DI gate) or
-    (`distance_id`, `trade_metric`) (a threshold the consumer compares
-    against a trade-state quantity it already owns) is set -- never
-    both, never neither. `trade_metric` names which consumer-local,
-    strategy-agnostic quantity the threshold gates, using `>=`."""
+    """Advances the trade to `target_phase`. Exactly one of three is set
+    -- never two, never none:
+    - `condition_id` (a market-native boolean, e.g. an ADX/DI gate);
+    - (`distance_id`, `trade_metric`) (a threshold the consumer compares
+      against a trade-state quantity it already owns);
+    - `paths` (a `composite_phase_condition`): the rule fires on the
+      first true path in order, and the consumer attributes its
+      `path_id`.
+    `trade_metric` names which consumer-local, strategy-agnostic
+    quantity the threshold gates, using `>=`."""
 
     kind: Literal["phase_transition"]
     rule_id: str
     target_phase: str
     condition_id: str | None
     distance_id: str | None
-    trade_metric: Literal["bars_since_entry", "mfe_pct", "mfe_distance"] | None
+    trade_metric: TradeMetric | None
+    paths: tuple[ManagedTransitionPath, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -84,19 +84,19 @@ from group 0 runs again at the end of every group.
 
 ## 3. Projection contract and builder
 
-- [ ] 3.1 `strategies/contracts.py`:
+- [x] 3.1 `strategies/contracts.py`:
       - `ManagedTransitionPath`, `ManagedTransitionThreshold`,
         `ManagedTransitionAtLeast`, `ManagedTransitionTerm`;
       - optional `paths` on `ManagedPhaseTransitionRule`;
       - the docstring states the three-way exclusivity (design D6).
-- [ ] 3.2 `historical_managed_projection.py`:
+- [x] 3.2 `historical_managed_projection.py`:
       - a composite rule emits `paths` from `fold_phase_paths`, called
         for both sides;
       - trade children reuse the existing distance/metric code;
       - ids follow design D6;
       - optional `bundle` and memo `context` parameters.
       `evaluator.py` passes `evaluation.contexts` and the memo context.
-- [ ] 3.3 `adapters/http/strategy_serialization.py`:
+- [x] 3.3 `adapters/http/strategy_serialization.py`:
       - serialize `paths`;
       - omit the field when `None`;
       - atomic rule bytes are unchanged, asserted by the group 0 gate.
@@ -120,17 +120,17 @@ from group 0 runs again at the end of every group.
 
 ## 5. Memo pre-pass
 
-- [ ] 5.1 `evaluation.py`:
+- [x] 5.1 `evaluation.py`:
       - add the `managed` stage to `MemoizedStageIdentities`, resolved
         after `exit_policy` by one function that the projection also
         uses;
       - add its consumptions (`local` plus `nested` per predicate child
         per side, in projection order) to `memoized_stage_consumptions`
         (design D8).
-- [ ] 5.2 The projection evaluates predicate children through their
+- [x] 5.2 The projection evaluates predicate children through their
       identities under the `_memo_identities` gate. Folding and the ADX
       series are not memoized.
-- [ ] 5.3 Tests:
+- [x] 5.3 Tests:
       - batch of candidates that differ only in the `mfe_atr` threshold:
         each predicate mask is computed once and
         `unforeseen_consumptions == 0`;

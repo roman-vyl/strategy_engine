@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from strategy_engine.domain.errors import InvalidRequestError
+from strategy_engine.domain.node_identity import NodeSpec
 from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.indicators.evaluation_context import EvaluationContext
 from strategy_engine.strategies.ema_pullback.composite_spec import (
@@ -52,6 +53,7 @@ from strategy_engine.strategies.ema_pullback.predicates import (
     TemporalPredicate,
     evaluate_predicate,
     parse_predicate,
+    resolve_predicate,
 )
 
 if TYPE_CHECKING:
@@ -288,3 +290,77 @@ def parse_if_composite(condition: Mapping[str, Any], path: str) -> CompositePhas
     if str(condition.get("component_id", "")) != COMPOSITE_PHASE_CONDITION:
         return None
     return parse_composite_phase_condition(condition, path)
+
+
+# -- memo (design D8) ------------------------------------------------------------
+
+# (phase rule index, side, child_id -> predicate identity), in projection
+# order: rules in declared order, `long` then `short`, children in order.
+ManagedPredicateIdentities = tuple[tuple[int, str, Mapping[str, PredicateIdentity]], ...]
+
+
+def _predicate_children(
+    raw_spec: Mapping[str, Any],
+) -> tuple[tuple[int, CompositePhaseCondition], ...]:
+    trade_management = raw_spec.get("trade_management")
+    if not isinstance(trade_management, Mapping):
+        return ()
+    exit_management = trade_management.get("exit_management")
+    if not isinstance(exit_management, Mapping) or exit_management.get("mode") != "managed":
+        return ()
+    return tuple(
+        (index, spec)
+        for index, spec in phase_rule_composites(exit_management)
+        if any(child.predicate is not None for child in spec.children)
+    )
+
+
+def has_managed_predicates(raw_spec: Mapping[str, Any]) -> bool:
+    """True iff the managed projection evaluates some predicate child."""
+
+    return bool(_predicate_children(raw_spec))
+
+
+def resolve_managed_predicates(
+    raw_spec: Mapping[str, Any],
+    feature_ids: Mapping[str, NodeSpec],
+    contexts: Mapping[str, NodeSpec] | None,
+) -> ManagedPredicateIdentities:
+    """The single resolution of the managed stage, used by the batch
+    pre-pass and by the projection. Empty unless `mode == "managed"` and
+    some composite phase condition has a predicate child."""
+
+    out: list[tuple[int, str, Mapping[str, PredicateIdentity]]] = []
+    for index, spec in _predicate_children(raw_spec):
+        predicates = [
+            (
+                child.child_id,
+                parse_predicate(child.predicate, f"phase_rules[{index}].{child.child_id}"),
+            )
+            for child in spec.children
+            if child.predicate is not None
+        ]
+        for side in ("long", "short"):
+            out.append(
+                (
+                    index,
+                    side,
+                    {
+                        child_id: resolve_predicate(predicate, feature_ids, side, contexts)
+                        for child_id, predicate in predicates
+                    },
+                )
+            )
+    return tuple(out)
+
+
+def managed_predicate_consumptions(identities: ManagedPredicateIdentities) -> tuple[NodeSpec, ...]:
+    """`local` plus `nested` per predicate child per side, in projection
+    order."""
+
+    consumed: list[NodeSpec] = []
+    for _, _, children in identities:
+        for identity in children.values():
+            consumed.append(identity.local)
+            consumed += identity.nested
+    return tuple(consumed)

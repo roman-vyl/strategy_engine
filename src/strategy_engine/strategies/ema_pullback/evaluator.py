@@ -29,6 +29,7 @@ from strategy_engine.strategies.decision_events import build_decision_events
 from strategy_engine.strategies.ema_pullback.evaluation import (
     EmaPullbackEvaluation,
     evaluate_ema_pullback_frame,
+    managed_memo_identities,
     memoized_stage_consumptions,
     resolve_memoized_stages,
 )
@@ -187,7 +188,16 @@ class EmaPullbackRangeEvaluator:
 
         frame, evaluation = self._evaluate_frame_native(request)
         planned = self._feature_planner.execute(request.strategy)
-        managed = build_historical_managed_projection(request.strategy.raw_spec, frame, planned)
+        raw_spec = request.strategy.raw_spec
+        identities = managed_memo_identities(raw_spec, frame, planned, request.evaluation_context)
+        managed = build_historical_managed_projection(
+            raw_spec,
+            frame,
+            planned,
+            bundle=evaluation.contexts,
+            context=request.evaluation_context if identities is not None else None,
+            identities=identities,
+        )
         return build_historical_execution_projection(
             strategy_id=request.strategy.strategy_id,
             config_hash=strategy_config_hash(request.strategy),

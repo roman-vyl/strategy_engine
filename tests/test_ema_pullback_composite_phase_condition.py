@@ -763,3 +763,194 @@ def test_plan_of_atomic_managed_specs_is_unchanged() -> None:
         (feature.kind, feature.timeframe)
         for feature in plan.indicator_plan.features[len(base_labels) :]
     ] == [("atr", "base"), ("adx", "1h"), ("di_plus", "1h"), ("di_minus", "1h")]
+
+
+# -- 3.x projection `paths` ------------------------------------------------------
+
+
+def _batch(variants: list[dict[str, Any]], *, memo_enabled: bool = True) -> tuple[list[Any], Any]:
+    from parity.harness import Recorder, _drain_route, batch_payload, recording_services
+    from parity.invariants import _capturing_contexts
+
+    with (
+        _capturing_contexts() as contexts,
+        recording_services(Recorder(), memo_enabled=memo_enabled) as services,
+    ):
+        ndjson = _drain_route(services, batch_payload(variants))
+    assert ndjson["termination"]["kind"] == "complete", ndjson["termination"]
+    return ndjson["lines"], contexts[0] if contexts else None
+
+
+def _managed(line: str) -> dict[str, Any]:
+    import json
+
+    return json.loads(line)["result"]["managed"]
+
+
+def _variants(*specs: Spec) -> list[dict[str, Any]]:
+    from parity.corpus import _variant
+
+    return [_variant(f"v{index}", spec) for index, spec in enumerate(specs)]
+
+
+def test_projection_paths_shape() -> None:
+    lines, _ = _batch(
+        _variants(_spec(owner_case()), _spec(trade_only_at_least()), _spec(mixed_at_least()))
+    )
+    owner, trade_only, mixed = (_managed(line) for line in lines)
+
+    (rule,) = owner["rules"]
+    assert (rule["condition_id"], rule["distance_id"], rule["trade_metric"]) == (None, None, None)
+    mfe = {"distance_id": "phase:rule-0:child:mfe:distance", "trade_metric": "mfe_distance"}
+    assert rule["paths"] == [
+        {
+            "path_id": "fast",
+            "condition_id": "phase:rule-0:path:fast:condition",
+            "thresholds": [mfe],
+            "at_least": None,
+        },
+        {
+            "path_id": "htf",
+            "condition_id": "phase:rule-0:path:htf:condition",
+            "thresholds": [mfe],
+            "at_least": None,
+        },
+    ]
+    # One series per path however many market children it folds; one
+    # distance per trade child however many paths use it.
+    assert set(owner["conditions"]) == {
+        "phase:rule-0:path:fast:condition",
+        "phase:rule-0:path:htf:condition",
+    }
+    assert set(owner["distances"]) == {"phase:rule-0:child:mfe:distance"}
+
+    def term(child_id: str, metric: str) -> dict[str, Any]:
+        return {
+            "condition_id": None,
+            "distance_id": f"phase:rule-0:child:{child_id}:distance",
+            "trade_metric": metric,
+        }
+
+    (rule,) = trade_only["rules"]
+    assert rule["paths"] == [
+        {
+            "path_id": "trade",
+            "condition_id": None,
+            "thresholds": [],
+            "at_least": {
+                "k": 2,
+                "terms": [
+                    term("bars", "bars_since_entry"),
+                    term("pct", "mfe_pct"),
+                    term("mfe", "mfe_distance"),
+                ],
+            },
+        }
+    ]
+    assert trade_only["conditions"] == {}
+
+    (rule,) = mixed["rules"]
+    adx5 = "phase:rule-0:child:adx5:condition"
+    assert rule["paths"] == [
+        {
+            "path_id": "vote",
+            "condition_id": "phase:rule-0:path:vote:condition",
+            "thresholds": [],
+            "at_least": {
+                "k": 2,
+                "terms": [
+                    {"condition_id": adx5, "distance_id": None, "trade_metric": None},
+                    term("pct", "mfe_pct"),
+                    term("bars", "bars_since_entry"),
+                ],
+            },
+        }
+    ]
+    assert set(mixed["conditions"]) == {"phase:rule-0:path:vote:condition", adx5}
+
+
+def test_all_market_at_least_folds_into_the_path_condition() -> None:
+    condition = _composite(
+        [_pred("adx5", ADX5), _pred("adx1h", ADX1H), _pred("di1h", DI1H)],
+        [{"path_id": "vote", "at_least": {"k": 2, "of": ["adx5", "adx1h", "di1h"]}}],
+    )
+    (line,), _ = _batch(_variants(_spec(condition)))
+    (rule,) = _managed(line)["rules"]
+    assert rule["paths"] == [
+        {
+            "path_id": "vote",
+            "condition_id": "phase:rule-0:path:vote:condition",
+            "thresholds": [],
+            "at_least": None,
+        }
+    ]
+
+
+def test_atomic_rules_serialize_without_paths() -> None:
+    (line,), _ = _batch(_variants(_spec(MFE_ATR, ADX_DI_1H, to_phases=("proven", "protected"))))
+    for rule in _managed(line)["rules"]:
+        assert "paths" not in rule
+
+
+# -- 5.3 memo --------------------------------------------------------------------
+
+
+def _predicate_computes(context: Any) -> dict[Any, int]:
+    return {
+        identity: count
+        for identity, count in context.stats.compute_calls.items()
+        if identity.kind.startswith("predicate")
+    }
+
+
+def _with_mfe_threshold(threshold: float) -> Spec:
+    condition = owner_case()
+    condition["params"]["children"][3]["condition"]["params"]["threshold"] = threshold
+    return _spec(condition)
+
+
+def test_batch_differing_only_in_mfe_computes_each_predicate_once() -> None:
+    lines, context = _batch(_variants(*(_with_mfe_threshold(t) for t in (2.0, 3.0, 4.0))))
+    assert context.stats.unforeseen_consumptions == 0
+    computes = _predicate_computes(context)
+    # adx5, adx1h (side-free), di1h long and short, and one shared 1h column
+    # node per operand feature.
+    compares = [identity for identity in computes if identity.kind == "predicate.compare"]
+    assert len(compares) == 4
+    assert set(computes.values()) == {1}
+    assert (
+        len({_managed(line)["distances"]["phase:rule-0:child:mfe:distance"][-1] for line in lines})
+        == 3
+    )
+
+
+def test_predicate_shared_with_composite_setup_is_computed_once() -> None:
+    spec = _spec(owner_case())
+    spec["setups"].append(
+        {
+            "component_id": "composite_setup",
+            "instance_id": "combo",
+            "params": {
+                "children": [{"child_id": "adx", "predicate": copy.deepcopy(ADX1H)}],
+                "paths": [{"path_id": "p", "require": ["adx"]}],
+            },
+        }
+    )
+    _, context = _batch(_variants(spec))
+    assert context.stats.unforeseen_consumptions == 0
+    computes = _predicate_computes(context)
+    assert len([i for i in computes if i.kind == "predicate.compare"]) == 4
+    assert set(computes.values()) == {1}
+
+
+def test_memo_on_and_off_give_identical_projections() -> None:
+    variants = _variants(
+        _with_mfe_threshold(2.0),
+        _with_mfe_threshold(3.0),
+        _spec(state_temporal()),
+        _spec(mixed_at_least()),
+    )
+    memo_on, context = _batch(variants, memo_enabled=True)
+    memo_off, _ = _batch(variants, memo_enabled=False)
+    assert context.stats.unforeseen_consumptions == 0
+    assert memo_on == memo_off
