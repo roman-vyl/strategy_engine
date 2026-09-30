@@ -8,10 +8,18 @@ through its predicate identity. It SHALL therefore share memoized nodes
 with identical predicates of `composite_setup`, of other rules and of
 other batch candidates.
 
-The batch pre-pass SHALL predict these consumptions (predicate `local`
-and `nested` nodes per side) with the same resolution the projection
-uses. A successful memoized evaluation of a spec with a composite phase
-condition SHALL end with zero `unforeseen_consumptions`.
+The batch pre-pass SHALL predict these consumptions with the same
+resolution the projection uses: a `managed` stage, resolved after the
+exit-policy stage, that lists for every composite phase rule in
+declared order, for `long` then `short`, each predicate child's `local`
+node followed by its `nested` nodes. The stage SHALL be empty unless
+`exit_management.mode` is `managed` and some composite phase condition
+has a predicate child; for every other spec the pre-pass predictions
+SHALL be unchanged and the projection SHALL resolve no identities. When
+the stage cannot be resolved it SHALL be absent and the projection
+SHALL evaluate its predicate children unmemoized. A successful memoized
+evaluation of a spec with a composite phase condition SHALL end with
+zero `unforeseen_consumptions`.
 
 The following SHALL NOT be memo nodes:
 

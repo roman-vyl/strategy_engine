@@ -159,6 +159,6 @@ from group 0 runs again at the end of every group.
 
 ## 7. Sync and archive
 
-- [ ] 7.1 Sync the deltas into `openspec/specs/`. Validate with
+- [x] 7.1 Sync the deltas into `openspec/specs/`. Validate with
       `openspec validate --strict`.
 - [ ] 7.2 Archive the change after owner approval.

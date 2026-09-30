@@ -1,4 +1,12 @@
-## ADDED Requirements
+# ema-pullback-composite-phase-condition-v1 Specification
+
+## Purpose
+`composite_phase_condition`: a managed phase condition that combines
+existing pre-entry predicates and the existing managed trade atoms by
+named paths (AND, N-of-M, OR), evaluated identically by single-trade
+replay, live open-trade and the candidate-wide historical projection.
+
+## Requirements
 
 ### Requirement: Ordinary phase condition at the outer boundary
 
