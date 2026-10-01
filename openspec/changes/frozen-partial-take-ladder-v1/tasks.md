@@ -3,7 +3,7 @@ from group 0 runs again at the end of every group.
 
 ## 0. Baseline gate for specs without legs
 
-- [ ] 0.1 Before any code change, on `main` 07ff911, confirm that the
+- [x] 0.1 Before any code change, on `main` 07ff911, confirm that the
       declared-invariant gate (`tests/test_declared_invariants.py`,
       `tests/test_declared_invariants_managed.py`) already records the
       following for specs without partial takes:
@@ -16,7 +16,7 @@ from group 0 runs again at the end of every group.
       both sides if they are missing.
 
       Verify: the gate is green on unchanged code.
-- [ ] 0.2 Name in the gate the requirements it protects:
+- [x] 0.2 Name in the gate the requirements it protects:
       - `batch-computation-reuse` "No compute regression for specs
         without partial takes";
       - `strategy-research-execution-contract-v1` "Optional partial

@@ -8,7 +8,10 @@ Run once on the pre-change code, from `tests/`:
 Writes `parity/golden/declared_invariants.json`; `python -m
 parity.record_invariants managed` writes only
 `parity/golden/declared_invariants_managed.json` (OpenSpec
-`composite-managed-phase-condition-v1`, task 0.1). Re-record only when a
+`composite-managed-phase-condition-v1`, task 0.1); `python -m
+parity.record_invariants live_entry` writes only
+`parity/golden/declared_invariants_live_entry.json` (OpenSpec
+`frozen-partial-take-ladder-v1`, task 0.1). Re-record only when a
 change *intends* to alter one of the invariants listed in
 `parity/invariants.py`, and say so in that change.
 """
@@ -21,10 +24,12 @@ import sys
 from parity.corpus import all_cases
 from parity.harness import GOLDEN_DIR
 from parity.invariants import case_invariants, indicator_contract_invariants
+from parity.live_entry_invariants import live_entry_invariants
 from parity.managed_invariants import managed_case_invariants, managed_cases
 
 BASELINE_PATH = GOLDEN_DIR / "declared_invariants.json"
 MANAGED_BASELINE_PATH = GOLDEN_DIR / "declared_invariants_managed.json"
+LIVE_ENTRY_BASELINE_PATH = GOLDEN_DIR / "declared_invariants_live_entry.json"
 
 
 def build() -> dict[str, object]:
@@ -42,6 +47,11 @@ def main() -> None:
     if sys.argv[1:] == ["managed"]:
         MANAGED_BASELINE_PATH.write_text(
             json.dumps(build_managed(), indent=1, sort_keys=True) + "\n"
+        )
+        return
+    if sys.argv[1:] == ["live_entry"]:
+        LIVE_ENTRY_BASELINE_PATH.write_text(
+            json.dumps({"cases": live_entry_invariants()}, indent=1, sort_keys=True) + "\n"
         )
         return
     BASELINE_PATH.write_text(json.dumps(build(), indent=1, sort_keys=True) + "\n")
