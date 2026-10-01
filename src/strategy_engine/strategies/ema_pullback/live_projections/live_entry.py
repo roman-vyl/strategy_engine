@@ -7,11 +7,16 @@ from decimal import Decimal, InvalidOperation
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.values import normalized_decimal_text
 from strategy_engine.strategies.application.load_live_feature_frame import LiveFeatureFrameBundle
-from strategy_engine.strategies.contracts import LiveEntryPlan, LiveEntryProjectionRequest
+from strategy_engine.strategies.contracts import (
+    LiveEntryPlan,
+    LiveEntryProjectionRequest,
+    LivePartialTake,
+)
 from strategy_engine.strategies.ema_pullback.evaluation import (
     EmaPullbackEvaluation,
     evaluate_ema_pullback_frame,
 )
+from strategy_engine.strategies.ema_pullback.exits import PartialTakeRule
 from strategy_engine.strategies.ema_pullback.live_projections.contracts import (
     EmaPullbackLiveEntryProjection,
 )
@@ -71,14 +76,70 @@ def _plan_for_side(
     )
     if not valid:
         return None
+    locked_profile = _profile_at(evaluation, side, index)
+    partial_takes = _partial_takes(
+        evaluation.exit_policy.partial_takes, side, index, locked_profile, entry_decimal
+    )
+    if partial_takes is None:
+        return None
     return LiveEntryPlan(
         side=side,
         source_plan_bar_open_time_ms=target,
         planned_entry_price=entry,
         initial_stop_price=stop,
         initial_take_price=take,
-        locked_exit_profile=_profile_at(evaluation, side, index),
+        locked_exit_profile=locked_profile,
+        partial_takes=partial_takes,
     )
+
+
+def _partial_takes(
+    rules: tuple[PartialTakeRule, ...],
+    side: str,
+    index: int,
+    locked_profile: str,
+    entry: Decimal,
+) -> tuple[LivePartialTake, ...] | None:
+    """Frozen leg prices of `always_on` + the locked profile on the plan
+    bar (`frozen-partial-take-ladder-v1`, design D8): pct legs
+    `entry * (1 ± pct)`, ATR legs `entry ± k*ATR` (the final take's
+    formula). `None` (no plan for the side) when any leg in force has no
+    valid positive profit-side price. Never compared with the final take.
+    Ordered by distance from entry, ties by declared order."""
+
+    sign = Decimal(1) if side == "long" else Decimal(-1)
+    legs: list[tuple[Decimal, LivePartialTake]] = []
+    for rule in rules:
+        if rule.group not in ("always_on", locked_profile):
+            continue
+        if rule.pct is not None:
+            distance: Decimal | None = entry * Decimal(repr(rule.pct))
+        else:
+            try:
+                raw = rule.distance[index]
+            except IndexError as exc:
+                raise InvalidRequestError(
+                    "partial take distance does not contain target index"
+                ) from exc
+            distance = None if raw is None else Decimal(repr(raw))
+        if distance is None or not distance.is_finite() or distance <= 0:
+            return None
+        price = entry + sign * distance
+        if price <= 0:
+            return None
+        legs.append(
+            (
+                distance,
+                LivePartialTake(
+                    take_id=rule.instance_id,
+                    price=normalized_decimal_text(price),
+                    fraction_of_initial=normalized_decimal_text(
+                        Decimal(repr(rule.fraction_of_initial))
+                    ),
+                ),
+            )
+        )
+    return tuple(leg for _, leg in sorted(legs, key=lambda item: item[0]))
 
 
 class EmaPullbackLiveEntryProjectionAdapter:

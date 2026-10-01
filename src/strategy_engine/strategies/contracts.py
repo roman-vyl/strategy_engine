@@ -460,6 +460,17 @@ class LiveEntryProjectionRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class LivePartialTake:
+    """One frozen partial take of a live entry plan
+    (`frozen-partial-take-ladder-v1`): absolute `price` and
+    `fraction_of_initial`, both normalized decimal text."""
+
+    take_id: str
+    price: str
+    fraction_of_initial: str
+
+
+@dataclass(frozen=True, slots=True)
 class LiveEntryPlan:
     side: str
     source_plan_bar_open_time_ms: int
@@ -467,6 +478,7 @@ class LiveEntryPlan:
     initial_stop_price: str
     initial_take_price: str
     locked_exit_profile: str
+    partial_takes: tuple[LivePartialTake, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -477,6 +489,7 @@ class DesiredEntry:
     initial_stop_price: str
     initial_take_price: str
     locked_exit_profile: str
+    partial_takes: tuple[LivePartialTake, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

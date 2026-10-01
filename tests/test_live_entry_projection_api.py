@@ -391,3 +391,44 @@ def test_live_entry_openapi_publishes_request_and_response_contracts() -> None:
     assert set(response_schema["properties"]) == {"desired_entry"}
     desired_entry = response_schema["properties"]["desired_entry"]
     assert desired_entry["anyOf"][0]["$ref"].endswith("/DesiredEntryResponseModel")
+
+
+# -- frozen partial take ladder (OpenSpec frozen-partial-take-ladder-v1) ------
+
+
+_PLAN_KEYS = {
+    "side",
+    "source_plan_bar_open_time_ms",
+    "planned_entry_price",
+    "initial_stop_price",
+    "initial_take_price",
+    "locked_exit_profile",
+}
+
+
+def test_live_entry_http_omits_partial_takes_without_legs() -> None:
+    app_services, _ = _services(plans_by_side={"long": _entry_plan("long"), "short": None})
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/live-entry", json=_payload())
+    assert response.status_code == 200
+    assert set(response.json()["desired_entry"]) == _PLAN_KEYS
+
+
+def test_live_entry_http_carries_partial_takes() -> None:
+    from dataclasses import replace
+
+    from strategy_engine.strategies.contracts import LivePartialTake
+
+    plan = replace(
+        _entry_plan("long"),
+        partial_takes=(LivePartialTake("pt_1pct", "12.12", "0.25"),),
+    )
+    app_services, _ = _services(plans_by_side={"long": plan, "short": None})
+    with TestClient(create_app(services=app_services)) as client:
+        response = client.post("/v1/strategy-evaluations/live-entry", json=_payload())
+    assert response.status_code == 200
+    desired = response.json()["desired_entry"]
+    assert set(desired) == _PLAN_KEYS | {"partial_takes"}
+    assert desired["partial_takes"] == [
+        {"take_id": "pt_1pct", "price": "12.12", "fraction_of_initial": "0.25"}
+    ]

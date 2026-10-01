@@ -99,6 +99,10 @@ _ZERO_LOOKBACK_EXITS = {
     "atr_take_profit",
     "constant_usd_stop_loss",
     "constant_usd_take_profit",
+    # frozen-partial-take-ladder-v1: the ATR history of `atr_partial_take`
+    # comes from its planned ATR feature, as for `atr_take_profit`.
+    "pct_partial_take",
+    "atr_partial_take",
 }
 _ZERO_LOOKBACK_PHASE_RULE_COMPONENTS = {
     "mfe_atr",

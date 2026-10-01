@@ -113,7 +113,7 @@ from group 0 runs again at the end of every group.
 
 ## 4. Live entry contract
 
-- [ ] 4.1 Keep per-leg absolute distances on the internal exit-policy
+- [x] 4.1 Keep per-leg absolute distances on the internal exit-policy
       result, not serialized on `/range` (design D8). Compute leg prices
       in the live entry projection:
       - ATR: `entry ± k·ATR`;
@@ -121,14 +121,14 @@ from group 0 runs again at the end of every group.
 
       Verify: a unit test reproduces the spec scenario (long 101/103,
       short 99/97), and the `/range` response is unchanged.
-- [ ] 4.2 Add `LivePartialTake` and `partial_takes = ()` on
+- [x] 4.2 Add `LivePartialTake` and `partial_takes = ()` on
       `LiveEntryPlan` and `DesiredEntry`. `_plan_for_side` returns `None`
       if any leg in force has a missing, non-positive or non-profit-side
       price. There is no comparison with `initial_take_price`.
 
       Verify: unit tests for the incomplete leg, the non-profit-side
       leg, and a leg beyond the final take (returned).
-- [ ] 4.3 HTTP `DesiredEntryResponseModel` omits `partial_takes` when
+- [x] 4.3 HTTP `DesiredEntryResponseModel` omits `partial_takes` when
       empty.
 
       Verify:
@@ -136,7 +136,7 @@ from group 0 runs again at the end of every group.
         without legs;
       - with legs it carries `{take_id, price, fraction_of_initial}`
         as decimal text.
-- [ ] 4.4 `live_calculation_requirements.py`: register both components
+- [x] 4.4 `live_calculation_requirements.py`: register both components
       as zero-lookback exits (design D10).
 
       Verify: a planner test with an `atr_partial_take` resolves with an

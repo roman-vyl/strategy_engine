@@ -550,3 +550,32 @@ def test_unrecognized_risk_component_fails_closed() -> None:
     }
     with pytest.raises(InvalidRequestError):
         EmaPullbackLiveCalculationRequirements().execute(spec)
+
+
+def test_partial_take_components_contribute_explicit_zero_lookback() -> None:
+    spec = _spec()
+    exits = spec["trade_management"]["exit_policy"]["always_on"]["exits"]  # type: ignore[index]
+    exits.extend(
+        [
+            {
+                "instance_id": "pt-atr",
+                "component_id": "atr_partial_take",
+                "exit_kind": "partial_take",
+                "distance": {"timeframe": "base", "period": 14, "multiplier": 3.0},
+                "fraction_of_initial": 0.25,
+            },
+            {
+                "instance_id": "pt-pct",
+                "component_id": "pct_partial_take",
+                "exit_kind": "partial_take",
+                "pct": 0.01,
+                "fraction_of_initial": 0.25,
+            },
+        ]
+    )
+    reqs = EmaPullbackLiveCalculationRequirements().execute(spec)
+    for component_id in ("atr_partial_take", "pct_partial_take"):
+        (leg_req,) = [r for r in reqs if component_id in r.reason]
+        assert leg_req.bars == 0
+    plain = EmaPullbackLiveCalculationRequirements().execute(_spec())
+    assert [r for r in reqs if "partial_take" not in r.reason] == list(plain)
