@@ -1,15 +1,24 @@
-"""Frozen partial take ladder through `/range-batch` on the parity market
-fixture (OpenSpec `frozen-partial-take-ladder-v1`): memo identities and
-compute sharing (task 2.3)."""
+"""Frozen partial take ladder on the parity market fixture (OpenSpec
+`frozen-partial-take-ladder-v1`): memo identities and compute sharing
+(task 2.3), untouched open-trade (task 5.1), `/range-batch` and
+`/live-entry` end to end (task 5.2)."""
 
 from __future__ import annotations
 
 import copy
+import json
+from decimal import Decimal
 from typing import Any
 
+import pytest
+from fastapi.testclient import TestClient
 from parity.corpus import _exits, _variant, base_spec
 from parity.harness import Recorder, _drain_route, batch_payload, recording_services
 from parity.invariants import _capturing_contexts
+from parity.live_entry_invariants import live_entry_response
+from parity.managed_invariants import _SPECS, _open_trade_invariants, _slice_services
+
+from strategy_engine.adapters.http.app import create_app
 
 Spec = dict[str, Any]
 
@@ -124,3 +133,111 @@ def test_memo_on_and_off_are_bit_identical() -> None:
     for left, right in zip(on, off, strict=True):
         assert left.exit_policy == right.exit_policy
         assert left.entries == right.entries
+
+
+# -- untouched surfaces (task 5.1) -----------------------------------------------
+
+
+def test_open_trade_with_a_ladder_equals_open_trade_without() -> None:
+    managed = _SPECS["htf_adx_aligned"]
+    laddered = copy.deepcopy(managed)
+    policy = laddered["trade_management"]["exit_policy"]
+    policy["always_on"]["exits"] += [pct_leg("p1", 0.004, 0.25), atr_leg("p2", 2.0, 0.25)]
+    policy["profiles"]["aligned"]["exits"] = [pct_leg("p3", 0.008, 0.25)]
+    with _slice_services() as services:
+        assert _open_trade_invariants(services, laddered) == _open_trade_invariants(
+            services, managed
+        )
+
+
+# -- end to end (task 5.2) -------------------------------------------------------
+
+
+_LIVE_LONG_TARGET = 3555  # a long `/live-entry` plan bar of `base_spec` (group 0 gate)
+
+
+def _e2e_spec() -> Spec:
+    # SL/TP as in `base_spec` (ATR 48, x3 / x6), so the live plan bar keeps its plan.
+    spec = copy.deepcopy(base_spec())
+    policy = spec["trade_management"]["exit_policy"]
+    policy["always_on"]["exits"] += [pct_leg("p-pct", 0.004, 0.25), atr_leg("p-atr", 2.0, 0.25)]
+    policy["profiles"]["aligned"]["exits"] = [pct_leg("p-aligned", 0.008, 0.2)]
+    return spec
+
+
+def _profile_spec() -> Spec:
+    # `_e2e_spec` with exit profiles selected by the 1h HTF state.
+    spec = _e2e_spec()
+    spec["contexts"] = {
+        "htf": {
+            "component_id": "htf_context",
+            "timeframe": "1h",
+            "source": "close",
+            "fast_period": 20,
+            "anchor_period": 50,
+            "slow_period": 200,
+        }
+    }
+    spec["trade_management"]["exit_policy"]["context_consumption"] = {
+        "context_ref": "htf",
+        "policy": {"policy_id": "exit_profile_by_htf_state"},
+    }
+    return spec
+
+
+_LEG_COMPONENTS = {
+    "p-pct": "pct_partial_take",
+    "p-atr": "atr_partial_take",
+    "p-aligned": "pct_partial_take",
+}
+
+
+def test_range_batch_opportunities_carry_the_legs_of_their_locked_profile() -> None:
+    _, context, ndjson = run([_variant("e2e", _profile_spec())])
+    assert context.stats.unforeseen_consumptions == 0
+    (line,) = ndjson["lines"]
+    opportunities = json.loads(line)["result"]["entry_opportunities"]
+    assert opportunities
+    profiles = set()
+    for opportunity in opportunities:
+        profiles.add(opportunity["locked_exit_profile"])
+        legs = {leg["take_id"]: leg for leg in opportunity["partial_takes"]}
+        expected = {"p-pct", "p-atr"} | (
+            {"p-aligned"} if opportunity["locked_exit_profile"] == "aligned" else set()
+        )
+        assert set(legs) == expected
+        ratios = [leg["ratio"] for leg in opportunity["partial_takes"]]
+        assert ratios == sorted(ratios)
+        assert legs["p-pct"]["ratio"] == 0.004
+        assert legs["p-pct"]["fraction_of_initial"] == 0.25
+        # Shared ATR(48): the x2 leg is a third of the x6 final take.
+        take = opportunity["initial_take"]
+        assert legs["p-atr"]["ratio"] == pytest.approx(take["ratio"] / 3, rel=1e-12)
+        assert take["attribution"]["exit_kind"] == "take_profit"
+        for take_id, leg in legs.items():
+            assert leg["attribution"] == {
+                "rule_id": take_id,
+                "component_id": _LEG_COMPONENTS[take_id],
+                "exit_kind": "partial_take",
+            }
+    assert "aligned" in profiles and len(profiles) > 1
+
+
+def test_live_entry_legs_follow_the_design_formulas() -> None:
+    with _slice_services() as services, TestClient(create_app(services=services)) as client:
+        body = live_entry_response(client, _e2e_spec(), _LIVE_LONG_TARGET)
+    desired = json.loads(body)["desired_entry"]
+    assert desired is not None and desired["side"] == "long"
+    entry = Decimal(desired["planned_entry_price"])
+    take = Decimal(desired["initial_take_price"])
+    legs = {leg["take_id"]: leg for leg in desired["partial_takes"]}
+    expected_ids = {"p-pct", "p-atr"} | (
+        {"p-aligned"} if desired["locked_exit_profile"] == "aligned" else set()
+    )
+    assert set(legs) == expected_ids
+    assert Decimal(legs["p-pct"]["price"]) == entry * Decimal("1.004")
+    assert legs["p-pct"]["fraction_of_initial"] == "0.25"
+    atr_distance = Decimal(legs["p-atr"]["price"]) - entry
+    assert float(atr_distance) == pytest.approx(float(take - entry) / 3, rel=1e-9)
+    prices = [Decimal(leg["price"]) for leg in desired["partial_takes"]]
+    assert prices == sorted(prices)

@@ -145,18 +145,18 @@ from group 0 runs again at the end of every group.
 
 ## 5. Untouched surfaces and end-to-end
 
-- [ ] 5.1 Verify that managed and open-trade are untouched (design
+- [x] 5.1 Verify that managed and open-trade are untouched (design
       D11):
       - an open-trade projection for a trade whose entry had legs
         returns the same result as without legs;
       - `git diff` shows no change in `managed.py`,
         `historical_managed_projection.py` or
         `live_projections/open_trade.py`.
-- [ ] 5.2 End-to-end `/range-batch` test over a fixture spec with one
+- [x] 5.2 End-to-end `/range-batch` test over a fixture spec with one
       pct and one ATR leg in `always_on` and one leg in `aligned`.
       Verify:
       - opportunities carry the expected legs per locked profile;
       - `/live-entry` on the same fixture returns the same `take_id`s
         with prices given by the design D8 formulas on the target bar.
-- [ ] 5.3 Full suite, ruff, mypy and `openspec validate
+- [x] 5.3 Full suite, ruff, mypy and `openspec validate
       frozen-partial-take-ladder-v1 --strict`. Verify: all green.
