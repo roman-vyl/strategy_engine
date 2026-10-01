@@ -27,7 +27,13 @@ from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     EXIT_DISTANCE_SUPPORTED as _DISTANCE_COMPONENTS,
 )
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    EXIT_PARTIAL_TAKE_SUPPORTED as _PARTIAL_TAKE_COMPONENTS,
+)
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     EXIT_SIGNAL_SUPPORTED as _SIGNAL_COMPONENTS,
+)
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    PARTIAL_TAKE_EXIT_KIND,
 )
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     resolve_exit_rule_groups as _policy_rules,
@@ -390,8 +396,9 @@ def _optional_floats(series: pd.Series) -> tuple[float | None, ...]:
 
 def _exit_rule_head(rule: Mapping[str, Any]) -> tuple[str, str, str, str]:
     """Validated `(instance_id, component_id, exit_kind, family)` of one exit
-    rule, `family` being "signal" or "distance" (shared by compute and
-    resolve)."""
+    rule, `family` being "signal", "distance" or "partial_take" (shared by
+    compute and resolve). A partial take is a distance rule that never
+    enters the like-kind minimum."""
 
     instance_id = str(rule.get("instance_id", ""))
     component_id = str(rule.get("component_id", ""))
@@ -411,6 +418,14 @@ def _exit_rule_head(rule: Mapping[str, Any]) -> tuple[str, str, str, str]:
                 exit_kind=exit_kind,
             )
         return instance_id, component_id, exit_kind, "distance"
+    if component_id in _PARTIAL_TAKE_COMPONENTS:
+        if exit_kind != PARTIAL_TAKE_EXIT_KIND:
+            raise InvalidRequestError(
+                "partial take exit component requires exit_kind partial_take",
+                component_id=component_id,
+                exit_kind=exit_kind,
+            )
+        return instance_id, component_id, exit_kind, "partial_take"
     raise InvalidRequestError("unsupported exit component", component_id=component_id)
 
 

@@ -561,3 +561,32 @@ def test_select_bool_unknown_profile_name_raises_key_error() -> None:
     profile = ("aligned", "totally_unknown_profile", "neutral", "aligned", "countertrend")
     with pytest.raises(KeyError):
         _select_bool(profile, values, values["aligned"].index)
+
+
+# -- frozen partial take ladder (OpenSpec frozen-partial-take-ladder-v1) ------
+
+
+def test_partial_take_component_with_take_profit_kind_is_rejected() -> None:
+    spec = raw_spec()
+    policy = spec["trade_management"]["exit_policy"]  # type: ignore[index]
+    policy["always_on"]["exits"].append(  # type: ignore[index]
+        {
+            "instance_id": "pt",
+            "component_id": "pct_partial_take",
+            "exit_kind": "take_profit",
+            "pct": 0.01,
+            "fraction_of_initial": 0.25,
+        }
+    )
+    feature_frame, plan = frame(spec)
+    with pytest.raises(InvalidRequestError, match="requires exit_kind partial_take"):
+        evaluate_exit_policy(spec, feature_frame, plan, ())
+
+
+def test_take_profit_component_with_partial_take_kind_is_rejected() -> None:
+    spec = raw_spec()
+    policy = spec["trade_management"]["exit_policy"]  # type: ignore[index]
+    policy["always_on"]["exits"][1]["exit_kind"] = "partial_take"  # type: ignore[index]
+    feature_frame, plan = frame(spec)
+    with pytest.raises(InvalidRequestError, match="mismatched exit_kind"):
+        evaluate_exit_policy(spec, feature_frame, plan, ())

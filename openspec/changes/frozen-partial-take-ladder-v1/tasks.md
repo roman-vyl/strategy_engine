@@ -28,7 +28,7 @@ from group 0 runs again at the end of every group.
 
 ## 1. Components and static validation
 
-- [ ] 1.1 `raw_spec_identity.py`: add `EXIT_PARTIAL_TAKE_SUPPORTED =
+- [x] 1.1 `raw_spec_identity.py`: add `EXIT_PARTIAL_TAKE_SUPPORTED =
       {pct_partial_take, atr_partial_take}`. `static_semantics.py`
       accepts the family and enforces design D3 and D5:
       - fraction in (0, 1);
@@ -42,12 +42,12 @@ from group 0 runs again at the end of every group.
       Verify: unit tests in `test_ema_pullback_static_semantics.py`,
       one rejection per rule plus acceptance of a leg beyond the final
       take, all without market data.
-- [ ] 1.2 `exits._exit_rule_head`: add a `partial_take` family. A
+- [x] 1.2 `exits._exit_rule_head`: add a `partial_take` family. A
       mismatch in either direction raises (`atr_partial_take` with
       `take_profit`, `atr_take_profit` with `partial_take`).
 
       Verify: unit tests in `test_ema_pullback_exits.py`.
-- [ ] 1.3 Authoring `/validate` path: a spec with each invalid ladder
+- [x] 1.3 Authoring `/validate` path: a spec with each invalid ladder
       returns `valid=false`, and a valid ladder returns `valid=true`.
 
       Verify: cases in `test_authoring_config_validation_api.py`.

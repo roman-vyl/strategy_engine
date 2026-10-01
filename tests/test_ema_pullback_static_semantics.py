@@ -168,3 +168,134 @@ def test_does_not_require_market_data_argument() -> None:
 
     signature = inspect.signature(check_ema_pullback_static_semantics)
     assert list(signature.parameters) == ["raw_spec"]
+
+
+# -- frozen partial take ladder (OpenSpec frozen-partial-take-ladder-v1) ------
+
+
+def _tp(instance_id: str = "tp-final") -> dict[str, object]:
+    return {
+        "component_id": "atr_take_profit",
+        "exit_kind": "take_profit",
+        "instance_id": instance_id,
+        "distance": {"timeframe": "base", "period": 14, "multiplier": 8.0},
+    }
+
+
+def _pct_leg(instance_id: str, fraction: object, pct: object = 0.01) -> dict[str, object]:
+    return {
+        "component_id": "pct_partial_take",
+        "exit_kind": "partial_take",
+        "instance_id": instance_id,
+        "pct": pct,
+        "fraction_of_initial": fraction,
+    }
+
+
+def _atr_leg(instance_id: str, fraction: object, multiplier: object = 2.0) -> dict[str, object]:
+    return {
+        "component_id": "atr_partial_take",
+        "exit_kind": "partial_take",
+        "instance_id": instance_id,
+        "distance": {"timeframe": "base", "period": 14, "multiplier": multiplier},
+        "fraction_of_initial": fraction,
+    }
+
+
+def _ladder_spec(
+    always_on: list[dict[str, object]], **profiles: list[dict[str, object]]
+) -> dict[str, object]:
+    spec = copy.deepcopy(_valid_raw_spec())
+    policy = spec["trade_management"]["exit_policy"]  # type: ignore[index]
+    policy["always_on"]["exits"].extend(always_on)
+    for name, rules in profiles.items():
+        policy["profiles"][name]["exits"] = rules
+    return spec
+
+
+def test_partial_take_ladder_passes() -> None:
+    check_ema_pullback_static_semantics(
+        _ladder_spec([_tp(), _pct_leg("pt-1", 0.25), _atr_leg("pt-2", "0.25")])
+    )
+
+
+def test_partial_take_beyond_final_take_passes() -> None:
+    # Final at +8% (pct-equivalent) and a leg at +10%: never compared.
+    final = {
+        "component_id": "constant_usd_take_profit",
+        "exit_kind": "take_profit",
+        "instance_id": "tp-usd",
+        "usd_distance": 8,
+    }
+    check_ema_pullback_static_semantics(_ladder_spec([final, _pct_leg("pt-far", 0.25, 0.10)]))
+
+
+def test_partial_take_fraction_sum_below_one_passes() -> None:
+    check_ema_pullback_static_semantics(
+        _ladder_spec([_tp(), _pct_leg("a", 0.1), _pct_leg("b", 0.2), _pct_leg("c", 0.6)])
+    )
+
+
+@pytest.mark.parametrize("fraction", [0, 1, 1.2, -0.1, "nan", True, None, "abc"])
+def test_partial_take_invalid_fraction_rejected(fraction: object) -> None:
+    with pytest.raises(InvalidRequestError, match="fraction_of_initial"):
+        check_ema_pullback_static_semantics(_ladder_spec([_tp(), _pct_leg("pt", fraction)]))
+
+
+def test_partial_take_fractions_sum_to_one_rejected() -> None:
+    spec = _ladder_spec([_tp(), _pct_leg("a", 0.1), _pct_leg("b", 0.2), _pct_leg("c", 0.7)])
+    with pytest.raises(InvalidRequestError, match="sum below 1"):
+        check_ema_pullback_static_semantics(spec)
+
+
+def test_partial_take_fractions_sum_across_always_on_and_profile_rejected() -> None:
+    spec = _ladder_spec([_tp(), _pct_leg("a", 0.5)], aligned=[_pct_leg("b", 0.5)])
+    with pytest.raises(InvalidRequestError, match="sum below 1") as excinfo:
+        check_ema_pullback_static_semantics(spec)
+    assert excinfo.value.details.get("profile") == "aligned"
+
+
+def test_partial_take_without_final_take_rejected() -> None:
+    with pytest.raises(InvalidRequestError, match="require a take_profit"):
+        check_ema_pullback_static_semantics(_ladder_spec([_pct_leg("pt", 0.25)]))
+
+
+def test_partial_take_final_take_in_another_profile_only_rejected() -> None:
+    spec = _ladder_spec([_pct_leg("pt", 0.25)], aligned=[_tp()])
+    with pytest.raises(InvalidRequestError, match="require a take_profit") as excinfo:
+        check_ema_pullback_static_semantics(spec)
+    assert excinfo.value.details.get("profile") == "countertrend"
+
+
+@pytest.mark.parametrize("pct", [0, -0.01, "nan", None])
+def test_partial_take_non_positive_pct_rejected(pct: object) -> None:
+    with pytest.raises(InvalidRequestError, match="pct"):
+        check_ema_pullback_static_semantics(_ladder_spec([_tp(), _pct_leg("pt", 0.25, pct)]))
+
+
+@pytest.mark.parametrize("multiplier", [0, -2.0, None])
+def test_partial_take_non_positive_multiplier_rejected(multiplier: object) -> None:
+    with pytest.raises(InvalidRequestError, match="multiplier"):
+        check_ema_pullback_static_semantics(
+            _ladder_spec([_tp(), _atr_leg("pt", 0.25, multiplier)])
+        )
+
+
+def test_partial_take_component_with_take_profit_kind_rejected() -> None:
+    leg = _atr_leg("pt", 0.25)
+    leg["exit_kind"] = "take_profit"
+    with pytest.raises(InvalidRequestError, match="exit_kind"):
+        check_ema_pullback_static_semantics(_ladder_spec([_tp(), leg]))
+
+
+def test_take_profit_component_with_partial_take_kind_rejected() -> None:
+    final = _tp()
+    final["exit_kind"] = "partial_take"
+    with pytest.raises(InvalidRequestError, match="exit_kind"):
+        check_ema_pullback_static_semantics(_ladder_spec([final]))
+
+
+def test_partial_take_duplicate_instance_id_rejected() -> None:
+    spec = _ladder_spec([_tp(), _pct_leg("dup", 0.25)], neutral=[_pct_leg("dup", 0.25)])
+    with pytest.raises(InvalidRequestError, match="instance_id must be unique"):
+        check_ema_pullback_static_semantics(spec)

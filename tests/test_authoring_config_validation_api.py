@@ -397,3 +397,46 @@ def test_mismatch_is_caught_before_any_semantic_validation_call() -> None:
         )
     assert response.status_code == 422
     assert calls == []
+
+
+# -- frozen partial take ladder (OpenSpec frozen-partial-take-ladder-v1) ------
+
+
+_FINAL_TAKE = {
+    "instance_id": "tp-final",
+    "component_id": "atr_take_profit",
+    "exit_kind": "take_profit",
+    "distance": {"timeframe": "base", "period": 14, "multiplier": 8.0},
+}
+
+
+def _pct_leg(instance_id: str, fraction: object) -> dict[str, object]:
+    return {
+        "instance_id": instance_id,
+        "component_id": "pct_partial_take",
+        "exit_kind": "partial_take",
+        "pct": 0.01,
+        "fraction_of_initial": fraction,
+    }
+
+
+def _validate_exits(always_on: list[dict[str, object]]) -> bool:
+    item = canonical_instance()
+    exit_policy = item["raw_spec"]["trade_management"]["exit_policy"]  # type: ignore[index]
+    exit_policy["always_on"]["exits"] = always_on
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/v1/strategies/ema_pullback/authoring-config/validate", json={"instances": [item]}
+        )
+    assert response.status_code == 200
+    return bool(response.json()["valid"])
+
+
+def test_valid_partial_take_ladder_is_accepted() -> None:
+    assert _validate_exits([_FINAL_TAKE, _pct_leg("pt-1", 0.25), _pct_leg("pt-2", 0.25)])
+
+
+def test_invalid_partial_take_ladders_are_rejected() -> None:
+    assert not _validate_exits([_FINAL_TAKE, _pct_leg("pt", 1)])
+    assert not _validate_exits([_FINAL_TAKE, _pct_leg("a", 0.5), _pct_leg("b", 0.5)])
+    assert not _validate_exits([_pct_leg("pt", 0.25)])

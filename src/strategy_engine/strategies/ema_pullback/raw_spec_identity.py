@@ -10,6 +10,8 @@ allowlists and `instance_id` requirements defined exactly once.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from decimal import Decimal
+from math import isfinite
 from typing import Any
 
 from strategy_engine.domain.errors import InvalidRequestError
@@ -30,6 +32,8 @@ EXIT_DISTANCE_SUPPORTED = frozenset(
         "constant_usd_take_profit",
     }
 )
+EXIT_PARTIAL_TAKE_SUPPORTED = frozenset({"pct_partial_take", "atr_partial_take"})
+PARTIAL_TAKE_EXIT_KIND = "partial_take"
 BLOCKER_SUPPORTED = frozenset(
     {
         "no_blockers",
@@ -161,3 +165,86 @@ def require_unique_instance_ids(scope: str, pairs: tuple[tuple[object, str], ...
                 f"{scope} instance_id must be unique", instance_id=instance_id
             )
         seen.add(instance_id)
+
+
+def _positive_finite(value: object, path: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise InvalidRequestError(f"{path} must be a positive number")
+    try:
+        number = float(value)
+    except ValueError as exc:
+        raise InvalidRequestError(f"{path} must be a positive number") from exc
+    if not isfinite(number) or number <= 0:
+        raise InvalidRequestError(f"{path} must be a positive number")
+    return number
+
+
+def resolve_partial_take_fraction(rule: Mapping[str, Any], path: str) -> float:
+    """`fraction_of_initial` of one partial take rule, strictly in (0, 1)."""
+
+    fraction = _positive_finite(rule.get("fraction_of_initial"), f"{path}.fraction_of_initial")
+    if fraction >= 1:
+        raise InvalidRequestError(f"{path}.fraction_of_initial must be below 1")
+    return fraction
+
+
+def resolve_partial_take_pct(rule: Mapping[str, Any], path: str) -> float:
+    return _positive_finite(rule.get("pct"), f"{path}.pct")
+
+
+def require_partial_take_ladder(
+    groups: Mapping[str, tuple[Mapping[str, Any], ...]],
+) -> None:
+    """Static frozen partial take ladder rules (OpenSpec
+    `frozen-partial-take-ladder-v1`, design D3/D5): exit kind bound to the
+    family, `fraction_of_initial` in (0, 1), positive `pct`/`multiplier`,
+    and per profile (always_on + profile) a fraction sum below 1 and a final
+    `take_profit` in force. Leg levels are never compared with the final."""
+
+    fractions: dict[str, Decimal] = {}
+    takes: dict[str, bool] = {}
+    for group in ("always_on", *_PROFILE_ORDER):
+        total = Decimal(0)
+        has_take = False
+        for index, rule in enumerate(groups[group]):
+            path = f"trade_management.exit_policy.{group}.exits[{index}]"
+            component_id = str(rule.get("component_id", ""))
+            exit_kind = str(rule.get("exit_kind", "signal"))
+            if exit_kind == "take_profit":
+                has_take = True
+            if component_id not in EXIT_PARTIAL_TAKE_SUPPORTED:
+                if exit_kind == PARTIAL_TAKE_EXIT_KIND:
+                    raise InvalidRequestError(
+                        "exit component has mismatched exit_kind",
+                        component_id=component_id,
+                        exit_kind=exit_kind,
+                    )
+                continue
+            if exit_kind != PARTIAL_TAKE_EXIT_KIND:
+                raise InvalidRequestError(
+                    "partial take exit component requires exit_kind partial_take",
+                    component_id=component_id,
+                    exit_kind=exit_kind,
+                )
+            # Exact decimal sum of the shortest float reprs: 0.1 + 0.2 + 0.7 == 1.
+            total += Decimal(repr(resolve_partial_take_fraction(rule, path)))
+            if component_id == "pct_partial_take":
+                resolve_partial_take_pct(rule, path)
+            else:
+                distance = _mapping(rule.get("distance"), f"{path}.distance")
+                _positive_finite(distance.get("multiplier"), f"{path}.distance.multiplier")
+        fractions[group] = total
+        takes[group] = has_take
+    for profile in _PROFILE_ORDER:
+        total = fractions["always_on"] + fractions[profile]
+        if total == 0:
+            continue
+        if total >= 1:
+            raise InvalidRequestError(
+                "partial take fractions must sum below 1 per profile", profile=profile
+            )
+        if not (takes["always_on"] or takes[profile]):
+            raise InvalidRequestError(
+                "partial takes require a take_profit rule in the same profile",
+                profile=profile,
+            )
