@@ -34,6 +34,7 @@ from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
 )
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     PARTIAL_TAKE_EXIT_KIND,
+    resolve_partial_take_fraction,
     resolve_partial_take_pct,
 )
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
@@ -79,6 +80,22 @@ class ExitRuleEvidence:
 
 
 @dataclass(frozen=True, slots=True)
+class PartialTakeRule:
+    """One configured partial take, internal to Engine (never on the
+    `/range` wire): its static `fraction_of_initial` and `pct`, and its
+    per-bar absolute distance (`pct * close` or `k * ATR`), for the
+    historical and live entry projections (OpenSpec
+    `frozen-partial-take-ladder-v1`, design D7/D8)."""
+
+    instance_id: str
+    component_id: str
+    group: str
+    fraction_of_initial: float
+    pct: float | None
+    distance: tuple[float | None, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ExitPolicyEvaluation:
     context_state: tuple[str, ...]
     profile_long: tuple[str, ...]
@@ -100,6 +117,7 @@ class ExitPolicyEvaluation:
     stop_loss_by_profile: dict[str, tuple[float | None, ...]]
     take_profit_by_profile: dict[str, tuple[float | None, ...]]
     rule_evidence: tuple[ExitRuleEvidence, ...]
+    partial_takes: tuple[PartialTakeRule, ...] = ()
 
     def to_wire(self) -> dict[str, object]:
         return {
@@ -563,6 +581,7 @@ def evaluate_exit_policy(
     distance_by_instance: dict[str, pd.Series] = {}
     ratio_by_instance: dict[str, pd.Series] = {}
     evidence: list[ExitRuleEvidence] = []
+    partial_takes: list[PartialTakeRule] = []
 
     for group, rules in groups.items():
         for rule in rules:
@@ -610,6 +629,19 @@ def evaluate_exit_policy(
                         distance_ratio=_optional_floats(ratio),
                     )
                 )
+                if family == "partial_take":
+                    partial_takes.append(
+                        PartialTakeRule(
+                            instance_id=instance_id,
+                            component_id=component_id,
+                            group=group,
+                            fraction_of_initial=resolve_partial_take_fraction(
+                                rule, f"exit[{instance_id}]"
+                            ),
+                            pct=_pct(rule) if component_id == "pct_partial_take" else None,
+                            distance=_optional_floats(distance),
+                        )
+                    )
 
     signals_long: dict[str, pd.Series] = {}
     signals_short: dict[str, pd.Series] = {}
@@ -753,6 +785,7 @@ def evaluate_exit_policy(
             key: _optional_floats(item) for key, item in tp_by_profile.items()
         },
         rule_evidence=tuple(evidence),
+        partial_takes=tuple(partial_takes),
     )
 
 

@@ -642,7 +642,11 @@ def test_partial_take_does_not_change_existing_outputs() -> None:
     laddered = _protection_spec([_USD_SL, _USD_TP, _PCT_LEG])
     plain_result = evaluate_exit_policy(plain, *_protection_frame(plain, {}), ())
     ladder_result = evaluate_exit_policy(laddered, *_protection_frame(laddered, {}), ())
-    assert replace(ladder_result, rule_evidence=plain_result.rule_evidence) == plain_result
+    assert ladder_result.partial_takes[0].fraction_of_initial == 0.25
+    assert ladder_result.partial_takes[0].pct == 0.01
+    assert replace(
+        ladder_result, rule_evidence=plain_result.rule_evidence, partial_takes=()
+    ) == plain_result
 
 
 def test_atr_partial_take_warm_up_blocks_readiness() -> None:

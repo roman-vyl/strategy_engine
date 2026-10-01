@@ -19,9 +19,16 @@ from types import SimpleNamespace
 
 import pytest
 
+from strategy_engine.adapters.http.strategy_serialization import (
+    serialize_historical_execution_projection,
+)
 from strategy_engine.domain.market import MarketStream
 from strategy_engine.domain.ranges import TimeRange
-from strategy_engine.strategies.ema_pullback.exits import ExitPolicyEvaluation, ExitRuleEvidence
+from strategy_engine.strategies.ema_pullback.exits import (
+    ExitPolicyEvaluation,
+    ExitRuleEvidence,
+    PartialTakeRule,
+)
 from strategy_engine.strategies.ema_pullback.risk import RiskMask, SideEntryEvaluation
 from strategy_engine.strategies.historical_execution_projection import (
     build_historical_execution_projection,
@@ -53,6 +60,7 @@ def _exit_policy(
     signal_long: dict[str, tuple[bool, ...]] | None = None,
     signal_short: dict[str, tuple[bool, ...]] | None = None,
     rule_evidence: tuple[ExitRuleEvidence, ...] = (),
+    partial_takes: tuple[PartialTakeRule, ...] = (),
 ) -> ExitPolicyEvaluation:
     neutral = tuple("neutral" for _ in range(bar_count))
     false = tuple(False for _ in range(bar_count))
@@ -79,6 +87,7 @@ def _exit_policy(
         stop_loss_by_profile={},
         take_profit_by_profile={},
         rule_evidence=rule_evidence,
+        partial_takes=partial_takes,
     )
 
 
@@ -440,3 +449,105 @@ def test_epsilon_matches_old_bbb_formula_exactly() -> None:
     )
     with pytest.raises(AssertionError, match="no matching rule_evidence entry"):
         _build(evaluation_outside, bar_count=1)
+
+
+# --- frozen partial take ladder (frozen-partial-take-ladder-v1) -------------
+
+
+def _leg_rule(
+    instance_id: str, component_id: str, group: str, fraction: float, ratio: float
+) -> tuple[ExitRuleEvidence, PartialTakeRule]:
+    return (
+        ExitRuleEvidence(
+            instance_id, component_id, "partial_take", group, None, distance_ratio=(ratio,)
+        ),
+        PartialTakeRule(
+            instance_id=instance_id,
+            component_id=component_id,
+            group=group,
+            fraction_of_initial=fraction,
+            pct=ratio if component_id == "pct_partial_take" else None,
+            distance=(ratio * 100,),
+        ),
+    )
+
+
+def _ladder_projection(
+    legs: list[tuple[ExitRuleEvidence, PartialTakeRule]], *, profile: str = "aligned"
+):
+    take = ExitRuleEvidence(
+        "tp_final", "atr_take_profit", "take_profit", "always_on", None, distance_ratio=(0.05,)
+    )
+    evaluation = _evaluation(
+        entries=(_entries("long", (True,)),),
+        exit_policy=_exit_policy(
+            bar_count=1,
+            stop_ready_long=(True,),
+            tp_long=(0.05,),
+            profile_long=(profile,),
+            rule_evidence=(take, *(evidence for evidence, _ in legs)),
+            partial_takes=tuple(rule for _, rule in legs),
+        ),
+    )
+    return _build(evaluation, bar_count=1)
+
+
+def test_partial_takes_follow_the_locked_profile_and_sort_by_ratio() -> None:
+    projection = _ladder_projection(
+        [
+            _leg_rule("pt_far", "atr_partial_take", "always_on", 0.25, 0.03),
+            _leg_rule("pt_counter", "pct_partial_take", "countertrend", 0.25, 0.005),
+            _leg_rule("pt_near", "pct_partial_take", "aligned", 0.25, 0.01),
+            _leg_rule("pt_tie", "pct_partial_take", "aligned", 0.1, 0.03),
+        ]
+    )
+    (opportunity,) = projection.entry_opportunities
+    assert [leg.take_id for leg in opportunity.partial_takes] == ["pt_near", "pt_far", "pt_tie"]
+    near = opportunity.partial_takes[0]
+    assert near.ratio == 0.01
+    assert near.fraction_of_initial == 0.25
+    assert (near.attribution.rule_id, near.attribution.component_id) == (
+        "pt_near",
+        "pct_partial_take",
+    )
+    assert near.attribution.exit_kind == "partial_take"
+
+
+def test_partial_takes_do_not_change_the_final_take() -> None:
+    plain = _ladder_projection([])
+    laddered = _ladder_projection(
+        [_leg_rule("pt", "pct_partial_take", "always_on", 0.25, 0.01)]
+    )
+    (plain_opportunity,) = plain.entry_opportunities
+    (laddered_opportunity,) = laddered.entry_opportunities
+    assert plain_opportunity.partial_takes == ()
+    assert laddered_opportunity.initial_take == plain_opportunity.initial_take
+    assert laddered_opportunity.initial_take is not None
+    assert laddered_opportunity.initial_take.attribution.rule_id == "tp_final"
+
+
+def test_partial_takes_serialize_only_when_present() -> None:
+    plain = serialize_historical_execution_projection(_ladder_projection([]))
+    laddered = serialize_historical_execution_projection(
+        _ladder_projection([_leg_rule("pt_1pct", "pct_partial_take", "always_on", 0.25, 0.01)])
+    )
+    assert plain["contract_version"] == "strategy_evaluation_execution.v2"
+    assert laddered["contract_version"] == "strategy_evaluation_execution.v2"
+    (plain_wire,) = plain["entry_opportunities"]
+    (laddered_wire,) = laddered["entry_opportunities"]
+    assert "partial_takes" not in plain_wire
+    assert laddered_wire["partial_takes"] == [
+        {
+            "take_id": "pt_1pct",
+            "ratio": 0.01,
+            "fraction_of_initial": 0.25,
+            "attribution": {
+                "rule_id": "pt_1pct",
+                "component_id": "pct_partial_take",
+                "exit_kind": "partial_take",
+            },
+        }
+    ]
+    assert {key: value for key, value in laddered_wire.items() if key != "partial_takes"} == (
+        plain_wire
+    )

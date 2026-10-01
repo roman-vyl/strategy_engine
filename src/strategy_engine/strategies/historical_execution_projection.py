@@ -44,12 +44,13 @@ from strategy_engine.strategies.contracts import (
     HistoricalExecutionProjection,
     HistoricalManagedProjection,
     InitialProtectionLeg,
+    PartialTakeLeg,
     SignalExitCandidate,
     SignalExitEvent,
     SignalExitProjection,
 )
 from strategy_engine.strategies.ema_pullback.evaluation import EmaPullbackEvaluation
-from strategy_engine.strategies.ema_pullback.exits import ExitRuleEvidence
+from strategy_engine.strategies.ema_pullback.exits import ExitRuleEvidence, PartialTakeRule
 
 _EPS_REL = 1e-9
 
@@ -111,6 +112,49 @@ def _leg(
             "resolved protection ratio has no matching rule_evidence entry",
         )
     return InitialProtectionLeg(ratio=ratio, attribution=attribution)
+
+
+def _partial_takes(
+    partial_takes: tuple[PartialTakeRule, ...],
+    rule_evidence: tuple[ExitRuleEvidence, ...],
+    *,
+    locked_profile: str,
+    bar_index: int,
+) -> tuple[PartialTakeLeg, ...]:
+    """Legs of `always_on` + the locked profile (`frozen-partial-take-
+    ladder-v1`, design D7): ratio read from the rule's own evidence at the
+    bar, attribution direct (no aggregate to recover), ordered by ratio
+    ascending, ties by declared order (stable sort). Readiness already
+    guarantees every ratio is non-null here."""
+
+    if not partial_takes:
+        return ()
+    ratios = {
+        rule.instance_id: rule.distance_ratio
+        for rule in rule_evidence
+        if rule.exit_kind == "partial_take"
+    }
+    legs: list[PartialTakeLeg] = []
+    for rule in partial_takes:
+        if rule.group not in ("always_on", locked_profile):
+            continue
+        series = ratios[rule.instance_id]
+        ratio = series[bar_index] if series is not None else None
+        if ratio is None:
+            raise AssertionError("ready entry opportunity has a null partial take ratio")
+        legs.append(
+            PartialTakeLeg(
+                take_id=rule.instance_id,
+                ratio=ratio,
+                fraction_of_initial=rule.fraction_of_initial,
+                attribution=ExitAttribution(
+                    rule_id=rule.instance_id,
+                    component_id=rule.component_id,
+                    exit_kind="partial_take",
+                ),
+            )
+        )
+    return tuple(sorted(legs, key=lambda leg: leg.ratio))
 
 
 def _entry_opportunities(
@@ -185,6 +229,12 @@ def _entry_opportunities(
                     locked_exit_profile=locked_profile,
                     initial_stop=initial_stop,
                     initial_take=initial_take,
+                    partial_takes=_partial_takes(
+                        exit_policy.partial_takes,
+                        rule_evidence,
+                        locked_profile=locked_profile,
+                        bar_index=i,
+                    ),
                 )
             )
     return tuple(opportunities)

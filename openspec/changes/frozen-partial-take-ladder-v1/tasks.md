@@ -85,13 +85,13 @@ from group 0 runs again at the end of every group.
 
 ## 3. Historical contract
 
-- [ ] 3.1 `strategies/contracts.py`:
+- [x] 3.1 `strategies/contracts.py`:
       - add `PartialTakeLeg`;
       - add `ExecutableEntryOpportunity.partial_takes = ()`;
       - widen `ExitAttribution.exit_kind` to include `"partial_take"`.
 
       Verify: contract unit tests in `test_domain_contracts.py`.
-- [ ] 3.2 `historical_execution_projection._entry_opportunities`:
+- [x] 3.2 `historical_execution_projection._entry_opportunities`:
       - add the legs of `always_on` plus the locked profile, with
         `ratio` from evidence at `bar_index`;
       - `fraction_of_initial` comes from the parsed rules;
@@ -102,7 +102,7 @@ from group 0 runs again at the end of every group.
       - a leg of another profile excluded;
       - `initial_take` unchanged by legs;
       - order of mixed pct and ATR legs.
-- [ ] 3.3 `strategy_serialization._serialize_opportunity` writes
+- [x] 3.3 `strategy_serialization._serialize_opportunity` writes
       `partial_takes` only when non-empty (design D6).
 
       Verify:
