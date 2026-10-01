@@ -34,6 +34,7 @@ from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
 )
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     PARTIAL_TAKE_EXIT_KIND,
+    resolve_partial_take_pct,
 )
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     resolve_exit_rule_groups as _policy_rules,
@@ -290,7 +291,7 @@ def _signal_rule(
     raise InvalidRequestError("unsupported signal exit component", component_id=component_id)
 
 
-_ATR_DISTANCE_COMPONENTS = frozenset({"atr_stop_loss", "atr_take_profit"})
+_ATR_DISTANCE_COMPONENTS = frozenset({"atr_stop_loss", "atr_take_profit", "atr_partial_take"})
 _USD_DISTANCE_COMPONENTS = frozenset({"constant_usd_stop_loss", "constant_usd_take_profit"})
 
 
@@ -319,12 +320,28 @@ def _distance(
             ) from exc
     elif component_id in _USD_DISTANCE_COMPONENTS:
         distance = pd.Series(_usd_distance(rule), index=df.index, dtype=float)
+    elif component_id == "pct_partial_take":
+        # Relative by definition: ratio is exactly `pct`, distance = pct * close.
+        pct = _pct(rule)
+        close = _positive_close(df)
+        return (close * pct).astype(float), pd.Series(pct, index=df.index, dtype=float)
     else:
         raise InvalidRequestError("unsupported distance exit component", component_id=component_id)
+    close = _positive_close(df)
+    return distance.astype(float), (distance / close).astype(float)
+
+
+def _positive_close(df: pd.DataFrame) -> pd.Series:
     close = df["close"].astype(float)
     if (close <= 0).any():
         raise InvalidRequestError("exit distance ratio requires positive close")
-    return distance.astype(float), (distance / close).astype(float)
+    return close
+
+
+def _pct(rule: Mapping[str, Any]) -> float:
+    """Effective `pct` of a `pct_partial_take` (shared by compute and resolve)."""
+
+    return resolve_partial_take_pct(rule, f"exit[{rule.get('instance_id', '')}]")
 
 
 def _profiles(
@@ -381,12 +398,23 @@ def _select_bool(
     return pd.Series(selected, index=index, dtype=bool)
 
 
-def _ready(sl: pd.Series, tp: pd.Series, sl_configured: bool, tp_configured: bool) -> pd.Series:
+def _ready(
+    sl: pd.Series,
+    tp: pd.Series,
+    sl_configured: bool,
+    tp_configured: bool,
+    partial_takes: tuple[pd.Series, ...] = (),
+) -> pd.Series:
+    """Protection readiness; every partial take in force must also be
+    non-null (OpenSpec frozen-partial-take-ladder-v1, design D2)."""
+
     output = pd.Series(True, index=sl.index, dtype=bool)
     if sl_configured:
         output = output & sl.notna()
     if tp_configured:
         output = output & tp.notna()
+    for leg in partial_takes:
+        output = output & leg.notna()
     return output
 
 
@@ -439,6 +467,7 @@ class _ProfileSelection:
     take_profit: tuple[str, ...]
     stop_loss_configured: bool
     take_profit_configured: bool
+    partial_take: tuple[str, ...] = ()
 
 
 def _profile_selection(
@@ -466,6 +495,11 @@ def _profile_selection(
         stop_loss_configured=any(str(rule.get("exit_kind")) == "stop_loss" for rule in selected),
         take_profit_configured=any(
             str(rule.get("exit_kind")) == "take_profit" for rule in selected
+        ),
+        partial_take=tuple(
+            str(rule.get("instance_id"))
+            for rule in selected
+            if str(rule.get("exit_kind")) == PARTIAL_TAKE_EXIT_KIND
         ),
     )
 
@@ -585,9 +619,13 @@ def evaluate_exit_policy(
     tp_distance_by_profile: dict[str, pd.Series] = {}
     sl_configured_by_profile: dict[str, bool] = {}
     tp_configured_by_profile: dict[str, bool] = {}
+    partial_takes_by_profile: dict[str, tuple[pd.Series, ...]] = {}
     for profile in _PROFILE_ORDER:
         selection = _profile_selection(groups, profile)
         agg = ids.by_profile[profile] if ids else None
+        partial_takes_by_profile[profile] = tuple(
+            ratio_by_instance[instance_id] for instance_id in selection.partial_take
+        )
         sl_configured_by_profile[profile] = selection.stop_loss_configured
         tp_configured_by_profile[profile] = selection.take_profit_configured
         signals_long[profile] = compute_through(
@@ -679,6 +717,7 @@ def evaluate_exit_policy(
                 tp_by_profile[profile],
                 sl_configured_by_profile[profile],
                 tp_configured_by_profile[profile],
+                partial_takes_by_profile[profile],
             ),
         )
         for profile in _PROFILE_ORDER
@@ -832,6 +871,12 @@ def resolve_distance_rule(
             version=EXIT_NODE_VERSION,
             params={"usd_distance": _usd_distance(rule)},
         )
+    if component_id == "pct_partial_take":
+        return node_spec(
+            "exit.distance.pct",
+            version=EXIT_NODE_VERSION,
+            params={"pct": _pct(rule)},
+        )
     raise InvalidRequestError("unsupported distance exit component", component_id=component_id)
 
 
@@ -938,7 +983,20 @@ def resolve_exit_policy(
                     "stop_loss_configured": selection.stop_loss_configured,
                     "take_profit_configured": selection.take_profit_configured,
                 },
-                upstream={"stop_loss": stop_loss_ratio, "take_profit": take_profit_ratio},
+                upstream={
+                    "stop_loss": stop_loss_ratio,
+                    "take_profit": take_profit_ratio,
+                    # Only when legs are in force: identities without legs unchanged.
+                    **(
+                        {
+                            "partial_takes": frozenset(
+                                distance_rules[item] for item in selection.partial_take
+                            )
+                        }
+                        if selection.partial_take
+                        else {}
+                    ),
+                },
             ),
         )
 

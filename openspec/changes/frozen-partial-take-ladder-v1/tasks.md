@@ -54,7 +54,7 @@ from group 0 runs again at the end of every group.
 
 ## 2. Exit policy evaluation and memo
 
-- [ ] 2.1 `exits._distance` gains the pct variant, and
+- [x] 2.1 `exits._distance` gains the pct variant, and
       `atr_partial_take` reads its planned ATR column (design D2).
       `_ProfileSelection.partial_take` lists the legs in force. Legs are
       excluded from the take minimum, and `_ready` requires each leg in
@@ -65,14 +65,14 @@ from group 0 runs again at the end of every group.
         `exit_kind` `partial_take`;
       - `take_profit_ratio_*` is unchanged by adding a leg;
       - readiness is false during ATR-leg warm-up.
-- [ ] 2.2 `feature_plan.py`: skip the kind-level `setdefault` for
+- [x] 2.2 `feature_plan.py`: skip the kind-level `setdefault` for
       `partial_take` (design D9).
 
       Verify:
       - an ATR leg sharing (timeframe, period) with SL/TP plans one ATR;
       - a pct leg plans nothing;
       - `plan_hash` is unchanged for specs without legs.
-- [ ] 2.3 Memo resolve twins: `exit.distance.atr` for
+- [x] 2.3 Memo resolve twins: `exit.distance.atr` for
       `atr_partial_take` and a new `exit.distance.pct`. The readiness
       aggregate includes legs only when present.
 
@@ -81,7 +81,7 @@ from group 0 runs again at the end of every group.
       - candidates differing only in `fraction_of_initial` compute each
         distance node once per batch;
       - memoized and non-memoized outputs are bit-identical.
-- [ ] 2.4 Run the group 0 gate. Verify: green with no re-recording.
+- [x] 2.4 Run the group 0 gate. Verify: green with no re-recording.
 
 ## 3. Historical contract
 

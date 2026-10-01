@@ -147,3 +147,42 @@ def test_wire_format_uses_stable_string_keys() -> None:
     assert wire["rsi_columns"] == {"1h:14": "rsi_close_1h_14"}
     assert "base:14" in wire["adx_dmi_columns"]
     assert isinstance(wire["plan_hash"], str)
+
+
+# -- frozen partial take ladder (OpenSpec frozen-partial-take-ladder-v1) ------
+
+
+def _with_exits(*extra: dict[str, object]) -> dict[str, object]:
+    spec = canonical_spec()
+    exits = spec["trade_management"]["exit_policy"]["always_on"]["exits"]  # type: ignore[index]
+    exits.extend(extra)
+    return spec
+
+
+def test_atr_partial_take_shares_the_atr_feature() -> None:
+    leg = {
+        "instance_id": "pt-atr",
+        "component_id": "atr_partial_take",
+        "exit_kind": "partial_take",
+        "distance": {"timeframe": "base", "period": 14, "multiplier": 3.0},
+        "fraction_of_initial": 0.25,
+    }
+    plan = build_feature_plan_from_canonical_spec(_with_exits(leg))
+    ids = [feature.output_id for feature in plan.indicator_plan.features]
+    assert ids.count("atr_close_base_14") == 1
+    assert plan.exit_distance_columns["pt-atr"] == "atr_close_base_14_x3_0"
+    assert "partial_take" not in plan.exit_distance_columns
+
+
+def test_pct_partial_take_plans_nothing() -> None:
+    leg = {
+        "instance_id": "pt-pct",
+        "component_id": "pct_partial_take",
+        "exit_kind": "partial_take",
+        "pct": 0.01,
+        "fraction_of_initial": 0.25,
+    }
+    plain = build_feature_plan_from_canonical_spec(canonical_spec())
+    laddered = build_feature_plan_from_canonical_spec(_with_exits(leg))
+    assert laddered.indicator_plan == plain.indicator_plan
+    assert laddered.to_wire() == plain.to_wire()
