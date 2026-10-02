@@ -30,7 +30,9 @@ COMPOSITE_PHASE_CONDITION = "composite_phase_condition"
 
 # Existing managed phase atoms allowed as `composite_phase_condition`
 # children (design D1). The composite itself is absent: no nesting.
-PHASE_ATOM_CHILDREN = frozenset({"bars_in_trade", "mfe_pct", "mfe_atr", "adx_di_threshold"})
+PHASE_ATOM_CHILDREN = frozenset(
+    {"bars_in_trade", "mfe_pct", "mfe_atr", "mfe_r", "adx_di_threshold"}
+)
 
 _ID_SEPARATOR = "/"
 
