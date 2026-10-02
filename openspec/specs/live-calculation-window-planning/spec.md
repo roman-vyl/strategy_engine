@@ -2,9 +2,7 @@
 
 ## Purpose
 Compute, without any I/O, a bounded history start timestamp that is sufficient, under a set of configured indicator-convergence and strategy-semantic warm-up policies, to evaluate a given live strategy spec at a target bar — so the live acquisition path stops reading history that scales with total accumulated market-data depth.
-
 ## Requirements
-
 ### Requirement: Pure history-start planning
 
 The planner SHALL compute a bounded history start (`from_ms`) from a strategy spec's indicator plan, the base timeframe, the strategy's event/lookback requirements, and a caller-supplied history anchor timestamp.
@@ -200,3 +198,24 @@ recursing into its children:
 - **AND** because the open-trade window is anchored at the earlier of
   the plan bar and the entry bar, the window SHALL be available on the
   entry bar.
+
+### Requirement: History policy for partial take components
+
+The live history planner SHALL register `pct_partial_take` and
+`atr_partial_take` as exit components with an explicit
+zero-additional-warm-up entry. The ATR history of `atr_partial_take`
+SHALL come from its planned ATR feature, as for `atr_take_profit`.
+
+#### Scenario: Spec with an ATR partial take
+
+- **WHEN** the planner resolves a spec containing an `atr_partial_take`
+- **THEN** the resolved requirements SHALL include an explicit zero
+  entry for that component
+- **AND** the planner SHALL NOT fail closed on it.
+
+#### Scenario: Requirements unchanged without partial takes
+
+- **WHEN** a spec has no partial take rules
+- **THEN** its resolved history requirements SHALL equal those before
+  this change.
+
