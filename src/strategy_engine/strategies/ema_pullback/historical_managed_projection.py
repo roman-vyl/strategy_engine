@@ -44,6 +44,7 @@ from strategy_engine.strategies.ema_pullback.managed import (
     _atr_output_id,
     _cached_series,
     _float,
+    _initial_r_stop_params,
     _int,
     _items,
     _mapping,
@@ -320,6 +321,8 @@ def build_historical_managed_projection(
         component_id = str(stop_rule.get("component_id", ""))
         params = _mapping(stop_rule.get("params", {}), "stop params")
         distance_id = f"stop:{rule_id}:distance"
+        stop_formula = None
+        trigger_distance_id = None
 
         if component_id == "break_even_stop":
             if params.get("buffer_type", "none") == "none":
@@ -350,7 +353,13 @@ def build_historical_managed_projection(
                 lock_atr * atr if atr is not None else _NAN for atr in atr_values
             )
         else:
-            raise ValueError(f"unsupported stop management component_id={component_id!r}")
+            initial_r = _initial_r_stop_params(component_id, params)
+            if initial_r is None:
+                raise ValueError(f"unsupported stop management component_id={component_id!r}")
+            stop_formula, trigger_r, action_r = initial_r
+            trigger_distance_id = f"stop:{rule_id}:trigger"
+            distances[trigger_distance_id] = tuple(trigger_r for _ in range(bar_count))
+            distances[distance_id] = tuple(action_r for _ in range(bar_count))
 
         rules.append(
             ManagedStopActionRule(
@@ -358,6 +367,8 @@ def build_historical_managed_projection(
                 rule_id=rule_id,
                 activation_phase=activation_phase,
                 distance_id=distance_id,
+                stop_formula=stop_formula,
+                trigger_distance_id=trigger_distance_id,
             )
         )
 

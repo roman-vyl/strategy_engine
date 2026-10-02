@@ -241,6 +241,50 @@ def _int(value: Any, path: str) -> int:
     return int(value)
 
 
+InitialRStopFormula = Literal["initial_r_lock", "initial_r_trailing"]
+
+
+def _initial_r_stop_params(
+    component_id: str, params: Mapping[str, Any]
+) -> tuple[InitialRStopFormula, float, float] | None:
+    """Return closed execution formula, trigger R, and action distance R."""
+
+    if component_id not in {"initial_r_lock_stop", "initial_r_trailing_stop"}:
+        return None
+    trigger_r = _float(params.get("trigger_r"), f"{component_id}.trigger_r", positive=True)
+    if component_id == "initial_r_lock_stop":
+        action_r = _float(params.get("lock_r"), "initial_r_lock_stop.lock_r")
+        if action_r < 0 or action_r > trigger_r:
+            raise InvalidRequestError("lock_r must satisfy 0 <= lock_r <= trigger_r")
+        return "initial_r_lock", trigger_r, action_r
+    action_r = _float(
+        params.get("trail_distance_r"),
+        "initial_r_trailing_stop.trail_distance_r",
+        positive=True,
+    )
+    if action_r > trigger_r:
+        raise InvalidRequestError("trail_distance_r must not exceed trigger_r")
+    return "initial_r_trailing", trigger_r, action_r
+
+
+def _initial_r_stop_candidate(
+    formula: InitialRStopFormula,
+    trigger_r: float,
+    action_r: float,
+    state: ManagedTradeState,
+) -> float | None:
+    initial_risk = state.initial_risk
+    if initial_risk is None or initial_risk <= 0:
+        return None
+    mfe_r = abs(state.mfe_price - state.entry_price) / initial_risk
+    if mfe_r < trigger_r:
+        return None
+    offset = action_r * initial_risk
+    if formula == "initial_r_lock":
+        return state.entry_price + offset if state.side == "long" else state.entry_price - offset
+    return state.mfe_price - offset if state.side == "long" else state.mfe_price + offset
+
+
 def _series(frame: FeatureFrameLike, output_id: str) -> tuple[float | None, ...]:
     values = frame.series.get(output_id)
     if values is None:
@@ -620,9 +664,14 @@ def _evaluate_managed_replay_core(
                 offset = float(params.get("lock_atr", 0.0)) * atr
                 price = state.entry_price + offset if side == "long" else state.entry_price - offset
             else:
-                raise InvalidRequestError(
-                    "unsupported stop management component", component_id=component_id
-                )
+                initial_r = _initial_r_stop_params(component_id, params)
+                if initial_r is None:
+                    raise InvalidRequestError(
+                        "unsupported stop management component", component_id=component_id
+                    )
+                price = _initial_r_stop_candidate(*initial_r, state)
+                if price is None:
+                    continue
             candidates.append((price, rule))
         if candidates:
             chosen_price, chosen_rule = (

@@ -100,6 +100,7 @@ def _replay_from_projection(
     entry_price: float,
     target_index: int,
     start_offset: int = 0,
+    initial_stop_price: float | None = None,
     transitions: list[tuple[int, str, str | None]] | None = None,
     fault: str | None = None,
 ) -> list[tuple[str, float | None, str, tuple[str, ...]]]:
@@ -113,7 +114,7 @@ def _replay_from_projection(
     runtime_rules = [r for r in projection.rules if r.kind == "runtime_exit"]
 
     phase = "initial_risk"
-    active_stop_price: float | None = None
+    active_stop_price = initial_stop_price
     active_take_profile = "initial"
     best_price = entry_price
     out: list[tuple[str, float | None, str, tuple[str, ...]]] = []
@@ -135,6 +136,12 @@ def _replay_from_projection(
             "bars_since_entry": float(bars_in_trade),
             "mfe_pct": mfe_pct,
             "mfe_distance": mfe_distance,
+            "mfe_r": (
+                float("nan")
+                if initial_stop_price is None
+                or abs(entry_price - initial_stop_price) <= 0
+                else mfe_distance / abs(entry_price - initial_stop_price)
+            ),
         }
 
         for rule in phase_rules:
@@ -170,7 +177,27 @@ def _replay_from_projection(
             distance = projection.distances[rule.distance_id][index]
             if distance != distance:  # NaN: "not ready this bar", per contract convention
                 continue
-            price = entry_price + distance if side == "long" else entry_price - distance
+            if rule.stop_formula is None:
+                price = entry_price + distance if side == "long" else entry_price - distance
+            else:
+                assert rule.trigger_distance_id is not None
+                trigger = projection.distances[rule.trigger_distance_id][index]
+                initial_risk = (
+                    None
+                    if initial_stop_price is None
+                    else abs(entry_price - initial_stop_price)
+                )
+                if (
+                    initial_risk is None
+                    or initial_risk <= 0
+                    or trade_metric_values["mfe_r"] < trigger
+                ):
+                    continue
+                offset = distance * initial_risk
+                if rule.stop_formula == "initial_r_lock":
+                    price = entry_price + offset if side == "long" else entry_price - offset
+                else:
+                    price = mfe_price - offset if side == "long" else mfe_price + offset
             candidates.append(price)
         if candidates:
             chosen = max(candidates) if side == "long" else min(candidates)

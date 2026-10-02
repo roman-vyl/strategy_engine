@@ -64,6 +64,35 @@ def test_setup_lookback_is_read_from_params() -> None:
     assert setup_reqs[0].timeframe == "base"
 
 
+def test_initial_r_stops_add_zero_semantic_lookback() -> None:
+    raw = _spec()
+    management = raw["trade_management"]
+    assert isinstance(management, dict)
+    management["exit_management"] = {
+        "phase_rules": [],
+        "stop_management": [
+            {
+                "rule_id": "lock",
+                "component_id": "initial_r_lock_stop",
+                "activate_when": {"phase_at_least": "initial_risk"},
+                "params": {"trigger_r": 6, "lock_r": 4},
+            },
+            {
+                "rule_id": "trail",
+                "component_id": "initial_r_trailing_stop",
+                "activate_when": {"phase_at_least": "initial_risk"},
+                "params": {"trigger_r": 6, "trail_distance_r": 2},
+            },
+        ],
+        "runtime_exits": [],
+    }
+
+    reqs = EmaPullbackLiveCalculationRequirements().execute(raw)
+    stop_reqs = [requirement for requirement in reqs if "stop_management" in requirement.reason]
+    assert len(stop_reqs) == 2
+    assert all(requirement.bars == 0 for requirement in stop_reqs)
+
+
 def test_untouched_anchor_setup_accounts_for_active_bars() -> None:
     """touch_active at target can be driven by a first_touch up to
     active_bars-1 bars before target, and that first_touch's own

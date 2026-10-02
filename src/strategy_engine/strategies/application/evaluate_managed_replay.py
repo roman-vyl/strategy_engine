@@ -52,5 +52,6 @@ class EvaluateManagedReplay:
             side=request.side,
             entry_time_ms=request.entry_time_ms,
             entry_price=request.entry_price,
+            initial_stop_price=request.initial_stop_price,
             bundle=bundle,
         )

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from strategy_engine.adapters.http.app import create_app
+from strategy_engine.adapters.http.models import ManagedReplayRequestModel
 from strategy_engine.domain.market import MarketBar, MarketFrame
 from strategy_engine.indicators.application.catalog import IndicatorCatalog
 from strategy_engine.indicators.application.evaluate_range import EvaluateIndicatorRange
@@ -40,7 +44,7 @@ class FakeMarketData:
 
 
 def raw_spec() -> dict[str, object]:
-    from tests.test_ema_pullback_managed import spec
+    from test_ema_pullback_managed import spec
 
     return spec()
 
@@ -113,3 +117,71 @@ def test_managed_replay_request_strategy_field_exact_key_set() -> None:
         schema = client.get("/openapi.json").json()
     strategy_schema = schema["components"]["schemas"]["LiveStrategySpecModel"]
     assert set(strategy_schema["properties"]) == {"strategy_id", "raw_spec"}
+
+
+def _initial_r_http_body(*, initial_stop_price: float | None) -> dict[str, object]:
+    raw = raw_spec()
+    management: Any = raw["trade_management"]
+    config = management["exit_management"]
+    config["phase_rules"] = []
+    config["take_management"] = []
+    config["runtime_exits"] = []
+    config["stop_management"] = [
+        {
+            "rule_id": "lock",
+            "component_id": "initial_r_lock_stop",
+            "activate_when": {"phase_at_least": "initial_risk"},
+            "params": {"trigger_r": 2, "lock_r": 1},
+        }
+    ]
+    body: dict[str, object] = {
+        "market": {
+            "ticker": "BTCUSDT.P",
+            "base_timeframe": "5m",
+            "from_ms": 0,
+            "to_ms": 1_800_000,
+        },
+        "strategy": {"strategy_id": "ema_pullback", "raw_spec": raw},
+        "trade_id": "L1",
+        "side": "long",
+        "entry_time_ms": 0,
+        "entry_price": 100.0,
+    }
+    if initial_stop_price is not None:
+        body["initial_stop_price"] = initial_stop_price
+    return body
+
+
+def test_managed_replay_http_threads_initial_stop_into_r_policy() -> None:
+    with TestClient(create_app(services=services())) as client:
+        with_stop = client.post(
+            "/v1/strategy-evaluations/managed-replay",
+            json=_initial_r_http_body(initial_stop_price=99.0),
+        )
+        without_stop = client.post(
+            "/v1/strategy-evaluations/managed-replay",
+            json=_initial_r_http_body(initial_stop_price=None),
+        )
+
+    assert with_stop.status_code == 200
+    assert with_stop.json()["final_state"]["active_stop_price"] == "101"
+    assert without_stop.status_code == 200
+    assert without_stop.json()["final_state"]["active_stop_price"] is None
+
+
+@pytest.mark.parametrize("initial_stop", [0, 100, 101])
+def test_managed_replay_http_rejects_invalid_initial_stop(initial_stop: float) -> None:
+    with TestClient(create_app(services=services())) as client:
+        response = client.post(
+            "/v1/strategy-evaluations/managed-replay",
+            json=_initial_r_http_body(initial_stop_price=initial_stop),
+        )
+
+    assert response.status_code == 422
+
+
+def test_managed_replay_model_rejects_non_finite_initial_stop() -> None:
+    with pytest.raises(ValidationError):
+        ManagedReplayRequestModel.model_validate(
+            _initial_r_http_body(initial_stop_price=float("inf"))
+        )
