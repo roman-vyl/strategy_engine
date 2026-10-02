@@ -2,9 +2,11 @@
 
 ### Requirement: Closed stop execution formula
 
-A projected `stop_action` SHALL support the closed execution semantic
-`stop_formula` with values `entry_offset`, `initial_r_lock`, and
-`initial_r_trailing`.
+A projected `stop_action` SHALL support the optional closed execution
+semantic `stop_formula` with values `initial_r_lock` and `initial_r_trailing`.
+Engine SHALL represent every legacy stop action with no formula (`None`),
+omitted on the wire; a consumer MAY name that omitted case `entry_offset`
+internally, but Engine SHALL NOT emit `entry_offset`.
 
 `stop_formula` SHALL describe generic execution semantics owned by the
 projection contract. It SHALL NOT contain or reproduce a strategy
@@ -31,8 +33,8 @@ opaque entries of the projection's distance map.
 
 ### Requirement: Legacy stop action wire compatibility
 
-A legacy stop action that omits `stop_formula` SHALL mean `entry_offset` and
-SHALL continue to interpret `distance_id` as the per-bar absolute price offset
+A legacy stop action that omits `stop_formula` SHALL keep the legacy
+entry-offset meaning (Research's `entry_offset`) and SHALL continue to interpret `distance_id` as the per-bar absolute price offset
 from entry. Engine SHALL omit the new formula and trigger-reference fields when
 serializing existing `break_even_stop` and `lock_profit_stop` rules.
 
@@ -40,7 +42,7 @@ serializing existing `break_even_stop` and `lock_profit_stop` rules.
 
 - **WHEN** a consumer receives a pre-change stop action containing only kind,
   rule id, activation phase, and distance id
-- **THEN** it SHALL execute that action as `entry_offset`.
+- **THEN** it SHALL execute that action with the legacy entry-offset meaning.
 
 #### Scenario: Serialize existing specification
 

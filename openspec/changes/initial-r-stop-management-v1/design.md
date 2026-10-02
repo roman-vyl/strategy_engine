@@ -44,6 +44,11 @@ The parser enforces `0 <= lock_r <= trigger_r` and
 `0 < trail_distance_r <= trigger_r`. Besides making invalid inputs fail early,
 these bounds ensure the first eligible candidate protects at least 0R.
 
+The parser lives in the dependency-neutral `raw_spec_identity.py` and is
+called from static semantics, so `ValidateStrategySpec` rejects an invalid
+configuration before feature planning, projection building or replay. The
+managed evaluator and the projection builder reuse the same resolver.
+
 ### D2. Phase activation and R trigger are independent gates
 
 `activate_when.phase_at_least` remains the outer lifecycle gate. The component's
@@ -72,10 +77,15 @@ entry bar. In both cases a decision from bar N is effective only on bar N+1.
 `ManagedStopActionRule` gains optional semantic fields at the end of its
 contract:
 
-- `stop_formula`: `entry_offset | initial_r_lock | initial_r_trailing`;
-- `trigger_distance_id`: an opaque reference required for either R formula;
-- existing `distance_id`: absolute price offset for `entry_offset`, lock R for
-  `initial_r_lock`, and trail-distance R for `initial_r_trailing`.
+- `stop_formula`: `initial_r_lock | initial_r_trailing`, or `None` for every
+  legacy stop action. Engine never emits a legacy formula value: `None` is
+  omitted on the wire, and Research normalizes the omitted field to its own
+  `entry_offset` meaning (D5);
+- `trigger_distance_id`: an opaque reference required for either R formula and
+  `None`/omitted otherwise;
+- existing `distance_id`: absolute price offset for a legacy action (omitted
+  formula), lock R for `initial_r_lock`, and trail-distance R for
+  `initial_r_trailing`.
 
 For new rules, both R values are emitted as already resolved constant distance
 series. Research knows that the trigger reference is compared with `mfe_r` and

@@ -3,6 +3,7 @@
 - [x] 1.1 Add shared parsing for `initial_r_lock_stop` and `initial_r_trailing_stop`, including finite-number checks and trigger/action bounds.
 - [x] 1.2 Add focused validation tests for accepted boundary values, rejected parameter combinations, missing fields, and non-finite inputs.
 - [x] 1.3 Register both components as zero-lookback managed stops and prove feature planning adds no indicator solely for them.
+- [x] 1.4 Run the parameter checks at the strategy-specification validation boundary (static semantics) through the same shared resolver the evaluators use, with tests proving rejection before evaluation.
 
 ## 2. Single-Trade and Live Managed Evaluation
 

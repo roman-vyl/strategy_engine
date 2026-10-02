@@ -21,6 +21,9 @@ from strategy_engine.strategies.ema_pullback.historical_managed_projection impor
     build_historical_managed_projection,
 )
 from strategy_engine.strategies.ema_pullback.managed import evaluate_managed_replay
+from strategy_engine.strategies.ema_pullback.static_semantics import (
+    check_ema_pullback_static_semantics,
+)
 
 STEP = 300_000
 
@@ -256,3 +259,62 @@ def test_new_stop_features_require_no_extra_indicator() -> None:
     with_plan = build_feature_plan_from_canonical_spec(raw)
     without_plan = build_feature_plan_from_canonical_spec(without_stops)
     assert with_plan.indicator_plan == without_plan.indicator_plan
+
+
+@pytest.mark.parametrize(
+    ("component_id", "params"),
+    [
+        ("initial_r_lock_stop", {"trigger_r": 0, "lock_r": 0}),
+        ("initial_r_lock_stop", {"trigger_r": 6}),
+        ("initial_r_lock_stop", {"trigger_r": 6, "lock_r": -1}),
+        ("initial_r_lock_stop", {"trigger_r": 6, "lock_r": 7}),
+        ("initial_r_lock_stop", {"trigger_r": 6, "lock_r": True}),
+        ("initial_r_trailing_stop", {"trigger_r": 6, "trail_distance_r": 0}),
+        ("initial_r_trailing_stop", {"trigger_r": 6, "trail_distance_r": 7}),
+        ("initial_r_trailing_stop", {"trigger_r": float("nan"), "trail_distance_r": 2}),
+        ("initial_r_trailing_stop", {"lock_r": 2}),
+    ],
+)
+def test_static_semantics_rejects_invalid_initial_r_parameters(
+    component_id: str, params: dict[str, object]
+) -> None:
+    raw = _spec()
+    management: Any = raw["trade_management"]
+    management["exit_management"]["stop_management"] = [
+        {
+            "rule_id": "bad",
+            "component_id": component_id,
+            "activate_when": {"phase_at_least": "initial_risk"},
+            "params": params,
+        }
+    ]
+
+    with pytest.raises(InvalidRequestError, match="stop_management\\[0\\]"):
+        check_ema_pullback_static_semantics(raw)
+
+
+def test_static_semantics_accepts_initial_r_boundaries() -> None:
+    raw = _spec()
+    management: Any = raw["trade_management"]
+    management["exit_management"]["stop_management"] = [
+        {
+            "rule_id": "lock0",
+            "component_id": "initial_r_lock_stop",
+            "activate_when": {"phase_at_least": "initial_risk"},
+            "params": {"trigger_r": 6, "lock_r": 0},
+        },
+        {
+            "rule_id": "lock_max",
+            "component_id": "initial_r_lock_stop",
+            "activate_when": {"phase_at_least": "initial_risk"},
+            "params": {"trigger_r": 6, "lock_r": 6},
+        },
+        {
+            "rule_id": "trail_max",
+            "component_id": "initial_r_trailing_stop",
+            "activate_when": {"phase_at_least": "initial_risk"},
+            "params": {"trigger_r": 6, "trail_distance_r": 6},
+        },
+    ]
+
+    check_ema_pullback_static_semantics(raw)

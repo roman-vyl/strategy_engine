@@ -12,6 +12,10 @@ from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.values import normalized_decimal_text
 from strategy_engine.indicators.contracts import FeatureFrame, FeatureFrameLike
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    InitialRStopFormula,
+    resolve_initial_r_stop,
+)
 
 if TYPE_CHECKING:
     from strategy_engine.strategies.ema_pullback.contexts import ContextBundle
@@ -241,30 +245,12 @@ def _int(value: Any, path: str) -> int:
     return int(value)
 
 
-InitialRStopFormula = Literal["initial_r_lock", "initial_r_trailing"]
-
-
 def _initial_r_stop_params(
     component_id: str, params: Mapping[str, Any]
 ) -> tuple[InitialRStopFormula, float, float] | None:
     """Return closed execution formula, trigger R, and action distance R."""
 
-    if component_id not in {"initial_r_lock_stop", "initial_r_trailing_stop"}:
-        return None
-    trigger_r = _float(params.get("trigger_r"), f"{component_id}.trigger_r", positive=True)
-    if component_id == "initial_r_lock_stop":
-        action_r = _float(params.get("lock_r"), "initial_r_lock_stop.lock_r")
-        if action_r < 0 or action_r > trigger_r:
-            raise InvalidRequestError("lock_r must satisfy 0 <= lock_r <= trigger_r")
-        return "initial_r_lock", trigger_r, action_r
-    action_r = _float(
-        params.get("trail_distance_r"),
-        "initial_r_trailing_stop.trail_distance_r",
-        positive=True,
-    )
-    if action_r > trigger_r:
-        raise InvalidRequestError("trail_distance_r must not exceed trigger_r")
-    return "initial_r_trailing", trigger_r, action_r
+    return resolve_initial_r_stop(component_id, params, f"{component_id}.params")
 
 
 def _initial_r_stop_candidate(

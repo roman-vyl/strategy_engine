@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from strategy_engine.adapters.http.app import create_app
-from strategy_engine.adapters.http.models import ManagedReplayRequestModel
+from strategy_engine.adapters.http.models import LiveStrategySpecModel, ManagedReplayRequestModel
+from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.market import MarketBar, MarketFrame
 from strategy_engine.indicators.application.catalog import IndicatorCatalog
 from strategy_engine.indicators.application.evaluate_range import EvaluateIndicatorRange
@@ -44,7 +45,7 @@ class FakeMarketData:
 
 
 def raw_spec() -> dict[str, object]:
-    from test_ema_pullback_managed import spec
+    from tests.test_ema_pullback_managed import spec
 
     return spec()
 
@@ -185,3 +186,25 @@ def test_managed_replay_model_rejects_non_finite_initial_stop() -> None:
         ManagedReplayRequestModel.model_validate(
             _initial_r_http_body(initial_stop_price=float("inf"))
         )
+
+
+def test_strategy_spec_validation_rejects_invalid_initial_r_stop() -> None:
+    from strategy_engine.strategies.application.check_static_semantics import (
+        CheckStrategyStaticSemantics,
+    )
+
+    body = _initial_r_http_body(initial_stop_price=99.0)
+    strategy: Any = body["strategy"]
+    stop = strategy["raw_spec"]["trade_management"]["exit_management"]["stop_management"][0]
+    planner = BuildStrategyFeaturePlan()
+    validator = ValidateStrategySpec(
+        StrategyRegistry(EmaPullbackRangeEvaluator(planner, services().evaluate_indicator_range)),
+        planner,
+        CheckStrategyStaticSemantics(),
+    )
+
+    stop["params"] = {"trigger_r": 2, "lock_r": 3}
+    with pytest.raises(InvalidRequestError, match="lock_r"):
+        validator.execute(LiveStrategySpecModel.model_validate(strategy).to_domain())
+    stop["params"] = {"trigger_r": 2, "lock_r": 1}
+    validator.execute(LiveStrategySpecModel.model_validate(strategy).to_domain())

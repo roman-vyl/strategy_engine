@@ -109,6 +109,11 @@ close and not a non-monotonic single-bar extreme.
 An initial-R stop SHALL produce no candidate when initial risk is absent or
 non-positive.
 
+These parameter checks SHALL run at the strategy-specification validation
+boundary (static semantics), so an invalid configuration is rejected before
+feature planning, indicator evaluation, projection building, or replay. The
+evaluators SHALL reuse the same shared resolver.
+
 #### Scenario: Break-even specialization
 
 - **WHEN** `initial_r_lock_stop` is configured with `lock_r: 0`
@@ -117,12 +122,12 @@ non-positive.
 #### Scenario: Invalid lock parameters
 
 - **WHEN** lock R is negative, exceeds trigger R, or either value is non-finite
-- **THEN** the specification SHALL be rejected.
+- **THEN** strategy-specification validation SHALL reject the specification before any evaluation.
 
 #### Scenario: Invalid trailing parameters
 
 - **WHEN** trail distance is non-positive, exceeds trigger R, or either value is non-finite
-- **THEN** the specification SHALL be rejected.
+- **THEN** strategy-specification validation SHALL reject the specification before any evaluation.
 
 #### Scenario: Initial risk unavailable
 
