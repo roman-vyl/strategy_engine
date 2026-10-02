@@ -117,13 +117,26 @@ def _serialize_leg(leg: InitialProtectionLeg | None) -> dict[str, object] | None
 
 
 def _serialize_opportunity(opportunity: ExecutableEntryOpportunity) -> dict[str, object]:
-    return {
+    wire: dict[str, object] = {
         "bar_index": opportunity.bar_index,
         "side": opportunity.side,
         "locked_exit_profile": opportunity.locked_exit_profile,
         "initial_stop": _serialize_leg(opportunity.initial_stop),
         "initial_take": _serialize_leg(opportunity.initial_take),
     }
+    if opportunity.partial_takes:
+        # Omitted when empty: existing specs stay byte-identical on `.v2`
+        # (`frozen-partial-take-ladder-v1`, design D6).
+        wire["partial_takes"] = [
+            {
+                "take_id": leg.take_id,
+                "ratio": leg.ratio,
+                "fraction_of_initial": leg.fraction_of_initial,
+                "attribution": _serialize_attribution(leg.attribution),
+            }
+            for leg in opportunity.partial_takes
+        ]
+    return wire
 
 
 def _serialize_signal_exit_events(events: tuple[SignalExitEvent, ...]) -> list[dict[str, object]]:

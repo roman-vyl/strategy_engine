@@ -162,13 +162,14 @@ class ExitAttribution:
     (`compact-strategy-evaluation-boundary-v1`, I0 corrective pass).
     Canonical `exit_kind` values: `"stop_loss"` for `initial_stop`,
     `"take_profit"` for `initial_take`, `"signal"` for a signal-exit
-    candidate. No `layer` field -- Research derives the canonical
+    candidate, `"partial_take"` only inside `partial_takes`
+    (`frozen-partial-take-ladder-v1`). No `layer` field -- Research derives the canonical
     constant `"exit_policy"`, this is not an independent Engine
     decision."""
 
     rule_id: str
     component_id: str
-    exit_kind: Literal["stop_loss", "take_profit", "signal"]
+    exit_kind: Literal["stop_loss", "take_profit", "signal", "partial_take"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +183,19 @@ class InitialProtectionLeg:
 
 
 @dataclass(frozen=True, slots=True)
+class PartialTakeLeg:
+    """One frozen partial take of an entry opportunity
+    (`frozen-partial-take-ladder-v1`): closes `fraction_of_initial` of the
+    initial quantity at `ratio` (same basis as `initial_take.ratio`).
+    `take_id == attribution.rule_id ==` the exit rule's `instance_id`."""
+
+    take_id: str
+    ratio: float
+    fraction_of_initial: float
+    attribution: ExitAttribution
+
+
+@dataclass(frozen=True, slots=True)
 class ExecutableEntryOpportunity:
     """`entry_allowed AND protection_ready`, collapsed -- `stop_ready`
     never exists as its own field anywhere in this contract.
@@ -191,13 +205,16 @@ class ExecutableEntryOpportunity:
     stays locked across a trade's life; that's a Research Service
     concern. `initial_stop`/`initial_take` are independently nullable --
     a strategy MAY be take-only or stop-only for the active
-    always_on+profile combination."""
+    always_on+profile combination. `partial_takes` (legs of always_on +
+    the locked profile, ratio ascending) is empty without partial take
+    rules and is then omitted on the wire."""
 
     bar_index: int
     side: Literal["long", "short"]
     locked_exit_profile: str
     initial_stop: InitialProtectionLeg | None
     initial_take: InitialProtectionLeg | None
+    partial_takes: tuple[PartialTakeLeg, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -443,6 +460,17 @@ class LiveEntryProjectionRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class LivePartialTake:
+    """One frozen partial take of a live entry plan
+    (`frozen-partial-take-ladder-v1`): absolute `price` and
+    `fraction_of_initial`, both normalized decimal text."""
+
+    take_id: str
+    price: str
+    fraction_of_initial: str
+
+
+@dataclass(frozen=True, slots=True)
 class LiveEntryPlan:
     side: str
     source_plan_bar_open_time_ms: int
@@ -450,6 +478,7 @@ class LiveEntryPlan:
     initial_stop_price: str
     initial_take_price: str
     locked_exit_profile: str
+    partial_takes: tuple[LivePartialTake, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -460,6 +489,7 @@ class DesiredEntry:
     initial_stop_price: str
     initial_take_price: str
     locked_exit_profile: str
+    partial_takes: tuple[LivePartialTake, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

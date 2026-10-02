@@ -561,3 +561,107 @@ def test_select_bool_unknown_profile_name_raises_key_error() -> None:
     profile = ("aligned", "totally_unknown_profile", "neutral", "aligned", "countertrend")
     with pytest.raises(KeyError):
         _select_bool(profile, values, values["aligned"].index)
+
+
+# -- frozen partial take ladder (OpenSpec frozen-partial-take-ladder-v1) ------
+
+
+def test_partial_take_component_with_take_profit_kind_is_rejected() -> None:
+    spec = raw_spec()
+    policy = spec["trade_management"]["exit_policy"]  # type: ignore[index]
+    policy["always_on"]["exits"].append(  # type: ignore[index]
+        {
+            "instance_id": "pt",
+            "component_id": "pct_partial_take",
+            "exit_kind": "take_profit",
+            "pct": 0.01,
+            "fraction_of_initial": 0.25,
+        }
+    )
+    feature_frame, plan = frame(spec)
+    with pytest.raises(InvalidRequestError, match="requires exit_kind partial_take"):
+        evaluate_exit_policy(spec, feature_frame, plan, ())
+
+
+def test_take_profit_component_with_partial_take_kind_is_rejected() -> None:
+    spec = raw_spec()
+    policy = spec["trade_management"]["exit_policy"]  # type: ignore[index]
+    policy["always_on"]["exits"][1]["exit_kind"] = "partial_take"  # type: ignore[index]
+    feature_frame, plan = frame(spec)
+    with pytest.raises(InvalidRequestError, match="mismatched exit_kind"):
+        evaluate_exit_policy(spec, feature_frame, plan, ())
+
+
+_USD_SL = {
+    "instance_id": "sl",
+    "component_id": "constant_usd_stop_loss",
+    "exit_kind": "stop_loss",
+    "usd_distance": 1.0,
+}
+_USD_TP = {
+    "instance_id": "tp",
+    "component_id": "constant_usd_take_profit",
+    "exit_kind": "take_profit",
+    "usd_distance": 5.0,
+}
+_PCT_LEG = {
+    "instance_id": "pt-pct",
+    "component_id": "pct_partial_take",
+    "exit_kind": "partial_take",
+    "pct": 0.01,
+    "fraction_of_initial": 0.25,
+}
+_ATR_LEG = {
+    "instance_id": "pt-atr",
+    "component_id": "atr_partial_take",
+    "exit_kind": "partial_take",
+    "distance": {"timeframe": "base", "period": 2, "multiplier": 3.0},
+    "fraction_of_initial": 0.25,
+}
+
+
+def test_partial_take_evidence_is_per_instance_and_not_aggregated() -> None:
+    spec = _protection_spec([_USD_SL, _USD_TP, _PCT_LEG, _ATR_LEG])
+    feature_frame, plan = _protection_frame(spec, {"pt-atr": ("0.5", "1", "1.5", "2")})
+    result = evaluate_exit_policy(spec, feature_frame, plan, ())
+    evidence = {item.instance_id: item for item in result.rule_evidence}
+    assert evidence["pt-pct"].exit_kind == "partial_take"
+    assert evidence["pt-pct"].component_id == "pct_partial_take"
+    assert evidence["pt-pct"].distance_ratio == (0.01, 0.01, 0.01, 0.01)
+    assert evidence["pt-atr"].exit_kind == "partial_take"
+    assert evidence["pt-atr"].distance_ratio == pytest.approx(
+        (0.5 / 100, 1 / 101, 1.5 / 102, 2 / 103)
+    )
+    # The legs are closer than the final take but never enter its minimum.
+    assert result.take_profit_ratio_long == pytest.approx(tuple(5 / (100 + i) for i in range(4)))
+    assert result.take_profit_distance_long == (5.0, 5.0, 5.0, 5.0)
+
+
+def test_partial_take_does_not_change_existing_outputs() -> None:
+    plain = _protection_spec([_USD_SL, _USD_TP])
+    laddered = _protection_spec([_USD_SL, _USD_TP, _PCT_LEG])
+    plain_result = evaluate_exit_policy(plain, *_protection_frame(plain, {}), ())
+    ladder_result = evaluate_exit_policy(laddered, *_protection_frame(laddered, {}), ())
+    assert ladder_result.partial_takes[0].fraction_of_initial == 0.25
+    assert ladder_result.partial_takes[0].pct == 0.01
+    assert replace(
+        ladder_result, rule_evidence=plain_result.rule_evidence, partial_takes=()
+    ) == plain_result
+
+
+def test_atr_partial_take_warm_up_blocks_readiness() -> None:
+    spec = _protection_spec([_USD_SL, _USD_TP, _ATR_LEG])
+    feature_frame, plan = _protection_frame(spec, {"pt-atr": (None, None, "1.5", "2")})
+    result = evaluate_exit_policy(spec, feature_frame, plan, ())
+    assert result.stop_ready_long == (False, False, True, True)
+    assert result.stop_ready_short == (False, False, True, True)
+
+
+def test_partial_take_of_unselected_profile_does_not_block_readiness() -> None:
+    spec = _protection_spec([_USD_SL, _USD_TP])
+    policy = spec["trade_management"]["exit_policy"]  # type: ignore[index]
+    policy["profiles"]["countertrend"]["exits"] = [_ATR_LEG]  # type: ignore[index]
+    feature_frame, plan = _protection_frame(spec, {"pt-atr": (None, None, None, None)})
+    result = evaluate_exit_policy(spec, feature_frame, plan, ())
+    # No context consumption: every bar selects `neutral`.
+    assert result.stop_ready_long == (True, True, True, True)

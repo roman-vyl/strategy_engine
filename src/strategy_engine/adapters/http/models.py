@@ -196,7 +196,19 @@ class LiveEntryProjectionRequestModel(BaseModel):
         )
 
 
+class LivePartialTakeResponseModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    take_id: StrictStr
+    price: StrictStr
+    fraction_of_initial: StrictStr
+
+
 class DesiredEntryResponseModel(BaseModel):
+    """`partial_takes` is left unset, and so omitted from the response
+    (`response_model_exclude_unset`), when the plan has no partial takes
+    (`frozen-partial-take-ladder-v1`, design D8)."""
+
     model_config = ConfigDict(extra="forbid")
 
     side: StrictStr
@@ -205,6 +217,7 @@ class DesiredEntryResponseModel(BaseModel):
     initial_stop_price: StrictStr
     initial_take_price: StrictStr
     locked_exit_profile: StrictStr
+    partial_takes: list[LivePartialTakeResponseModel] | None = None
 
 
 class LiveEntryProjectionResponseModel(BaseModel):

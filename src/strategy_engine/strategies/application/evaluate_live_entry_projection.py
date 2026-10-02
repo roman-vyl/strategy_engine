@@ -38,6 +38,7 @@ def _normalize_desired_entry(
         initial_stop_price=plan.initial_stop_price,
         initial_take_price=plan.initial_take_price,
         locked_exit_profile=plan.locked_exit_profile,
+        partial_takes=plan.partial_takes,
     )
 
 

@@ -136,21 +136,32 @@ def _serialize_live_entry_projection(result: object) -> dict[str, object]:
 
     if not isinstance(result, LiveEntryProjectionResult):
         raise TypeError("expected LiveEntryProjectionResult")
+    desired_entry = result.desired_entry
+    if desired_entry is None:
+        return {"desired_entry": None}
+    fields: dict[str, object] = {
+        "side": desired_entry.side,
+        "source_plan_bar_open_time_ms": desired_entry.source_plan_bar_open_time_ms,
+        "planned_entry_price": desired_entry.planned_entry_price,
+        "initial_stop_price": desired_entry.initial_stop_price,
+        "initial_take_price": desired_entry.initial_take_price,
+        "locked_exit_profile": desired_entry.locked_exit_profile,
+    }
+    if desired_entry.partial_takes:
+        # Omitted when empty: existing plans stay byte-identical
+        # (`frozen-partial-take-ladder-v1`, design D8).
+        fields["partial_takes"] = [
+            {
+                "take_id": leg.take_id,
+                "price": leg.price,
+                "fraction_of_initial": leg.fraction_of_initial,
+            }
+            for leg in desired_entry.partial_takes
+        ]
     return {
-        "desired_entry": (
-            DesiredEntryResponseModel(
-                side=result.desired_entry.side,
-                source_plan_bar_open_time_ms=(
-                    result.desired_entry.source_plan_bar_open_time_ms
-                ),
-                planned_entry_price=result.desired_entry.planned_entry_price,
-                initial_stop_price=result.desired_entry.initial_stop_price,
-                initial_take_price=result.desired_entry.initial_take_price,
-                locked_exit_profile=result.desired_entry.locked_exit_profile,
-            ).model_dump()
-            if result.desired_entry is not None
-            else None
-        ),
+        "desired_entry": DesiredEntryResponseModel.model_validate(fields).model_dump(
+            exclude_unset=True
+        )
     }
 
 
@@ -251,6 +262,7 @@ def evaluate_strategy_range_batch(
 @router.post(
     "/strategy-evaluations/live-entry",
     response_model=LiveEntryProjectionResponseModel,
+    response_model_exclude_unset=True,
     responses={
         404: {"model": ErrorResponseModel},
         409: {"model": ErrorResponseModel},

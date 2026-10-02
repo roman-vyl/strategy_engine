@@ -270,6 +270,7 @@ def test_live_entry_plan_projection_accepts_short_geometry() -> None:
         exit_policy=SimpleNamespace(
             profile_long=("aligned",),
             profile_short=("countertrend",),
+            partial_takes=(),
         ),
         potential_entries={
             "short": PotentialEntry("short", (100.0,), (101.0,), (99.0,)),
@@ -280,3 +281,86 @@ def test_live_entry_plan_projection_accepts_short_geometry() -> None:
     assert plan is not None
     assert plan.side == "short"
     assert plan.locked_exit_profile == "countertrend"
+
+
+# -- frozen partial take ladder (OpenSpec frozen-partial-take-ladder-v1) ------
+
+
+def _leg(
+    instance_id: str,
+    *,
+    group: str = "always_on",
+    pct: float | None = None,
+    distance: float | None = None,
+    fraction: float = 0.25,
+) -> object:
+    from strategy_engine.strategies.ema_pullback.exits import PartialTakeRule
+
+    return PartialTakeRule(
+        instance_id=instance_id,
+        component_id="pct_partial_take" if pct is not None else "atr_partial_take",
+        group=group,
+        fraction_of_initial=fraction,
+        pct=pct,
+        distance=(distance,),
+    )
+
+
+def _laddered_plan(side: str, take: float, legs: tuple[object, ...], profile: str = "aligned"):
+    from types import SimpleNamespace
+
+    from strategy_engine.strategies.ema_pullback.live_projections.live_entry import (
+        _plan_for_side,
+    )
+    from strategy_engine.strategies.ema_pullback.potential_entries import PotentialEntry
+
+    stop = 96.0 if side == "long" else 104.0
+    evaluation = SimpleNamespace(
+        exit_policy=SimpleNamespace(
+            profile_long=(profile,),
+            profile_short=(profile,),
+            partial_takes=legs,
+        ),
+        potential_entries={side: PotentialEntry(side, (100.0,), (stop,), (take,))},
+    )
+    return _plan_for_side(evaluation, side, 0, 0)  # type: ignore[arg-type]
+
+
+def test_live_partial_take_prices_long_and_short() -> None:
+    legs = (_leg("atr", distance=3.0), _leg("pct", pct=0.01))
+    long_plan = _laddered_plan("long", 116.0, legs)
+    short_plan = _laddered_plan("short", 84.0, legs)
+    assert long_plan is not None and short_plan is not None
+    long_legs = long_plan.partial_takes
+    assert [(leg.take_id, leg.price, leg.fraction_of_initial) for leg in long_legs] == [
+        ("pct", "101", "0.25"),
+        ("atr", "103", "0.25"),
+    ]
+    assert [(leg.take_id, leg.price) for leg in short_plan.partial_takes] == [
+        ("pct", "99"),
+        ("atr", "97"),
+    ]
+    assert long_plan.initial_take_price == "116"
+
+
+def test_live_partial_take_beyond_final_take_is_returned() -> None:
+    plan = _laddered_plan("long", 108.0, (_leg("far", pct=0.10),))
+    assert plan is not None
+    assert plan.initial_take_price == "108"
+    assert [leg.price for leg in plan.partial_takes] == ["110"]
+
+
+def test_live_partial_take_of_another_profile_is_excluded() -> None:
+    plan = _laddered_plan("long", 116.0, (_leg("counter", group="countertrend", pct=0.01),))
+    assert plan is not None
+    assert plan.partial_takes == ()
+
+
+def test_live_incomplete_partial_take_drops_the_plan() -> None:
+    assert _laddered_plan("long", 116.0, (_leg("warming", distance=None),)) is None
+
+
+def test_live_non_profit_side_partial_take_drops_the_plan() -> None:
+    # A short leg whose price would not be positive has no valid price.
+    assert _laddered_plan("short", 84.0, (_leg("deep", distance=100.0),)) is None
+    assert _laddered_plan("long", 116.0, (_leg("zero", distance=0.0),)) is None

@@ -68,3 +68,23 @@ def test_plan_and_strategy_hashes_are_deterministic() -> None:
     spec = LiveStrategySpec("ema_pullback", {"b": 1, "a": 2})
     same_semantics = LiveStrategySpec("ema_pullback", {"a": 2, "b": 1})
     assert strategy_config_hash(spec) == strategy_config_hash(same_semantics)
+
+
+def test_entry_opportunity_partial_takes_default_empty() -> None:
+    from strategy_engine.strategies.contracts import (
+        ExecutableEntryOpportunity,
+        ExitAttribution,
+        PartialTakeLeg,
+    )
+
+    plain = ExecutableEntryOpportunity(1, "long", "aligned", None, None)
+    assert plain.partial_takes == ()
+    leg = PartialTakeLeg(
+        take_id="pt_1pct",
+        ratio=0.01,
+        fraction_of_initial=0.25,
+        attribution=ExitAttribution("pt_1pct", "pct_partial_take", "partial_take"),
+    )
+    laddered = ExecutableEntryOpportunity(1, "long", "aligned", None, None, (leg,))
+    assert laddered.partial_takes[0].attribution.exit_kind == "partial_take"
+    assert laddered.partial_takes[0].take_id == laddered.partial_takes[0].attribution.rule_id

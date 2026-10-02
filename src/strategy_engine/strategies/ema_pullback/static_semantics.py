@@ -21,10 +21,12 @@ from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     BLOCKER_SUPPORTED,
     DIRECTION_SUPPORTED,
     EXIT_DISTANCE_SUPPORTED,
+    EXIT_PARTIAL_TAKE_SUPPORTED,
     EXIT_SIGNAL_SUPPORTED,
     RISK_SUPPORTED,
     SETUP_SUPPORTED,
     TRIGGER_SUPPORTED,
+    require_partial_take_ladder,
     require_unique_instance_ids,
     resolve_blocker_identity,
     resolve_direction_component_id,
@@ -111,6 +113,7 @@ def check_ema_pullback_static_semantics(raw_spec: Mapping[str, Any]) -> None:
             if (
                 component_id not in EXIT_SIGNAL_SUPPORTED
                 and component_id not in EXIT_DISTANCE_SUPPORTED
+                and component_id not in EXIT_PARTIAL_TAKE_SUPPORTED
             ):
                 raise InvalidRequestError(
                     "unsupported exit component", component_id=component_id
@@ -118,6 +121,7 @@ def check_ema_pullback_static_semantics(raw_spec: Mapping[str, Any]) -> None:
             path = f"trade_management.exit_policy.{group}.exits[{index}].instance_id"
             exit_identity_pairs.append((rule.get("instance_id"), path))
     require_unique_instance_ids("trade_management.exit_policy", tuple(exit_identity_pairs))
+    require_partial_take_ladder(exit_rule_groups)
 
 
 def _check_composite_setups(

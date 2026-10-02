@@ -23,6 +23,7 @@ from strategy_engine.strategies.ema_pullback.composite_spec import (
 )
 from strategy_engine.strategies.ema_pullback.predicates import parse_predicate
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    PARTIAL_TAKE_EXIT_KIND,
     require_non_empty_instance_id,
     resolve_exit_rule_groups,
 )
@@ -302,7 +303,9 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
         instance_id = str(rule.get("instance_id"))
         exit_kind = str(rule.get("exit_kind", ""))
         exit_columns[instance_id] = distance_id
-        exit_columns.setdefault(exit_kind, distance_id)
+        if exit_kind != PARTIAL_TAKE_EXIT_KIND:
+            # No consumer reads a kind-level alias for partial takes.
+            exit_columns.setdefault(exit_kind, distance_id)
 
     rsi_specs: list[tuple[str, int]] = []
     blockers = _sequence(components.get("blockers"), "components.blockers")
