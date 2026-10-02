@@ -333,15 +333,17 @@ class ManagedTakeActionRule:
 @dataclass(frozen=True, slots=True)
 class ManagedStopActionRule:
     """Mutates stop state once `activation_phase` is reached.
-    `distance_id` is the per-bar offset from entry price; the consumer
-    (who owns entry price and side) computes the candidate stop price
-    itself and ratchets it exactly as it already does for every other
-    stop candidate."""
+    Omitted `stop_formula` preserves the legacy meaning: `distance_id` is
+    the per-bar absolute offset from entry. Initial-R formulas use the same
+    opaque action distance plus an opaque trigger distance; the consumer
+    dispatches only on this closed execution semantic, never component id."""
 
     kind: Literal["stop_action"]
     rule_id: str
     activation_phase: str
     distance_id: str
+    stop_formula: Literal["initial_r_lock", "initial_r_trailing"] | None = None
+    trigger_distance_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -450,6 +452,7 @@ class ManagedReplayRequest:
     side: Literal["long", "short"]
     entry_time_ms: int
     entry_price: float
+    initial_stop_price: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

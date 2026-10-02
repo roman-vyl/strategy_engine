@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from decimal import Decimal
 from math import isfinite
-from typing import Any
+from typing import Any, Literal
 
 from strategy_engine.domain.errors import InvalidRequestError
 
@@ -33,6 +33,8 @@ EXIT_DISTANCE_SUPPORTED = frozenset(
     }
 )
 EXIT_PARTIAL_TAKE_SUPPORTED = frozenset({"pct_partial_take", "atr_partial_take"})
+INITIAL_R_STOP_SUPPORTED = frozenset({"initial_r_lock_stop", "initial_r_trailing_stop"})
+InitialRStopFormula = Literal["initial_r_lock", "initial_r_trailing"]
 PARTIAL_TAKE_EXIT_KIND = "partial_take"
 BLOCKER_SUPPORTED = frozenset(
     {
@@ -177,6 +179,62 @@ def _positive_finite(value: object, path: str) -> float:
     if not isfinite(number) or number <= 0:
         raise InvalidRequestError(f"{path} must be a positive number")
     return number
+
+
+def _non_negative_finite(value: object, path: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise InvalidRequestError(f"{path} must be a non-negative number")
+    try:
+        number = float(value)
+    except ValueError as exc:
+        raise InvalidRequestError(f"{path} must be a non-negative number") from exc
+    if not isfinite(number) or number < 0:
+        raise InvalidRequestError(f"{path} must be a non-negative number")
+    return number
+
+
+def resolve_initial_r_stop(
+    component_id: str, params: Mapping[str, Any], path: str
+) -> tuple[InitialRStopFormula, float, float] | None:
+    """Closed execution formula, trigger R and action distance R of one
+    initial-R managed stop (OpenSpec `initial-r-stop-management-v1` D1), or
+    `None` for any other stop component. Bounds keep the first eligible
+    candidate at or beyond entry: `0 <= lock_r <= trigger_r` and
+    `0 < trail_distance_r <= trigger_r`."""
+
+    if component_id not in INITIAL_R_STOP_SUPPORTED:
+        return None
+    trigger_r = _positive_finite(params.get("trigger_r"), f"{path}.trigger_r")
+    if component_id == "initial_r_lock_stop":
+        lock_r = _non_negative_finite(params.get("lock_r"), f"{path}.lock_r")
+        if lock_r > trigger_r:
+            raise InvalidRequestError(f"{path}.lock_r must not exceed trigger_r")
+        return "initial_r_lock", trigger_r, lock_r
+    trail_r = _positive_finite(params.get("trail_distance_r"), f"{path}.trail_distance_r")
+    if trail_r > trigger_r:
+        raise InvalidRequestError(f"{path}.trail_distance_r must not exceed trigger_r")
+    return "initial_r_trailing", trigger_r, trail_r
+
+
+def require_initial_r_stops(raw_spec: Mapping[str, Any]) -> None:
+    """Static parameter check of every initial-R managed stop. Other stop
+    management components are not validated here, exactly as before."""
+
+    trade_management = raw_spec.get("trade_management")
+    if not isinstance(trade_management, Mapping):
+        return
+    exit_management = trade_management.get("exit_management")
+    if not isinstance(exit_management, Mapping):
+        return
+    stops = exit_management.get("stop_management")
+    for index, stop in enumerate(stops if isinstance(stops, (list, tuple)) else ()):
+        if not isinstance(stop, Mapping):
+            continue
+        component_id = str(stop.get("component_id", ""))
+        if component_id not in INITIAL_R_STOP_SUPPORTED:
+            continue
+        path = f"trade_management.exit_management.stop_management[{index}].params"
+        resolve_initial_r_stop(component_id, _mapping(stop.get("params", {}), path), path)
 
 
 def resolve_partial_take_fraction(rule: Mapping[str, Any], path: str) -> float:

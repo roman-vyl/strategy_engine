@@ -111,7 +111,12 @@ _ZERO_LOOKBACK_PHASE_RULE_COMPONENTS = {
     "bars_in_trade",
     "mfe_pct",
 }
-_ZERO_LOOKBACK_STOP_COMPONENTS = {"lock_profit_stop", "break_even_stop"}
+_ZERO_LOOKBACK_STOP_COMPONENTS = {
+    "lock_profit_stop",
+    "break_even_stop",
+    "initial_r_lock_stop",
+    "initial_r_trailing_stop",
+}
 # phase_runtime_exit is dispatched in managed.py's runtime-exit condition
 # function (component_id == "phase_runtime_exit": checks params.exit_price
 # == "close", a current-bar check), not in the phase_rules condition

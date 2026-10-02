@@ -26,6 +26,7 @@ from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     RISK_SUPPORTED,
     SETUP_SUPPORTED,
     TRIGGER_SUPPORTED,
+    require_initial_r_stops,
     require_partial_take_ladder,
     require_unique_instance_ids,
     resolve_blocker_identity,
@@ -122,6 +123,7 @@ def check_ema_pullback_static_semantics(raw_spec: Mapping[str, Any]) -> None:
             exit_identity_pairs.append((rule.get("instance_id"), path))
     require_unique_instance_ids("trade_management.exit_policy", tuple(exit_identity_pairs))
     require_partial_take_ladder(exit_rule_groups)
+    require_initial_r_stops(raw_spec)
 
 
 def _check_composite_setups(

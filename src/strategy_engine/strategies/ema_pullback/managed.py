@@ -12,6 +12,10 @@ from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.values import normalized_decimal_text
 from strategy_engine.indicators.contracts import FeatureFrame, FeatureFrameLike
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
+from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
+    InitialRStopFormula,
+    resolve_initial_r_stop,
+)
 
 if TYPE_CHECKING:
     from strategy_engine.strategies.ema_pullback.contexts import ContextBundle
@@ -239,6 +243,32 @@ def _int(value: Any, path: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise InvalidRequestError(f"{path} must be an integer >= 1")
     return int(value)
+
+
+def _initial_r_stop_params(
+    component_id: str, params: Mapping[str, Any]
+) -> tuple[InitialRStopFormula, float, float] | None:
+    """Return closed execution formula, trigger R, and action distance R."""
+
+    return resolve_initial_r_stop(component_id, params, f"{component_id}.params")
+
+
+def _initial_r_stop_candidate(
+    formula: InitialRStopFormula,
+    trigger_r: float,
+    action_r: float,
+    state: ManagedTradeState,
+) -> float | None:
+    initial_risk = state.initial_risk
+    if initial_risk is None or initial_risk <= 0:
+        return None
+    mfe_r = abs(state.mfe_price - state.entry_price) / initial_risk
+    if mfe_r < trigger_r:
+        return None
+    offset = action_r * initial_risk
+    if formula == "initial_r_lock":
+        return state.entry_price + offset if state.side == "long" else state.entry_price - offset
+    return state.mfe_price - offset if state.side == "long" else state.mfe_price + offset
 
 
 def _series(frame: FeatureFrameLike, output_id: str) -> tuple[float | None, ...]:
@@ -620,9 +650,14 @@ def _evaluate_managed_replay_core(
                 offset = float(params.get("lock_atr", 0.0)) * atr
                 price = state.entry_price + offset if side == "long" else state.entry_price - offset
             else:
-                raise InvalidRequestError(
-                    "unsupported stop management component", component_id=component_id
-                )
+                initial_r = _initial_r_stop_params(component_id, params)
+                if initial_r is None:
+                    raise InvalidRequestError(
+                        "unsupported stop management component", component_id=component_id
+                    )
+                price = _initial_r_stop_candidate(*initial_r, state)
+                if price is None:
+                    continue
             candidates.append((price, rule))
         if candidates:
             chosen_price, chosen_rule = (

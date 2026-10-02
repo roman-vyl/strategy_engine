@@ -225,12 +225,16 @@ def _serialize_rule(rule: ManagedRule) -> dict[str, object]:
             "resulting_profile": rule.resulting_profile,
         }
     if rule.kind == "stop_action":
-        return {
+        wire = {
             "kind": "stop_action",
             "rule_id": rule.rule_id,
             "activation_phase": rule.activation_phase,
             "distance_id": rule.distance_id,
         }
+        if rule.stop_formula is not None:
+            wire["stop_formula"] = rule.stop_formula
+            wire["trigger_distance_id"] = rule.trigger_distance_id
+        return wire
     return {
         "kind": "runtime_exit",
         "rule_id": rule.rule_id,

@@ -6,6 +6,7 @@ from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 
+from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.market import MarketStream
 from strategy_engine.domain.ranges import TimeRange
 from strategy_engine.indicators.contracts import (
@@ -235,11 +236,19 @@ class ManagedReplayRequestModel(BaseModel):
     side: StrictStr
     entry_time_ms: StrictInt
     entry_price: float
+    initial_stop_price: float | None = Field(default=None, gt=0, allow_inf_nan=False)
 
     def to_domain(self) -> ManagedReplayRequest:
         market, time_range = self.market.to_domain()
         if self.side not in {"long", "short"}:
             raise ValueError("side must be long or short")
+        if self.initial_stop_price is not None:
+            if self.initial_stop_price == self.entry_price:
+                raise InvalidRequestError("initial_stop_price must differ from entry_price")
+            if self.side == "long" and self.initial_stop_price > self.entry_price:
+                raise InvalidRequestError("long initial_stop_price must be below entry_price")
+            if self.side == "short" and self.initial_stop_price < self.entry_price:
+                raise InvalidRequestError("short initial_stop_price must be above entry_price")
         return ManagedReplayRequest(
             strategy=self.strategy.to_domain(),
             market=market,
@@ -248,6 +257,9 @@ class ManagedReplayRequestModel(BaseModel):
             side=cast(Literal["long", "short"], self.side),
             entry_time_ms=self.entry_time_ms,
             entry_price=float(self.entry_price),
+            initial_stop_price=(
+                None if self.initial_stop_price is None else float(self.initial_stop_price)
+            ),
         )
 
 
