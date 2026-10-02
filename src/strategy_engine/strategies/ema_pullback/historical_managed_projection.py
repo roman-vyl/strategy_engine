@@ -78,6 +78,7 @@ def _runtime_exit_class(
 _METRIC: dict[str, TradeMetric] = {
     "mfe_atr": "mfe_distance",
     "mfe_pct": "mfe_pct",
+    "mfe_r": "mfe_r",
     "bars_in_trade": "bars_since_entry",
 }
 _TRADE_ATOMS = frozenset(_METRIC)
@@ -111,6 +112,12 @@ def _trade_threshold(
     if component_id == "mfe_pct":
         pct_threshold = _float(params.get("threshold"), "mfe_pct.threshold", positive=True)
         return tuple(pct_threshold for _ in range(bar_count)), _METRIC[component_id]
+    if component_id == "mfe_r":
+        # mfe-r-phase-threshold-v1: the threshold is in R (multiples of the
+        # trade's initial risk); the division by that trade's initial risk
+        # is the executor's, so the series is constant.
+        r_threshold = _float(params.get("threshold"), "mfe_r.threshold", positive=True)
+        return tuple(r_threshold for _ in range(bar_count)), _METRIC[component_id]
     bars_threshold = _int(params.get("threshold"), "bars_in_trade.threshold")
     return tuple(float(bars_threshold) for _ in range(bar_count)), _METRIC[component_id]
 

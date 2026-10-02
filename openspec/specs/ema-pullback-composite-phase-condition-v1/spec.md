@@ -5,9 +5,7 @@
 existing pre-entry predicates and the existing managed trade atoms by
 named paths (AND, N-of-M, OR), evaluated identically by single-trade
 replay, live open-trade and the candidate-wide historical projection.
-
 ## Requirements
-
 ### Requirement: Ordinary phase condition at the outer boundary
 
 `composite_phase_condition` SHALL be accepted only as the `condition`
@@ -56,7 +54,7 @@ Each child SHALL have a `child_id` and exactly one of:
   (`pre-entry-predicates-v1`), parsed and evaluated by that layer
   without modification;
 - `condition`: `{component_id, params}` where `component_id` is one of
-  `bars_in_trade`, `mfe_pct`, `mfe_atr` or `adx_di_threshold`. Its
+  `bars_in_trade`, `mfe_pct`, `mfe_atr`, `mfe_r` or `adx_di_threshold`. Its
   params SHALL be exactly that atom's existing params, and its value
   SHALL be computed by that atom's existing formula.
 
@@ -78,9 +76,18 @@ The following SHALL be rejected:
 - **AND** the condition SHALL be true exactly when `(adx5 AND mfe) OR
   (adx1h AND di1h AND mfe)`.
 
+#### Scenario: `mfe_r` child
+
+- **WHEN** a child `condition` has `component_id: mfe_r` and a positive
+  `threshold`
+- **THEN** the spec SHALL be accepted
+- **AND** the child SHALL be a trade child, valued by the `mfe_r` atom's
+  formula.
+
 #### Scenario: Unsupported atom child
 
-- **WHEN** a child `condition` has `component_id: mfe_r`
+- **WHEN** a child `condition` has a `component_id` outside the list
+  above
 - **THEN** static validation SHALL reject the spec.
 
 ### Requirement: Paths
@@ -205,3 +212,4 @@ the projection.
   reference consumer
 - **THEN** the sequence of phase transitions SHALL be identical,
   including bar, `rule_id` and `path_id`.
+

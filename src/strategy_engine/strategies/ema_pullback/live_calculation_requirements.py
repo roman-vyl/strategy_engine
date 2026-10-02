@@ -106,6 +106,7 @@ _ZERO_LOOKBACK_EXITS = {
 }
 _ZERO_LOOKBACK_PHASE_RULE_COMPONENTS = {
     "mfe_atr",
+    "mfe_r",
     "adx_di_threshold",
     "bars_in_trade",
     "mfe_pct",

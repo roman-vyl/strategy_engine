@@ -36,6 +36,9 @@ class ManagedTradeState:
     mfe_pct: float = 0.0
     mae_price: float = 0.0
     mae_pct: float = 0.0
+    # mfe-r-phase-threshold-v1: |entry - initial stop|, frozen at entry; None
+    # when the replay carries no initial stop (the `mfe_r` atom is then unmet).
+    initial_risk: float | None = None
     active_stop_price: float | None = None
     active_stop_rule_id: str | None = None
     active_stop_component_id: str | None = None
@@ -336,6 +339,12 @@ def _phase_met(
             return False, {"reason": "indicator_not_ready"}
         distance = abs(state.mfe_price - state.entry_price)
         return distance >= atr_threshold * value, {"threshold": atr_threshold, "atr": value}
+    if component_id == "mfe_r":
+        r_threshold = _float(params.get("threshold"), "mfe_r.threshold", positive=True)
+        if state.initial_risk is None or state.initial_risk <= 0:
+            return False, {"reason": "initial_risk_unavailable"}
+        mfe_r = abs(state.mfe_price - state.entry_price) / state.initial_risk
+        return mfe_r >= r_threshold, {"threshold": r_threshold, "mfe_r": mfe_r}
     if component_id == "adx_di_threshold":
         key = (
             str(params.get("timeframe", "")),
@@ -512,6 +521,8 @@ def _evaluate_managed_replay_core(
         raise InvalidRequestError("target_index is outside the managed replay frame")
     state.bars_in_trade = 1 if evaluation_start_offset == 1 else 0
     state.active_stop_price = initial_stop_price
+    if initial_stop_price is not None:
+        state.initial_risk = abs(entry_price - initial_stop_price)
     events: list[ManagedPolicyEvent] = []
     bars: list[ManagedBarDecision] = []
     evaluation_start_index = entry_index + evaluation_start_offset
@@ -726,9 +737,13 @@ def evaluate_managed_replay(
     side: Side,
     entry_time_ms: int,
     entry_price: float,
+    initial_stop_price: float | None = None,
     bundle: ContextBundle | None = None,
 ) -> ManagedReplayResult:
-    """Preserve the public managed-replay entry-bar semantics."""
+    """Preserve the public managed-replay entry-bar semantics.
+
+    `initial_stop_price` is optional and not on the HTTP wire: without it the
+    `mfe_r` atom is unmet (mfe-r-phase-threshold-v1)."""
 
     return ManagedReplayResult(
         trade_id=trade_id,
@@ -740,6 +755,7 @@ def evaluate_managed_replay(
             entry_time_ms=entry_time_ms,
             entry_price=entry_price,
             evaluation_start_offset=0,
+            initial_stop_price=initial_stop_price,
             require_managed_mode=True,
             bundle=bundle,
         ),

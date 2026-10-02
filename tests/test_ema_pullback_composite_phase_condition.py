@@ -102,8 +102,8 @@ _SETUP_CHILD = {
             _mutate("params.children.3", _cond("mfe", owner_case())), id="nested-composite"
         ),
         pytest.param(
-            _mutate("params.children.3", _cond("mfe", {"component_id": "mfe_r", "params": {}})),
-            id="mfe_r-child",
+            _mutate("params.children.3", _cond("mfe", {"component_id": "giveback", "params": {}})),
+            id="giveback-child",
         ),
         pytest.param(_mutate("params.children.0", _SETUP_CHILD), id="setup-child"),
         pytest.param(
@@ -153,7 +153,7 @@ def test_invalid_composites_are_rejected(condition: dict[str, Any]) -> None:
 def test_atomic_rules_are_not_newly_validated() -> None:
     # An unknown atom keeps failing where it failed before (at evaluation
     # and in live planning), not in static validation.
-    check_ema_pullback_static_semantics(_spec({"component_id": "mfe_r", "params": {}}))
+    check_ema_pullback_static_semantics(_spec({"component_id": "giveback", "params": {}}))
 
 
 # -- 2.5 single-trade replay against a naive reference ---------------------------
