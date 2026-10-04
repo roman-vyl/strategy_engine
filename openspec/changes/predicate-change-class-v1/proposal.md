@@ -37,7 +37,7 @@ which already feeds composite phase conditions, the projection and both Research
 
 ## Consequences for the research
 
-The trigger is now "ADX(tf) rose by at least `delta` over the last `lookback` base bars, and DI is aligned with the trade", which is
+The trigger is now "ADX(tf) rose by at least `delta` over the last `lookback` bars of that timeframe, and DI is aligned with the trade", which is
 **not** the same signal as the signed-ADX-since-entry replay (surface 4). A new replay of this exact rule is needed (a new surface
 of its own); surface 4 stays what it is, replay-only. Strict DI alignment (`plus > minus`, ties not aligned) is the Engine's existing
 rule, so the tie question disappears.
@@ -46,11 +46,13 @@ rule, so the tie question disappears.
 
 - Unit: the lag arithmetic, lookback in bars of a higher-timeframe feature (and in base bars for a base feature), all four operators, warm-up, history start, non-finite, `short` override,
   `held_for` / `within` around it, composite path with `adx_di_threshold`.
-- Gate: ruff, mypy, full suite, `openspec validate signed-adx-delta-phase-threshold-v1 --strict`.
+- Gate: ruff, mypy, full suite, `openspec validate predicate-change-class-v1 --strict`.
 - Parity with the research replay of the same rule: 20-30 cells run in the Engine must match the replay table in trade count and net PnL.
 
-## Open questions for review
+## Decisions taken in review
 
-1. Rename the change to `predicate-change-class-v1`?
-2. `lookback` in base bars (proposed, matches `held_for`/`within` market-time windows) or in operand-timeframe bars?
-3. Operators: only `>=` and `<=` (enough for the research) or all four?
+- Name: `predicate-change-class-v1` (neutral, not tied to ADX or to one strategy).
+- `lookback` counts bars of the feature's own timeframe, because the two compared values are points of one series.
+- All four ordering operators, the same set as `compare`.
+- Surface 4 (signed ADX since entry) stays a separate historical replay experiment and is not renamed. The new rule gets its own
+  fifth surface: replay research first, then selected points in the real Engine with a parity check.
