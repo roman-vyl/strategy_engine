@@ -1,58 +1,41 @@
 ## Why
 
-Research needs a trailing-stop trigger of the kind "the trend strength is rising in the trade direction". The Engine can only
-test a level (`adx_di_threshold`: ADX at or above N, with DI aligned to the side). It cannot test a *change* of a feature.
-
-The first design (an entry-relative `signed_adx_delta` phase atom) was rejected in review: it needs per-trade state (entry
-reference, running maximum, side) that the `HistoricalManagedProjection` and the Research consumers cannot carry without a
-wire-contract change in two services.
-
-This design avoids per-trade state completely. The change is a market-only series, so it fits the existing predicate layer,
-which already feeds composite phase conditions, the projection and both Research consumers.
+The predicate layer can compare a feature with a constant or with another feature at the same instant (`compare`, `range`,
+`state`) and can look back over a window of booleans (`held_for`, `within`). It cannot ask how much a feature has moved over
+a number of bars. A change of a feature over a short span is a basic building block that cannot be composed from the existing
+classes, so it is added to the language once, generically, for every supported feature.
 
 ## What Changes
 
-- One new predicate class `change` in the pre-entry predicate layer:
-  `change {operand, lookback, op, value}` is True on a base bar when
-  `operand(j) - operand(j - lookback) <op> value`, where `j` is the last completed bar of the operand's own timeframe at that base
-  bar, `operand` is a feature reference, `lookback` is a positive integer number of **bars of the operand's timeframe**
-  (for a base-timeframe feature, base bars), `op` is one of `>=` `>` `<=` `<` (the same comparison set as `compare`;
-  `==` and `!=` stay rejected), and `value` is a finite constant.
-  - Both values come from one time series, so the two points are always whole bars of that series (no mixing of base and
-    higher-timeframe clocks). Higher timeframes use the last completed bar, no look-ahead.
-  - Missing or non-finite operand at `j` or at `j - lookback` (warm-up, history start): False.
-  - Side-free, with the existing explicit `short` override (no automatic inversion).
-- Nothing else. The scheme is composed from existing parts as a composite phase condition path:
-  `require: [adx_rising, di_aligned]` with `adx_rising = change{adx(1h,14), lookback, >=, delta}` and
-  `di_aligned = adx_di_threshold{timeframe, period, adx_threshold: 0, require_di_alignment: true}`; then
-  `to_phase: runner` and `initial_r_trailing_stop` activated at `phase_at_least: runner`, as in the confirmed ADX state runs.
-- No projection change (a predicate child is a market series), no Research Service change, no per-trade state, no new indicator,
-  no change for specs that do not use `change`. `/managed-replay` and the single-trade path inherit it because predicate children already work there.
+- One new predicate class `change {operand, lookback, op, value}`.
+  - `operand`: a feature reference, resolved through the same canonical feature-kind contract as the other classes.
+  - `lookback`: a positive integer number of bars of the operand's own timeframe.
+  - `op`: one of `>=`, `>`, `<=`, `<` (the comparison set of `compare`; `==` and `!=` stay rejected).
+  - `value`: a finite constant.
+- Semantics. On a base bar, let `j` be the last completed bar of the operand's timeframe. The predicate is True iff
+  `operand(j) - operand(j - lookback) <op> value`. Both values are points of one series, so the two points are always whole bars
+  of that series. For a base-timeframe feature, bars are base bars. A higher timeframe uses its last completed bar, with no
+  look-ahead.
+- Non-finite values: if the operand is missing or non-finite at `j` or at `j - lookback` (indicator warm-up, start of history),
+  the predicate is False. There is no negation.
+- Side: side-free, with the existing explicit `short` override. No automatic side inversion.
+- Composition: usable wherever a predicate is already allowed, and wrappable by the existing temporal classes (`held_for`,
+  `within`) and by composite conditions, without any change to them.
+- Planning and history: the operand is requested through the existing feature plan and is computed once per evaluation like any
+  other feature. The history window needed before the first evaluated bar grows by `lookback` bars of the operand's timeframe,
+  and the plan accounts for it so that results do not depend on where the evaluated range starts.
+- Determinism: the same inputs give the same result.
+- Nothing changes for specs that do not use `change`: no new indicator, no new wire field, no change in compute cost or output.
 
 ## Impact
 
-- `pre-entry-predicates-v1`: ADDED requirement `change` class (and its scenarios); the "any other class is rejected" list gains one entry.
-- `ema-pullback-composite-phase-condition-v1`: no text change (predicate children already allowed).
-- Research Service: no change. `scripts/experiments/fill_*_runs.py` gain a request builder (not a contract).
-
-## Consequences for the research
-
-The trigger is now "ADX(tf) rose by at least `delta` over the last `lookback` bars of that timeframe, and DI is aligned with the trade", which is
-**not** the same signal as the signed-ADX-since-entry replay (surface 4). A new replay of this exact rule is needed (a new surface
-of its own); surface 4 stays what it is, replay-only. Strict DI alignment (`plus > minus`, ties not aligned) is the Engine's existing
-rule, so the tie question disappears.
+- `pre-entry-predicates-v1`: ADDED requirement for the `change` class and its scenarios; the list of supported classes gains
+  one entry; every class outside the list stays rejected.
+- `ema-pullback-feature-plan-v1`: MODIFIED, history window for a `change` operand.
 
 ## Verification
 
-- Unit: the lag arithmetic, lookback in bars of a higher-timeframe feature (and in base bars for a base feature), all four operators, warm-up, history start, non-finite, `short` override,
-  `held_for` / `within` around it, composite path with `adx_di_threshold`.
-- Gate: ruff, mypy, full suite, `openspec validate predicate-change-class-v1 --strict`.
-- Parity with the research replay of the same rule: 20-30 cells run in the Engine must match the replay table in trade count and net PnL.
-
-## Decisions taken in review
-
-- Name: `predicate-change-class-v1` (neutral, not tied to ADX or to one strategy).
-- `lookback` counts bars of the feature's own timeframe, because the two compared values are points of one series.
-- All four ordering operators, the same set as `compare`.
-- Surface 4 (signed ADX since entry) stays a separate historical replay experiment and is not renamed. The new rule gets its own
-  fifth surface: replay research first, then selected points in the real Engine with a parity check.
+- Unit tests: the lag arithmetic on a base-timeframe and on a higher-timeframe feature, all four operators, `lookback`
+  validation, warm-up, start of history, non-finite values, `short` override, wrapping by `held_for` and `within`, determinism.
+- History: evaluating a range that starts later gives the same values on the common bars.
+- Gate: ruff, mypy, the full suite, `openspec validate predicate-change-class-v1 --strict`.
