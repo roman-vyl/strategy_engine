@@ -14,10 +14,13 @@ which already feeds composite phase conditions, the projection and both Research
 
 - One new predicate class `change` in the pre-entry predicate layer:
   `change {operand, lookback, op, value}` is True on a base bar when
-  `operand(t) - operand(t - lookback) <op> value`, with `operand` a feature reference, `lookback` a positive number of
-  **base bars**, `op` one of `>=` `>` `<=` `<`, and `value` a finite constant.
-  - The operand is the value the other predicates see (higher timeframes: last completed bar, no look-ahead).
-  - Missing or non-finite operand at `t` or at `t - lookback` (warm-up, history start): False.
+  `operand(j) - operand(j - lookback) <op> value`, where `j` is the last completed bar of the operand's own timeframe at that base
+  bar, `operand` is a feature reference, `lookback` is a positive integer number of **bars of the operand's timeframe**
+  (for a base-timeframe feature, base bars), `op` is one of `>=` `>` `<=` `<` (the same comparison set as `compare`;
+  `==` and `!=` stay rejected), and `value` is a finite constant.
+  - Both values come from one time series, so the two points are always whole bars of that series (no mixing of base and
+    higher-timeframe clocks). Higher timeframes use the last completed bar, no look-ahead.
+  - Missing or non-finite operand at `j` or at `j - lookback` (warm-up, history start): False.
   - Side-free, with the existing explicit `short` override (no automatic inversion).
 - Nothing else. The scheme is composed from existing parts as a composite phase condition path:
   `require: [adx_rising, di_aligned]` with `adx_rising = change{adx(1h,14), lookback, >=, delta}` and
@@ -41,7 +44,7 @@ rule, so the tie question disappears.
 
 ## Verification
 
-- Unit: the lag arithmetic, base-bar lookback on a higher-timeframe feature, warm-up, history start, non-finite, `short` override,
+- Unit: the lag arithmetic, lookback in bars of a higher-timeframe feature (and in base bars for a base feature), all four operators, warm-up, history start, non-finite, `short` override,
   `held_for` / `within` around it, composite path with `adx_di_threshold`.
 - Gate: ruff, mypy, full suite, `openspec validate signed-adx-delta-phase-threshold-v1 --strict`.
 - Parity with the research replay of the same rule: 20-30 cells run in the Engine must match the replay table in trade count and net PnL.
