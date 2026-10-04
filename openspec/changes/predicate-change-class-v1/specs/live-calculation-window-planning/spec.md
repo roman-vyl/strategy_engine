@@ -14,7 +14,10 @@ into its children:
   of the operand's timeframe on top of the operand's own warm-up,
   converted to base bars by the existing timeframe-aware conversion.
 - **Temporal predicates** SHALL contribute `bars − 1` additional base
-  bars on top of their inner predicate.
+  bars on top of their inner predicate. Over a `change` predicate the
+  window SHALL be counted in bars of the operand's timeframe, so that the
+  requirement is a sufficient bound on one axis (such a bar is never
+  shorter than a base bar).
 - **An unrecognized child, predicate class or mode** SHALL make the
   planner fail closed.
 
@@ -42,7 +45,8 @@ into its children:
 #### Scenario: Temporal window over a change
 
 - **WHEN** a composite child is `held_for 12` over a `change` predicate with `lookback` 3 on a `1h` feature
-- **THEN** the resolved requirements SHALL include 11 additional base bars and 3 additional `1h` bars for that predicate.
+- **THEN** the resolved requirements SHALL include 14 additional `1h` bars (3 + 12 − 1) for that predicate, a sufficient bound for
+  the 11 base-bar window on top of 3 `1h` bars.
 
 ### Requirement: History policy for composite phase condition children
 

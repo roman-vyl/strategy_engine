@@ -27,6 +27,7 @@ from strategy_engine.strategies.ema_pullback.composite_spec import (
 )
 from strategy_engine.strategies.ema_pullback.predicates import (
     AnyPredicate,
+    Change,
     Predicate,
     StatePredicate,
     TemporalPredicate,
@@ -64,9 +65,26 @@ def _predicate_history(predicate: AnyPredicate, where: str) -> list[HistoryRequi
     - `compare`/`range`/`state` read only the current bar: an explicit
       zero-additional entry (indicator and context EMA warm-up is already
       counted from the plan by the per-feature policies);
-    - `temporal` adds `bars - 1` base bars on top of its inner predicate.
+    - `change` adds `lookback` bars of its operand's timeframe on top of the
+      operand's own warm-up (OpenSpec `predicate-change-class-v1`, design D6);
+    - `temporal` adds `bars - 1` base bars on top of its inner predicate; over a
+      `change` the window is counted in bars of the operand's timeframe, a
+      sufficient bound since such a bar is never shorter than a base bar.
     Anything else fails closed."""
 
+    if isinstance(predicate, Predicate) and isinstance(predicate.long, Change):
+        change = predicate.long
+        assert change.operand.feature is not None
+        return [
+            HistoryRequirement(
+                timeframe=change.operand.feature.timeframe,
+                bars=change.lookback,
+                reason=(
+                    f"{where} change lookback={change.lookback} bars of the operand's "
+                    "timeframe on top of the operand's own warm-up"
+                ),
+            )
+        ]
     if isinstance(predicate, (Predicate, StatePredicate)):
         return [
             HistoryRequirement(
@@ -79,7 +97,7 @@ def _predicate_history(predicate: AnyPredicate, where: str) -> list[HistoryRequi
         inner = _predicate_history(predicate.of, where)
         return [
             HistoryRequirement(
-                timeframe=_BASE,
+                timeframe=inner[0].timeframe,
                 bars=predicate.bars - 1 + max(item.bars for item in inner),
                 reason=(
                     f"{where} temporal {predicate.mode} bars={predicate.bars} - 1 "

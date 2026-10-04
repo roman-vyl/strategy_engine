@@ -63,8 +63,9 @@ not-ready operand can never make the predicate true.
 The owner of predicate history is the live history planner (`live-calculation-window-planning`). The feature plan only lists
 features and carries no history rule, so it is not changed. For `change`, the planner adds `lookback` bars of the operand's
 timeframe as an additional requirement on top of the feature's own warm-up (already counted per feature), converted to base bars by
-the existing timeframe-aware conversion. Under `held_for`/`within` it adds the window's `bars - 1` base bars on top, as for any inner
-predicate. Range and batch evaluation take their frame from the caller: the Engine does not extend it and the predicate is False
+the existing timeframe-aware conversion. Under `held_for`/`within` the window's `bars - 1` is added on top, counted in bars of the operand's timeframe so that the
+requirement stays on one axis (the planner takes the largest span, it does not add axes); this is a sufficient bound because a
+bar of the operand's timeframe is never shorter than a base bar. For a base feature the axis is the base axis, as before. Range and batch evaluation take their frame from the caller: the Engine does not extend it and the predicate is False
 where its second point falls before the frame.
 
 ### D7. Identity

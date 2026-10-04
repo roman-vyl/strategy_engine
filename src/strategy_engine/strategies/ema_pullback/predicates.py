@@ -68,7 +68,19 @@ class Range:
     max: float
 
 
-Condition = Compare | Range
+@dataclass(frozen=True, slots=True)
+class Change:
+    """`operand(j) - operand(j - lookback) <op> value` where `j` is the last
+    completed bar of the operand's own timeframe and `lookback` counts bars of
+    that timeframe (OpenSpec `predicate-change-class-v1`, design D2)."""
+
+    operand: Operand
+    lookback: int
+    op: str
+    value: float
+
+
+Condition = Compare | Range | Change
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +213,19 @@ def _compare(payload: Mapping[str, Any], path: str) -> Compare:
     return Compare(left, str(op), right)
 
 
+def _change(payload: Mapping[str, Any], path: str) -> Change:
+    operand = _operand(payload.get("operand"), f"{path}.operand")
+    if operand.feature is None:
+        raise InvalidRequestError(f"{path}.operand must be a feature reference")
+    lookback = payload.get("lookback")
+    if isinstance(lookback, bool) or not isinstance(lookback, int) or lookback < 1:
+        raise InvalidRequestError(f"{path}.lookback must be a positive integer", lookback=lookback)
+    op = payload.get("op")
+    if op not in _COMPARE_OPS:
+        raise InvalidRequestError(f"{path}.op must be one of >, >=, <, <=", op=op)
+    return Change(operand, int(lookback), str(op), _number(payload.get("value"), f"{path}.value"))
+
+
 def _range(payload: Mapping[str, Any], path: str) -> Range:
     operand = _operand(payload.get("operand"), f"{path}.operand")
     if operand.const is not None:
@@ -216,6 +241,7 @@ _CLASS_FIELDS: dict[str, tuple[set[str], set[str]]] = {
     # class -> (condition fields, fields a `short` override may replace)
     "compare": ({"left", "op", "right"}, {"left", "op", "right"}),
     "range": ({"operand", "min", "max"}, {"min", "max"}),
+    "change": ({"operand", "lookback", "op", "value"}, {"op", "value"}),
 }
 
 
@@ -279,11 +305,16 @@ def parse_predicate(
         return _temporal(payload, path, context_refs)
     if kind not in _CLASS_FIELDS:
         raise InvalidRequestError(
-            f"{path}.kind must be compare, range, state or temporal", kind=kind
+            f"{path}.kind must be compare, range, change, state or temporal", kind=kind
         )
     fields, overridable = _CLASS_FIELDS[kind]
     _only_fields(payload, {"kind", "short", *fields}, path)
-    parse = _compare if kind == "compare" else _range
+    parsers: dict[str, Callable[[Mapping[str, Any], str], Condition]] = {
+        "compare": _compare,
+        "range": _range,
+        "change": _change,
+    }
+    parse = parsers[kind]
     long = parse(payload, path)
     short: Condition | None = None
     if payload.get("short") is not None:
@@ -339,6 +370,24 @@ def _finite(values: np.ndarray | float) -> np.ndarray | bool:
     return np.isfinite(values)
 
 
+def _feature_bar_ratio(feature: PlannedFeature, frame: FeatureFrameLike) -> int:
+    """Base rows per bar of the feature's own timeframe. A `MarketFrame` is a
+    complete gapless grid, so a shift by `lookback * ratio` rows is a shift by
+    `lookback` whole bars of the feature's series (design D2)."""
+
+    if feature.timeframe == "base":
+        return 1
+    bar_ms = timeframe_duration_ms(feature.timeframe)
+    base_ms = timeframe_duration_ms(frame.market.base_timeframe)
+    if bar_ms % base_ms:
+        raise InvalidRequestError(
+            "change operand timeframe must be an integral multiple of the base timeframe",
+            timeframe=feature.timeframe,
+            base_timeframe=frame.market.base_timeframe,
+        )
+    return bar_ms // base_ms
+
+
 def _evaluate_condition(
     condition: Condition,
     frame: FeatureFrameLike,
@@ -350,6 +399,20 @@ def _evaluate_condition(
         left = _values(condition.left, frame, context, column_ids)
         right = _values(condition.right, frame, context, column_ids)
         result = _finite(left) & _finite(right) & _COMPARE_OPS[condition.op](left, right)
+    elif isinstance(condition, Change):
+        assert condition.operand.feature is not None
+        current = _values(condition.operand, frame, context, column_ids)
+        assert isinstance(current, np.ndarray)
+        shift = condition.lookback * _feature_bar_ratio(condition.operand.feature, frame)
+        earlier = np.full(length, np.nan)
+        if shift < length:
+            earlier[shift:] = current[: length - shift]
+        with np.errstate(invalid="ignore"):
+            result = (
+                np.isfinite(current)
+                & np.isfinite(earlier)
+                & _COMPARE_OPS[condition.op](current - earlier, condition.value)
+            )
     else:
         value = _values(condition.operand, frame, context, column_ids)
         result = _finite(value) & (value >= condition.min) & (value <= condition.max)
@@ -537,6 +600,9 @@ def resolve_predicate(
             "left": _operand_param(condition.left),
             "right": _operand_param(condition.right),
         }
+    elif isinstance(condition, Change):
+        kind = "predicate.change"
+        params = {"op": condition.op, "value": condition.value, "lookback": condition.lookback}
     else:
         kind = "predicate.range"
         params = {
