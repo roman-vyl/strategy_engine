@@ -17,9 +17,10 @@
 
 - [ ] 2.1 `evaluate_predicate` for `change`: shifted aligned column by `lookback * k` base bars, difference, comparison, False on a
       non-finite or out-of-frame point. Verify: tests on a base-timeframe feature, on a higher-timeframe feature (k > 1), at the start
-      of the frame, with non-finite values, for all four operators and both sides with and without override.
+      of the frame, with non-finite values, and the D2 equivalence test (aligned column shifted by `lookback * k` equals the value of completed
+      bar `j - lookback` on every base bar, real evaluator, epoch-aligned and mid-bucket frame starts, a one-row-off mutant fails), for all four operators and both sides with and without override.
 - [ ] 2.2 Composition: `held_for` and `within` over `change`; `change` inside a composite path with other children.
-      Verify: tests; single-trade managed evaluation and the historical projection agree.
+      Verify: predicate-level tests only. Managed evaluation and the historical projection are not touched by this change.
 - [ ] 2.3 Determinism: repeated evaluation is identical. Verify: test.
 
 ## 3. Planning and identity
