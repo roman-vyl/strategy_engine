@@ -23,7 +23,7 @@ def _int_param(label: str, *, default: int, min_val: int = 1) -> ParamFieldSchem
     return ParamFieldSchema(type="integer", label=label, min=float(min_val), default=default)
 
 
-def _num_param(label: str, *, default: float) -> ParamFieldSchema:
+def _num_param(label: str, *, default: float | None) -> ParamFieldSchema:
     return ParamFieldSchema(type="number", label=label, default=default)
 
 
@@ -218,6 +218,25 @@ def get_component_catalog(*, strategy_id: str = "ema_pullback") -> ComponentCata
                 "min_current_width_atr": _num_param("Min current width (ATR)", default=2.0),
                 "min_recent_width_atr": _num_param("Min recent width (ATR)", default=4.0),
                 "width_lookback_bars": _int_param("Width lookback bars", default=80),
+            },
+            supports_context_consumption=True,
+            context_consumption_policies=_SETUP_CONTEXT_POLICIES,
+        ),
+        ComponentSchema(
+            component_id="anchor_stack_width_band_setup",
+            role="setup",
+            label="Anchor stack width band setup",
+            description=(
+                "Admits a bar when the current anchor EMA stack width, |fast - slow| / ATR, "
+                "lies in the inclusive band [min, max]. Reads the current bar only; the "
+                "upper bound is optional."
+            ),
+            params_storage="nested",
+            params_schema={
+                "atr_timeframe": _tf_param("ATR timeframe"),
+                "atr_period": _int_param("ATR period", default=14),
+                "min_width_atr": _num_param("Min width (ATR)", default=None),
+                "max_width_atr": _num_param("Max width (ATR)", default=None),
             },
             supports_context_consumption=True,
             context_consumption_policies=_SETUP_CONTEXT_POLICIES,

@@ -23,7 +23,12 @@ COMPOSITE_SETUP = "composite_setup"
 # Existing semantic setups allowed as composite children. `composite_setup`
 # itself is deliberately absent: no nested composites in v1.
 SEMANTIC_SETUP_CHILDREN = frozenset(
-    {"untouched_anchor_setup", "ema_bounce_counter_setup", "anchor_stack_width_setup"}
+    {
+        "untouched_anchor_setup",
+        "ema_bounce_counter_setup",
+        "anchor_stack_width_setup",
+        "anchor_stack_width_band_setup",
+    }
 )
 
 COMPOSITE_PHASE_CONDITION = "composite_phase_condition"

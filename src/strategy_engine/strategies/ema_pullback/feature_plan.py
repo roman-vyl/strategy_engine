@@ -24,6 +24,8 @@ from strategy_engine.strategies.ema_pullback.composite_spec import (
 from strategy_engine.strategies.ema_pullback.predicates import parse_predicate
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     PARTIAL_TAKE_EXIT_KIND,
+    WIDTH_BAND_SETUP,
+    parse_width_band_params,
     require_non_empty_instance_id,
     resolve_exit_rule_groups,
 )
@@ -237,6 +239,13 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
                 "anchor": anchor,
                 "slow": slow,
                 "atr": add_atr(timeframe, period),
+            }
+        elif component_id == WIDTH_BAND_SETUP:
+            band = parse_width_band_params(params)
+            setup_columns[instance_id] = {
+                "fast": fast,
+                "slow": slow,
+                "atr": add_atr(band.atr_timeframe, band.atr_period),
             }
         elif component_id == "ema_bounce_counter_setup":
             setup_columns[instance_id] = {"fast": fast, "anchor": anchor, "slow": slow}
