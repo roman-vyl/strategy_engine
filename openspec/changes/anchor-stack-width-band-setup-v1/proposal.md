@@ -52,8 +52,8 @@ existing component stays exactly as it is.
   readiness (non-finite `fast`/`slow`/`atr`, `atr <= 0`), ATR on base and on a higher timeframe, side-freeness, determinism.
 - Static validation: missing `min_width_atr`, non-numeric, non-finite or non-positive bounds, `max_width_atr < min_width_atr`,
   unknown keys; acceptance at top level, with `context_consumption`, and as a `composite_setup` child.
-- Equivalence: with `max_width_atr` absent, the local mask equals that of `anchor_stack_width_setup` with the same ATR, the same
-  `min_current_width_atr`, and a trailing condition that is always satisfied, on every bar where both are ready.
+- Equivalence of the width formula: with the same ATR, `width_atr` of the new component equals `current_width_atr` of
+  `anchor_stack_width_setup` on every bar where both are finite. The masks of the two components are not required to agree.
 - Identity and memo: bounds-only candidates share one `width` computation; zero `unforeseen_consumptions`; memoized and
   non-memoized outputs are bit-identical.
 - Regression: existing suites that pin `plan_hash`, node identities, compute counts and outputs pass unchanged.

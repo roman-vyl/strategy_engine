@@ -24,7 +24,7 @@
 
 - [ ] 3.1 Compute (D3): vectorized width node and band test, trace (D5). Verify: inclusive bounds at exact `min` and `max`, no upper
       bound, readiness, higher-timeframe ATR, identical masks for both sides, determinism.
-- [ ] 3.2 Equivalence with the existing component (Verification in the proposal). Verify: test on a real frame.
+- [ ] 3.2 Width equivalence: `width_atr` equals `current_width_atr` of the existing setup for the same ATR. Verify: test on a real frame.
 - [ ] 3.3 Composite child: local mask equals the same setup declared directly. Verify: test.
 
 ## 4. Identity and memo
