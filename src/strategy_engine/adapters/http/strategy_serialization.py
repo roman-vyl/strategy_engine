@@ -12,7 +12,9 @@ from strategy_engine.strategies.contracts import (
     InitialProtectionLeg,
     ManagedConditionSeries,
     ManagedRule,
+    ManagedTransitionEntryChange,
     ManagedTransitionPath,
+    ManagedTransitionTerm,
     SignalExitEvent,
     SignalExitProjection,
     StrategyDecisionEvent,
@@ -173,8 +175,25 @@ def _serialize_distance(value: float) -> float | None:
     return value if isfinite(value) else None
 
 
+def _serialize_entry_change(item: ManagedTransitionEntryChange) -> dict[str, object]:
+    return {"series_id": item.series_id, "op": item.op, "value": item.value}
+
+
+def _serialize_term(term: ManagedTransitionTerm) -> dict[str, object]:
+    wire: dict[str, object] = {
+        "condition_id": term.condition_id,
+        "distance_id": term.distance_id,
+        "trade_metric": term.trade_metric,
+    }
+    # entry-anchored-change-v1 design D7: omitted when absent, so terms
+    # without an entry change keep their bytes.
+    if term.entry_change is not None:
+        wire["entry_change"] = _serialize_entry_change(term.entry_change)
+    return wire
+
+
 def _serialize_path(path: ManagedTransitionPath) -> dict[str, object]:
-    return {
+    wire: dict[str, object] = {
         "path_id": path.path_id,
         "condition_id": path.condition_id,
         "thresholds": [
@@ -185,16 +204,13 @@ def _serialize_path(path: ManagedTransitionPath) -> dict[str, object]:
         if path.at_least is None
         else {
             "k": path.at_least.k,
-            "terms": [
-                {
-                    "condition_id": term.condition_id,
-                    "distance_id": term.distance_id,
-                    "trade_metric": term.trade_metric,
-                }
-                for term in path.at_least.terms
-            ],
+            "terms": [_serialize_term(term) for term in path.at_least.terms],
         },
     }
+    # Omitted when empty, so paths without an entry change keep their bytes.
+    if path.entry_changes:
+        wire["entry_changes"] = [_serialize_entry_change(item) for item in path.entry_changes]
+    return wire
 
 
 def _serialize_rule(rule: ManagedRule) -> dict[str, object]:

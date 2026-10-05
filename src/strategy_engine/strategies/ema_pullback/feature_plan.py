@@ -21,6 +21,10 @@ from strategy_engine.strategies.ema_pullback.composite_spec import (
     parse_composite_phase_condition,
     parse_composite_setup,
 )
+from strategy_engine.strategies.ema_pullback.entry_change import (
+    CHANGE_SINCE_ENTRY,
+    parse_change_since_entry,
+)
 from strategy_engine.strategies.ema_pullback.predicates import parse_predicate
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     PARTIAL_TAKE_EXIT_KIND,
@@ -366,6 +370,10 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
                 _positive_int(params.get("period"), "phase_rule.period"),
                 adx_dmi_columns,
             )
+        elif component_id == CHANGE_SINCE_ENTRY:
+            # entry-anchored-change-v1 design D9: the operand joins the
+            # predicate features (planned last, collision checked).
+            predicate_features.append(parse_change_since_entry(params, f"{path}.params").feature)
 
     for index, phase_rule_raw in enumerate(exit_management.get("phase_rules", ()) or ()):
         phase_rule = _mapping(phase_rule_raw, f"phase_rules[{index}]")

@@ -15,6 +15,7 @@ as the spec's "Research dispatches on rule kind alone" scenario requires.
 
 from __future__ import annotations
 
+import math
 from decimal import Decimal
 
 import pytest
@@ -24,6 +25,7 @@ from strategy_engine.domain.ranges import TimeRange
 from strategy_engine.indicators.contracts import FeatureFrame
 from strategy_engine.strategies.contracts import (
     HistoricalManagedProjection,
+    ManagedTransitionEntryChange,
     ManagedTransitionPath,
 )
 from strategy_engine.strategies.ema_pullback.feature_plan import (
@@ -53,6 +55,32 @@ def _threshold_met(
     return values[trade_metric] >= projection.distances[distance_id][index]
 
 
+_ENTRY_CHANGE_OPS = {
+    ">=": lambda a, b: a >= b,
+    ">": lambda a, b: a > b,
+    "<=": lambda a, b: a <= b,
+    "<": lambda a, b: a < b,
+}
+
+
+def _entry_change_met(
+    projection: HistoricalManagedProjection,
+    change: ManagedTransitionEntryChange,
+    entry_index: int,
+    index: int,
+    fault: str | None,
+) -> bool:
+    """`entry-anchored-change-v1` design D7: `series[i] - series[entry]
+    <op> value`, NaN -> False."""
+
+    series = projection.distances[change.series_id]
+    anchor = series[entry_index - 1 if fault == "anchor_one_bar_early" else entry_index]
+    current = series[index]
+    if not (math.isfinite(anchor) and math.isfinite(current)):
+        return False
+    return bool(_ENTRY_CHANGE_OPS[change.op](current - anchor, change.value))
+
+
 def _path_met(
     projection: HistoricalManagedProjection,
     path: ManagedTransitionPath,
@@ -60,6 +88,7 @@ def _path_met(
     values: dict[str, float],
     index: int,
     fault: str | None,
+    entry_index: int = 0,
 ) -> bool:
     """The `paths` rule of `composite-managed-phase-condition-v1` design D6.
     `fault` injects one deliberate consumer bug (task 6.2 controls)."""
@@ -75,6 +104,11 @@ def _path_met(
         for t in path.thresholds
     ):
         return False
+    if fault != "ignore_entry_changes" and not all(
+        _entry_change_met(projection, change, entry_index, index, fault)
+        for change in path.entry_changes
+    ):
+        return False
     at_least = path.at_least
     if at_least is None:
         return True
@@ -86,6 +120,9 @@ def _path_met(
         trade_terms = []
     count = sum(condition(t.condition_id) for t in market_terms if t.condition_id is not None)
     for term in trade_terms:
+        if term.entry_change is not None:
+            count += _entry_change_met(projection, term.entry_change, entry_index, index, fault)
+            continue
         assert term.distance_id is not None and term.trade_metric is not None
         count += _threshold_met(projection, term.distance_id, term.trade_metric, values, index)
     return count >= at_least.k
@@ -153,7 +190,9 @@ def _replay_from_projection(
                     (
                         path.path_id
                         for path in rule.paths
-                        if _path_met(projection, path, side, trade_metric_values, index, fault)
+                        if _path_met(
+                            projection, path, side, trade_metric_values, index, fault, entry_index
+                        )
                     ),
                     None,
                 )
@@ -511,6 +550,8 @@ def _composite_corpus() -> dict[str, dict[str, object]]:
         _cond,
         _pred,
         _spec,
+        entry_change_at_least,
+        entry_change_case,
         mixed_at_least,
         owner_case,
         state_temporal,
@@ -553,6 +594,8 @@ def _composite_corpus() -> dict[str, dict[str, object]]:
         "trade_only_path": _spec(trade_path),
         "state_temporal": _spec(state_temporal()),
         "cascade_with_actions": cascade,
+        "entry_change": _spec(entry_change_case()),
+        "entry_change_at_least": _spec(entry_change_at_least()),
     }
 
 
@@ -698,6 +741,8 @@ def test_composite_projection_matches_managed_replay(composite_corpus) -> None: 
         ("trade_only_path", "market"),
         ("state_temporal", "regime"),
         ("state_temporal", "atom"),
+        ("entry_change", "rise"),
+        ("entry_change_at_least", "vote"),
     }, won
 
 
@@ -753,6 +798,8 @@ def test_composite_projection_matches_live_start_after_entry(composite_corpus) -
         ("ignore_mixed_trade_terms", ("mixed_at_least",)),
         ("drop_trade_only_at_least", ("trade_only_at_least",)),
         ("ignore_thresholds", ("owner_case",)),
+        ("ignore_entry_changes", ("entry_change",)),
+        ("anchor_one_bar_early", ("entry_change_at_least",)),
     ],
 )
 def test_consumer_faults_are_caught_by_the_corpus(  # type: ignore[no-untyped-def]

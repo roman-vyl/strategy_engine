@@ -452,6 +452,12 @@ def _composite_phase_met(
             plan=plan,
             series_cache=series_cache,
         )[0],
+        # entry-anchored-change-v1 design D3, D8: the anchor is the operand's
+        # aligned value on the entry bar, for offset 0 and offset 1 alike.
+        lambda change: change.met(
+            _feature_value(series_cache, frame, change.feature.output_id, index),
+            _feature_value(series_cache, frame, change.feature.output_id, state.entry_index),
+        ),
     )
 
 

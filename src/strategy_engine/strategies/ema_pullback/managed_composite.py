@@ -23,7 +23,7 @@ the historical projection emits it. Neither re-implements the other.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -38,6 +38,10 @@ from strategy_engine.strategies.ema_pullback.composite_spec import (
     CompositePhaseCondition,
     parse_composite_phase_condition,
     phase_rule_composites,
+)
+from strategy_engine.strategies.ema_pullback.entry_change import (
+    ChangeSinceEntry,
+    change_since_entry_of,
 )
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 from strategy_engine.strategies.ema_pullback.managed import (
@@ -125,6 +129,9 @@ class FoldedComposite:
     paths: tuple[FoldedPath, ...]
     # child_id -> read-only bool array for the folded side (market children).
     market_children: Mapping[str, np.ndarray]
+    # child_id -> parsed `change_since_entry` trade child, parsed once per
+    # fold (`entry-anchored-change-v1`); empty when the composite has none.
+    entry_changes: Mapping[str, ChangeSinceEntry] = field(default_factory=dict)
 
 
 def _market_mask(
@@ -175,7 +182,15 @@ def fold_phase_paths(
     cache: SeriesCache = {} if series_cache is None else series_cache
     length = len(frame.time_ms)
     market: dict[str, np.ndarray] = {}
+    entry_changes: dict[str, ChangeSinceEntry] = {}
     for child in spec.children:
+        if child.condition is not None:
+            change = change_since_entry_of(
+                child.condition, f"composite_phase_condition.{child.child_id}.condition"
+            )
+            if change is not None:
+                entry_changes[child.child_id] = change
+                continue
         if is_market_child(child):
             market[child.child_id] = _market_mask(
                 child,
@@ -220,25 +235,37 @@ def fold_phase_paths(
                 ),
             )
         )
-    return FoldedComposite(spec, tuple(paths), market)
+    return FoldedComposite(spec, tuple(paths), market, entry_changes)
 
 
 TradeMet = Callable[[Mapping[str, Any]], bool]
+EntryChangeMet = Callable[[ChangeSinceEntry], bool]
 
 
 def composite_met(
-    folded: FoldedComposite, index: int, trade_met: TradeMet
+    folded: FoldedComposite,
+    index: int,
+    trade_met: TradeMet,
+    entry_change_met: EntryChangeMet | None = None,
 ) -> tuple[bool, dict[str, object]]:
     """The composite's value on bar `index` for the folded side (design D5):
     the first true path in declared order wins. `trade_met(condition)` is
-    the existing atom formula for a trade child on this bar."""
+    the existing atom formula for a trade child on this bar;
+    `entry_change_met(change)` values a `change_since_entry` child for the
+    trade on this bar (required iff the fold has one)."""
 
     spec = folded.spec
+    entry_changes = folded.entry_changes
 
     def value(child_id: str) -> bool:
         mask = folded.market_children.get(child_id)
         if mask is not None:
             return bool(mask[index])
+        if entry_changes:
+            change = entry_changes.get(child_id)
+            if change is not None:
+                assert entry_change_met is not None
+                return entry_change_met(change)
         condition = spec.child(child_id).condition
         assert condition is not None
         return trade_met(condition)

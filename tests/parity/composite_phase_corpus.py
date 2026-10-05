@@ -53,6 +53,16 @@ ADX_DI_1H = {
     },
 }
 
+# entry-anchored-change-v1: a rise from the operand's value on the entry bar.
+RISE_ADX1H = {
+    "component_id": "change_since_entry",
+    "params": {"operand": _feature("adx", "1h"), "op": ">=", "value": 2.0},
+}
+RISE_ADX5 = {
+    "component_id": "change_since_entry",
+    "params": {"operand": _feature("adx", "5m"), "op": ">=", "value": 5.0},
+}
+
 
 def _pred(child_id: str, predicate: dict[str, Any]) -> dict[str, Any]:
     return {"child_id": child_id, "predicate": copy.deepcopy(predicate)}
@@ -108,6 +118,24 @@ def state_temporal() -> dict[str, Any]:
             {"path_id": "regime", "require": ["state", "held"]},
             {"path_id": "atom", "require": ["adx_di"]},
         ],
+    )
+
+
+def entry_change_case() -> dict[str, Any]:
+    """1h ADX up by 2 from its entry value AND DI 1h on the trade side."""
+
+    return _composite(
+        [_cond("rise", RISE_ADX1H), _pred("di1h", DI1H)],
+        [{"path_id": "rise", "require": ["rise", "di1h"]}],
+    )
+
+
+def entry_change_at_least() -> dict[str, Any]:
+    """2 of [5m ADX up by 5 from entry, MFE >= 1%, ADX 1h > 25]."""
+
+    return _composite(
+        [_cond("rise", RISE_ADX5), _cond("pct", MFE_PCT), _pred("adx1h", ADX1H)],
+        [{"path_id": "vote", "at_least": {"k": 2, "of": ["rise", "pct", "adx1h"]}}],
     )
 
 

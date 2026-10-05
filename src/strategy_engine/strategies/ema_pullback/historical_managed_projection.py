@@ -19,11 +19,13 @@ candidate this bar" behavior without any special-casing.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.strategies.contracts import (
+    EntryChangeOp,
     HistoricalManagedProjection,
     ManagedConditionSeries,
     ManagedPhaseTransitionRule,
@@ -32,6 +34,7 @@ from strategy_engine.strategies.contracts import (
     ManagedStopActionRule,
     ManagedTakeActionRule,
     ManagedTransitionAtLeast,
+    ManagedTransitionEntryChange,
     ManagedTransitionPath,
     ManagedTransitionTerm,
     ManagedTransitionThreshold,
@@ -186,6 +189,19 @@ def _composite_paths(
             )
         return ManagedTransitionThreshold(distance_id, _METRIC[component_id])
 
+    def entry_change_term(child_id: str) -> ManagedTransitionEntryChange:
+        # entry-anchored-change-v1 design D7: the operand's aligned column,
+        # one series per child however many paths reference it; the
+        # consumer anchors it at each trade's entry bar.
+        change = long_fold.entry_changes[child_id]
+        series_id = f"phase:{rule_id}:child:{child_id}:series"
+        if series_id not in distances:
+            distances[series_id] = tuple(
+                _NAN if value is None or not math.isfinite(value) else float(value)
+                for value in _cached_series(cache, frame, change.feature.output_id)
+            )
+        return ManagedTransitionEntryChange(series_id, cast(EntryChangeOp, change.op), change.value)
+
     paths: list[ManagedTransitionPath] = []
     for long_path, short_path in zip(long_fold.paths, short_fold.paths, strict=True):
         condition_id: str | None = None
@@ -201,6 +217,8 @@ def _composite_paths(
             for ref in long_path.at_least_terms:
                 if ref in long_fold.market_children:
                     terms.append(ManagedTransitionTerm(market_term(ref), None, None))
+                elif ref in long_fold.entry_changes:
+                    terms.append(ManagedTransitionTerm(None, None, None, entry_change_term(ref)))
                 else:
                     threshold = trade_term(ref)
                     terms.append(
@@ -211,8 +229,17 @@ def _composite_paths(
             ManagedTransitionPath(
                 path_id=long_path.path_id,
                 condition_id=condition_id,
-                thresholds=tuple(trade_term(ref) for ref in long_path.trade_require),
+                thresholds=tuple(
+                    trade_term(ref)
+                    for ref in long_path.trade_require
+                    if ref not in long_fold.entry_changes
+                ),
                 at_least=at_least,
+                entry_changes=tuple(
+                    entry_change_term(ref)
+                    for ref in long_path.trade_require
+                    if ref in long_fold.entry_changes
+                ),
             )
         )
     return tuple(paths)
