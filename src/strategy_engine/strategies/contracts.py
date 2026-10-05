@@ -262,14 +262,30 @@ class ManagedTransitionThreshold:
     trade_metric: TradeMetric
 
 
+EntryChangeOp = Literal[">=", ">", "<=", "<"]
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedTransitionEntryChange:
+    """`series[i] - series[entry_index] <op> value`, where `series` is
+    `distances[series_id]` and `entry_index` is the trade's entry bar;
+    False when either point is NaN (`entry-anchored-change-v1`, design D7).
+    The consumer reads the anchor once per trade."""
+
+    series_id: str
+    op: EntryChangeOp
+    value: float
+
+
 @dataclass(frozen=True, slots=True)
 class ManagedTransitionTerm:
-    """One `at_least` term: exactly one of `condition_id` (market) or
-    (`distance_id`, `trade_metric`) (trade threshold)."""
+    """One `at_least` term: exactly one of `condition_id` (market),
+    (`distance_id`, `trade_metric`) (trade threshold) or `entry_change`."""
 
     condition_id: str | None
     distance_id: str | None
     trade_metric: TradeMetric | None
+    entry_change: ManagedTransitionEntryChange | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -285,13 +301,15 @@ class ManagedTransitionAtLeast:
 @dataclass(frozen=True, slots=True)
 class ManagedTransitionPath:
     """True on a bar iff `condition_id` (if any) is true for the trade
-    side, every threshold holds and `at_least` (if any) holds
-    (`composite-managed-phase-condition-v1` design D6)."""
+    side, every threshold holds, every entry change holds and `at_least`
+    (if any) holds (`composite-managed-phase-condition-v1` design D6,
+    `entry-anchored-change-v1` design D7)."""
 
     path_id: str
     condition_id: str | None
     thresholds: tuple[ManagedTransitionThreshold, ...]
     at_least: ManagedTransitionAtLeast | None
+    entry_changes: tuple[ManagedTransitionEntryChange, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

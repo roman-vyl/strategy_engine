@@ -16,6 +16,10 @@ from strategy_engine.strategies.ema_pullback.composite_spec import (
     phase_rule_composites,
     require_no_internal_key_collision,
 )
+from strategy_engine.strategies.ema_pullback.entry_change import (
+    CHANGE_SINCE_ENTRY,
+    change_since_entry_of,
+)
 from strategy_engine.strategies.ema_pullback.predicates import parse_predicate
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     BLOCKER_SUPPORTED,
@@ -179,6 +183,13 @@ def _check_composite_phase_conditions(
                 "use it as a composite_phase_condition child",
                 path=f"phase_rules[{index}].condition",
             )
+        # entry-anchored-change-v1 design D6: a composite child only.
+        if isinstance(condition, Mapping) and condition.get("component_id") == CHANGE_SINCE_ENTRY:
+            raise InvalidRequestError(
+                "change_since_entry is not a phase_rule condition; "
+                "use it as a composite_phase_condition child",
+                path=f"phase_rules[{index}].condition",
+            )
     for index, spec in phase_rule_composites(exit_management):
         for child in spec.children:
             if child.predicate is not None:
@@ -186,4 +197,8 @@ def _check_composite_phase_conditions(
                     child.predicate,
                     f"phase_rules[{index}].condition.{child.child_id}.predicate",
                     context_refs=context_refs,
+                )
+            elif child.condition is not None:
+                change_since_entry_of(
+                    child.condition, f"phase_rules[{index}].condition.{child.child_id}.condition"
                 )

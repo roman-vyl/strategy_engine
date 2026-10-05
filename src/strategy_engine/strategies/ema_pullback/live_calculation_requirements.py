@@ -25,6 +25,7 @@ from strategy_engine.strategies.ema_pullback.composite_spec import (
     parse_composite_phase_condition,
     parse_composite_setup,
 )
+from strategy_engine.strategies.ema_pullback.entry_change import CHANGE_SINCE_ENTRY
 from strategy_engine.strategies.ema_pullback.predicates import (
     AnyPredicate,
     Change,
@@ -606,5 +607,16 @@ class EmaPullbackLiveCalculationRequirements:
                 )
             else:
                 assert child.condition is not None
-                out.append(self._phase_atom(str(child.condition.get("component_id", "")), where))
+                component_id = str(child.condition.get("component_id", ""))
+                if component_id == CHANGE_SINCE_ENTRY:
+                    # entry-anchored-change-v1 design D10: the anchor is the
+                    # entry bar, already inside the open-trade window.
+                    out.append(
+                        _zero(
+                            f"{where} {component_id}: anchored at the entry bar, "
+                            "indicator warm-up already counted separately"
+                        )
+                    )
+                else:
+                    out.append(self._phase_atom(component_id, where))
         return out
