@@ -5,9 +5,7 @@ Let one EMA Pullback setup express alternative combinations of
 pre-entry conditions. Its children are predicates over canonical
 features/context and existing semantic setups, combined by AND within
 a path, N-of-M within a path, and OR across paths.
-
 ## Requirements
-
 ### Requirement: Ordinary setup at the outer boundary
 
 `composite_setup` SHALL be a setup component:
@@ -39,7 +37,8 @@ beyond dispatching on its `component_id`.
 For a `setup` child:
 
 - its `component_id` SHALL be one of `untouched_anchor_setup`,
-  `ema_bounce_counter_setup`, `anchor_stack_width_setup`;
+  `ema_bounce_counter_setup`, `anchor_stack_width_setup`,
+  `anchor_stack_width_band_setup`;
 - it SHALL NOT carry `instance_id` or `context_consumption`.
 
 `composite_setup` SHALL NOT be a child.
@@ -53,6 +52,13 @@ For a `setup` child:
 
 - **WHEN** a setup child has `component_id` `composite_setup`
 - **THEN** static validation SHALL reject the spec.
+
+#### Scenario: Width band child equals the width band setup
+
+- **WHEN** a composite has a single path requiring a single
+  `anchor_stack_width_band_setup` child
+- **THEN** the composite local mask SHALL equal the local mask of the
+  same `anchor_stack_width_band_setup` declared directly.
 
 ### Requirement: Semantic setup children are reused unchanged
 
@@ -127,3 +133,4 @@ evaluation context.
 
 - **WHEN** the same child is referenced by two paths
 - **THEN** it SHALL be computed once.
+

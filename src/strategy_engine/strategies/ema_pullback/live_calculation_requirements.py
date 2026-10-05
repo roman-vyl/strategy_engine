@@ -319,6 +319,17 @@ class EmaPullbackLiveCalculationRequirements:
                     ),
                 )
             )
+        elif component_id == "anchor_stack_width_band_setup":
+            out.append(
+                HistoryRequirement(
+                    timeframe=_BASE,
+                    bars=0,
+                    reason=(
+                        f"setups[{index}] anchor_stack_width_band_setup reads the current "
+                        "bar only; feature warm-up is counted from the plan"
+                    ),
+                )
+            )
         elif component_id == "ema_bounce_counter_setup":
             anchor_period = self._anchor_ema_period(root, index)
             tier = self._select_bounce_tier(anchor_period, index)

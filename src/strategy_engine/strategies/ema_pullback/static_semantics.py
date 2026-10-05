@@ -26,6 +26,8 @@ from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     RISK_SUPPORTED,
     SETUP_SUPPORTED,
     TRIGGER_SUPPORTED,
+    WIDTH_BAND_SETUP,
+    parse_width_band_params,
     require_initial_r_stops,
     require_partial_take_ladder,
     require_unique_instance_ids,
@@ -95,6 +97,8 @@ def check_ema_pullback_static_semantics(raw_spec: Mapping[str, Any]) -> None:
         component_id, _ = resolve_setup_identity(setup)
         if component_id not in SETUP_SUPPORTED:
             raise InvalidRequestError("unsupported setup component", component_id=component_id)
+        if component_id == WIDTH_BAND_SETUP:
+            parse_width_band_params(_mapping(setup.get("params", {}), f"setups[{index}].params"))
         setup_identity_pairs.append(
             (setup.get("instance_id"), f"setups[{index}].instance_id")
         )
@@ -137,6 +141,10 @@ def _check_composite_setups(
         return
     for spec in composites:
         for child in spec.children:
+            if child.setup is not None and child.setup.get("component_id") == WIDTH_BAND_SETUP:
+                parse_width_band_params(
+                    _mapping(child.setup.get("params", {}), f"setup[{spec.instance_id}].params")
+                )
             if child.predicate is not None:
                 parse_predicate(
                     child.predicate,

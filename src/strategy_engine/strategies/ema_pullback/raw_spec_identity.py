@@ -10,6 +10,7 @@ allowlists and `instance_id` requirements defined exactly once.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from decimal import Decimal
 from math import isfinite
 from typing import Any, Literal
@@ -49,10 +50,57 @@ SETUP_SUPPORTED = frozenset(
         "untouched_anchor_setup",
         "ema_bounce_counter_setup",
         "anchor_stack_width_setup",
+        "anchor_stack_width_band_setup",
         "composite_setup",
     }
 )
+WIDTH_BAND_SETUP = "anchor_stack_width_band_setup"
+_WIDTH_BAND_KEYS = frozenset({"atr_timeframe", "atr_period", "min_width_atr", "max_width_atr"})
 DIRECTION_SUPPORTED = frozenset({"ema_anchor_stack_trend"})
+
+
+@dataclass(frozen=True, slots=True)
+class WidthBandParams:
+    """Effective, post-default parameters of `anchor_stack_width_band_setup`."""
+
+    min_width_atr: float
+    max_width_atr: float | None
+    atr_timeframe: str
+    atr_period: int
+
+
+def _band_number(value: object, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value):
+        raise InvalidRequestError(f"{name} must be a finite number")
+    return float(value)
+
+
+def parse_width_band_params(params: Mapping[str, Any]) -> WidthBandParams:
+    """Market-data-free parsing of the band setup's params, shared by static
+    validation, compute and resolve so defaults are applied in one place."""
+
+    unknown = set(params) - _WIDTH_BAND_KEYS
+    if unknown:
+        raise InvalidRequestError(
+            "anchor_stack_width_band_setup has unknown params", fields=sorted(unknown)
+        )
+    if "min_width_atr" not in params:
+        raise InvalidRequestError("anchor_stack_width_band_setup requires min_width_atr")
+    min_width = _band_number(params["min_width_atr"], "min_width_atr")
+    if min_width <= 0:
+        raise InvalidRequestError("min_width_atr must be greater than zero")
+    max_width: float | None = None
+    if "max_width_atr" in params:
+        max_width = _band_number(params["max_width_atr"], "max_width_atr")
+        if max_width < min_width:
+            raise InvalidRequestError("max_width_atr must not be less than min_width_atr")
+    timeframe = params.get("atr_timeframe", "base")
+    if not isinstance(timeframe, str) or not timeframe:
+        raise InvalidRequestError("atr_timeframe must be a non-empty string")
+    period = params.get("atr_period", 14)
+    if isinstance(period, bool) or not isinstance(period, int) or period <= 0:
+        raise InvalidRequestError("atr_period must be a positive integer")
+    return WidthBandParams(min_width, max_width, timeframe, period)
 
 
 def _mapping(value: object, path: str) -> Mapping[str, Any]:

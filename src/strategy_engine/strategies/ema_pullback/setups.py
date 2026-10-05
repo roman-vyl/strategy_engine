@@ -48,6 +48,8 @@ from strategy_engine.strategies.ema_pullback.predicates import (
 )
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     SETUP_SUPPORTED,
+    WIDTH_BAND_SETUP,
+    parse_width_band_params,
 )
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     resolve_setup_identity as _setup_identity,
@@ -479,6 +481,64 @@ def _anchor_stack_width(
     }
 
 
+def _band_width(
+    fast: tuple[float, ...], slow: tuple[float, ...], atr: tuple[float, ...]
+) -> tuple[float, ...]:
+    """Side-free, threshold-free `width_atr = |fast - slow| / atr` of the band
+    setup (NaN where a column is not finite or `atr <= 0`)."""
+
+    fast_arr = np.asarray(fast, dtype=float)
+    slow_arr = np.asarray(slow, dtype=float)
+    atr_arr = np.asarray(atr, dtype=float)
+    ready = np.isfinite(fast_arr) & np.isfinite(slow_arr) & np.isfinite(atr_arr) & (atr_arr > 0)
+    safe_atr = np.where(ready, atr_arr, 1.0)
+    width = np.where(ready, np.abs(fast_arr - slow_arr) / safe_atr, np.nan)
+    return tuple(width.tolist())
+
+
+def _anchor_stack_width_band(
+    frame: FeatureFrameLike,
+    columns: Mapping[str, str],
+    params: Mapping[str, Any],
+    *,
+    context: EvaluationContext | None = None,
+    width_id: NodeSpec | None = None,
+) -> tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]:
+    """Current-bar inclusive band `min <= width_atr <= max` (no upper bound
+    when `max_width_atr` is absent); the width is shared through the memo."""
+
+    band = parse_width_band_params(params)
+    fast = _float_series(frame, columns["fast"])
+    slow = _float_series(frame, columns["slow"])
+    atr = _float_series(frame, columns["atr"])
+    width = compute_through(context, width_id, functools.partial(_band_width, fast, slow, atr))
+    width_arr = np.asarray(width, dtype=float)
+    ready = np.isfinite(width_arr)
+    with np.errstate(invalid="ignore"):
+        below = width_arr < band.min_width_atr
+        above = (
+            width_arr > band.max_width_atr
+            if band.max_width_atr is not None
+            else np.zeros(len(width_arr), dtype=bool)
+        )
+    allowed = ready & ~below & ~above
+    reasons = np.where(
+        ~ready,
+        "indicator_not_ready",
+        np.where(below, "width_below_min", np.where(above, "width_above_max", "")),
+    )
+    size = len(width_arr)
+    return tuple(allowed.tolist()), {
+        "blocked_reason": tuple(reasons.tolist()),
+        "width_atr": width,
+        "min_width_atr": tuple(band.min_width_atr for _ in range(size)),
+        "max_width_atr": tuple(band.max_width_atr for _ in range(size)),
+        "fast_ema": fast,
+        "slow_ema": slow,
+        "atr_value": atr,
+    }
+
+
 def _combine_setup_masks(
     mask_allowed: tuple[tuple[bool, ...], ...], length: int
 ) -> tuple[bool, ...]:
@@ -535,6 +595,15 @@ def _semantic_setup_compute(
         columns = _setup_columns(plan, instance_id)
         return functools.partial(_ema_bounce_counter, frame, columns, params, side)
     columns = _setup_columns(plan, instance_id)
+    if component_id == WIDTH_BAND_SETUP:
+        return functools.partial(
+            _anchor_stack_width_band,
+            frame,
+            columns,
+            params,
+            context=context,
+            width_id=identity.width_prefix if identity else None,
+        )
     return functools.partial(
         _anchor_stack_width,
         frame,
@@ -794,8 +863,10 @@ def _feature_node(feature_ids: Mapping[str, NodeSpec], output_id: str) -> NodeSp
 class SetupIdentity:
     """Identities of one setup item for one side. `local` covers
     `local_setup_allowed` + `trace`; `final` covers `final_setup_allowed`.
-    `width_prefix` is set only for the width setup: its side-free,
-    threshold-free `(current_width_atr, recent_max_width_atr)` prefix."""
+    `width_prefix` is set only for the width setups: the side-free,
+    threshold-free `(current_width_atr, recent_max_width_atr)` prefix of
+    `anchor_stack_width_setup`, or the `width_atr` node of
+    `anchor_stack_width_band_setup`."""
 
     instance_id: str
     side: str
@@ -859,6 +930,29 @@ def resolve_setup_local(
                 side=side,
             ),
             None,
+        )
+    if component_id == WIDTH_BAND_SETUP:
+        band = parse_width_band_params(params)
+        fast_node = _feature_node(feature_ids, columns["fast"])
+        slow_node = _feature_node(feature_ids, columns["slow"])
+        atr_node = _feature_node(feature_ids, columns["atr"])
+        width_node = node_spec(
+            "setup.anchor_stack_width_band.width",
+            version=SETUP_NODE_VERSION,
+            params={},
+            upstream={"fast": fast_node, "slow": slow_node, "atr": atr_node},
+        )
+        band_params: dict[str, Any] = {"min_width_atr": band.min_width_atr}
+        if band.max_width_atr is not None:
+            band_params["max_width_atr"] = band.max_width_atr
+        return (
+            node_spec(
+                kind,
+                version=SETUP_NODE_VERSION,
+                params=band_params,
+                upstream={"width": width_node},
+            ),
+            width_node,
         )
     min_current, min_recent, lookback = _anchor_stack_width_params(params)
     fast = _feature_node(feature_ids, columns["fast"])
