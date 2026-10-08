@@ -33,6 +33,10 @@ from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     require_non_empty_instance_id,
     resolve_exit_rule_groups,
 )
+from strategy_engine.strategies.ema_pullback.stack_episode import (
+    SECTION,
+    parse_episode_section,
+)
 
 _ALLOWED_KINDS = frozenset(contract.kind for contract in feature_kinds())
 
@@ -47,9 +51,10 @@ class EmaPullbackFeaturePlan:
     setup_columns_by_instance_id: dict[str, dict[str, str]] = field(default_factory=dict)
     ema_columns: dict[tuple[str, int], str] = field(default_factory=dict)
     htf_context_columns_by_ref: dict[str, dict[str, str]] = field(default_factory=dict)
+    episode_columns_by_ref: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def to_wire(self) -> dict[str, object]:
-        return {
+        wire: dict[str, object] = {
             "plan_version": self.indicator_plan.plan_version,
             "plan_hash": self.indicator_plan.plan_hash,
             "features": [feature.canonical_payload() for feature in self.indicator_plan.features],
@@ -70,6 +75,9 @@ class EmaPullbackFeaturePlan:
             },
             "htf_context_columns_by_ref": self.htf_context_columns_by_ref,
         }
+        if self.episode_columns_by_ref:
+            wire["episode_columns_by_ref"] = self.episode_columns_by_ref
+        return wire
 
 
 def _mapping(value: Any, path: str) -> Mapping[str, Any]:
@@ -221,6 +229,20 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
             resolved[role] = feature.output_id
         htf_columns[str(context_ref)] = resolved
 
+    # ema-stack-episode-v1 D2: the episode's base-timeframe EMAs, planned
+    # only when the section is declared.
+    episode_columns: dict[str, dict[str, str]] = {}
+    for episode_ref, episode in parse_episode_section(root).items():
+        episode_columns[episode_ref] = {
+            role: add_ema({"period": period}, f"{SECTION}.{episode_ref}.{role}_period")
+            for role, period in (
+                ("fast", episode.fast_period),
+                ("anchor", episode.anchor_period),
+                ("slow", episode.slow_period),
+            )
+        }
+    episode_refs = frozenset(episode_columns)
+
     exit_rule_groups = resolve_exit_rule_groups(root)
     all_exits: list[Mapping[str, Any]] = [
         rule
@@ -274,6 +296,7 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
                             child.predicate,
                             f"setups[{index}].params.children[{child_index}].predicate",
                             context_refs=htf_columns,
+                            episode_refs=episode_refs,
                         ).features()
                     )
                     continue
@@ -393,6 +416,7 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
                             child.predicate,
                             f"{child_path}.predicate",
                             context_refs=htf_columns,
+                            episode_refs=episode_refs,
                         ).features()
                     )
                 else:
@@ -456,6 +480,7 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
         setup_columns_by_instance_id=setup_columns,
         ema_columns=ema_columns,
         htf_context_columns_by_ref=htf_columns,
+        episode_columns_by_ref=episode_columns,
     )
 
 

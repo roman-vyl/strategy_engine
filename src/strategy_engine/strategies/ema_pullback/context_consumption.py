@@ -191,6 +191,18 @@ def _exit_consumption(raw_spec: Mapping[str, Any]) -> tuple[str, str] | None:
     return context_ref, policy_id
 
 
+def consumption_context_refs(raw_spec: Mapping[str, Any]) -> frozenset[str]:
+    """Every `context_ref` a gate or the exit profile consumes."""
+
+    refs = {
+        consumption[0] for _, _, consumption, _ in _gate_declarations(raw_spec, ("long",))
+    }
+    exit_consumption = _exit_consumption(raw_spec)
+    if exit_consumption is not None:
+        refs.add(exit_consumption[0])
+    return frozenset(refs)
+
+
 def build_context_consumption_evidence(
     raw_spec: Mapping[str, Any], bundle: ContextBundle
 ) -> tuple[ContextConsumptionRecord, ...]:

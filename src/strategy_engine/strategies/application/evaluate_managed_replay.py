@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from strategy_engine.indicators.application.evaluate_range import EvaluateIndicatorRange
 from strategy_engine.indicators.contracts import IndicatorRangeRequest
 from strategy_engine.strategies.application.build_feature_plan import BuildStrategyFeaturePlan
@@ -15,6 +17,7 @@ from strategy_engine.strategies.ema_pullback.managed import (
 from strategy_engine.strategies.ema_pullback.managed_composite import (
     composites_need_context_bundle,
 )
+from strategy_engine.strategies.ema_pullback.stack_episode import build_episode_bundle
 
 
 class EvaluateManagedReplay:
@@ -44,6 +47,10 @@ class EvaluateManagedReplay:
             if composites_need_context_bundle(raw_spec)
             else None
         )
+        if bundle is not None:
+            episodes = build_episode_bundle(raw_spec, frame, planned.episode_columns_by_ref)
+            if episodes is not None:
+                bundle = replace(bundle, episodes=episodes)
         return evaluate_managed_replay(
             raw_spec,
             frame,

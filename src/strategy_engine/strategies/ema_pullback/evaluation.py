@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from strategy_engine.domain.node_identity import NodeSpec
@@ -59,6 +59,10 @@ from strategy_engine.strategies.ema_pullback.setups import (
     evaluate_setups,
     resolve_setups,
 )
+from strategy_engine.strategies.ema_pullback.stack_episode import (
+    build_episode_bundle,
+    resolve_episode_identities,
+)
 from strategy_engine.strategies.ema_pullback.triggers import (
     SideTriggerEvaluation,
     SideTriggerIdentity,
@@ -96,6 +100,15 @@ def evaluate_ema_pullback_frame(
     memo = _memo_identities(strategy.raw_spec, frame, planned, context)
     memo_context = context if memo is not None else None
     contexts = build_context_bundle(strategy.raw_spec, frame, planned)
+    episodes = build_episode_bundle(
+        strategy.raw_spec,
+        frame,
+        planned.episode_columns_by_ref,
+        context=memo_context,
+        identities=memo.episodes if memo else None,
+    )
+    if episodes is not None:
+        contexts = replace(contexts, episodes=episodes)
     consumption = build_context_consumption_evidence(strategy.raw_spec, contexts)
     direction_blockers = evaluate_direction_and_blockers(
         strategy.raw_spec,
@@ -217,6 +230,10 @@ class MemoizedStageIdentities:
     # managed projection (composite-managed-phase-condition-v1 design D8);
     # empty for every spec without one.
     managed: ManagedPredicateIdentities | None = None
+    # EMA stack episode nodes by `episode_identity_key`, consumed once each
+    # when the episode bundle is built (ema-stack-episode-v1); empty for
+    # every spec without `ema_stack_episode`.
+    episodes: Mapping[str, NodeSpec] | None = None
 
 
 def resolve_memoized_stages(
@@ -233,6 +250,19 @@ def resolve_memoized_stages(
 
     try:
         features = resolve_feature_identities(planned, base_timeframe=base_timeframe)
+        episodes = resolve_episode_identities(raw_spec, planned.episode_columns_by_ref, features)
+    except Exception:
+        return MemoizedStageIdentities(None, None, None)
+    stages = _resolve_memoized_stages(raw_spec, planned, features)
+    return replace(stages, episodes=episodes) if episodes else stages
+
+
+def _resolve_memoized_stages(
+    raw_spec: Mapping[str, Any],
+    planned: EmaPullbackFeaturePlan,
+    features: Mapping[str, NodeSpec],
+) -> MemoizedStageIdentities:
+    try:
         contexts = resolve_context_bundle(raw_spec, planned, features)
         gates = resolve_context_consumption(raw_spec, contexts)
         direction_blockers = resolve_direction_and_blockers(raw_spec, planned, features, gates)
@@ -266,7 +296,7 @@ def memoized_stage_consumptions(stages: MemoizedStageIdentities) -> tuple[NodeSp
     setup consumption; when that setup is served from the memo the prefix
     consumption does not happen and the root releases it on exit."""
 
-    consumed: list[NodeSpec] = []
+    consumed: list[NodeSpec] = list((stages.episodes or {}).values())
     for side in stages.direction_blockers or ():
         consumed.append(side.direction)
         for (_, intrinsic), (_, allowed) in zip(

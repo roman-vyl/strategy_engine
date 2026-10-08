@@ -10,6 +10,10 @@ from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.node_identity import NodeSpec, node_spec
 from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
+from strategy_engine.strategies.ema_pullback.stack_episode import (
+    EpisodeBundle,
+    resolve_episode_identities,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,10 +40,15 @@ class ContextOutput:
 
 @dataclass(frozen=True, slots=True)
 class ContextBundle:
-    """All declared strategy contexts evaluated once for one feature frame."""
+    """All declared strategy contexts evaluated once for one feature frame.
+
+    `episodes` carries the EMA stack episodes evaluated beside the contexts
+    (ema-stack-episode-v1), so predicates reach them through the same
+    bundle. They are not contexts: `outputs` and `to_wire` never hold them."""
 
     time_ms: tuple[int, ...]
     outputs: tuple[ContextOutput, ...]
+    episodes: EpisodeBundle | None = None
 
     def to_wire(self) -> dict[str, object]:
         return {
@@ -154,7 +163,9 @@ def resolve_context_bundle(
     plan: EmaPullbackFeaturePlan,
     feature_ids: Mapping[str, NodeSpec],
 ) -> dict[str, NodeSpec]:
-    """`context_ref -> identity` of each context's state/up/down/neutral.
+    """`context_ref -> identity` of each context's state/up/down/neutral,
+    plus `episode_identity_key -> identity` of each declared EMA stack
+    episode and side (none for a spec without `ema_stack_episode`).
 
     The computation reads only the three stack series (by plan label, via
     `frame.series.get`, so an absent series is an absent upstream) -- the
@@ -162,7 +173,7 @@ def resolve_context_bundle(
     source enter through the upstream EMA identities.
     """
 
-    return {
+    contexts = {
         context_ref: node_spec(
             "context.htf_context",
             version=CONTEXT_NODE_VERSION,
@@ -170,3 +181,7 @@ def resolve_context_bundle(
         )
         for context_ref, _provider, columns in _context_providers(raw_spec, plan)
     }
+    contexts.update(
+        resolve_episode_identities(raw_spec, plan.episode_columns_by_ref, feature_ids)
+    )
+    return contexts

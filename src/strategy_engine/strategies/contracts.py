@@ -154,6 +154,9 @@ class StrategyDiagnosticEvaluation:
     potential_entries: dict[str, Any]
     component_evidence: dict[str, Any]
     warnings: tuple[str, ...]
+    # ema-stack-episode-v1: per episode_ref, params and per-side state
+    # series and entity tables; empty for a spec without the section.
+    ema_stack_episode: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -440,6 +443,7 @@ class StrategyRangeResult:
     validity: dict[str, Any]
     state_artifact: dict[str, Any] | None
     warnings: tuple[str, ...]
+    ema_stack_episode: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

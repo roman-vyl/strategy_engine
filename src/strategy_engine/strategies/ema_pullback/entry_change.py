@@ -53,7 +53,7 @@ def parse_change_since_entry(params: object, path: str) -> ChangeSinceEntry:
 
     payload = _mapping(params, path)
     _only_fields(payload, _FIELDS, path)
-    operand = _operand(payload.get("operand"), f"{path}.operand")
+    operand = _operand(payload.get("operand"), f"{path}.operand", None)
     if operand.feature is None:
         raise InvalidRequestError(f"{path}.operand must be a feature reference")
     op = payload.get("op")

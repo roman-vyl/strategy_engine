@@ -42,6 +42,11 @@ from strategy_engine.strategies.historical_execution_projection import (
 )
 
 
+def _episode_wire(evaluation: EmaPullbackEvaluation) -> dict[str, object]:
+    episodes = evaluation.contexts.episodes
+    return episodes.to_wire() if episodes is not None else {}
+
+
 def _indicator_request(request: StrategyRangeRequest, plan: IndicatorPlan) -> IndicatorRangeRequest:
     return IndicatorRangeRequest(
         market=request.market,
@@ -258,6 +263,7 @@ class EmaPullbackRangeEvaluator:
             warnings=(
                 "managed exit policy is available through /v1/strategy-evaluations/managed-replay",
             ),
+            ema_stack_episode=_episode_wire(evaluation),
         )
 
     def evaluate(self, request: StrategyRangeRequest) -> StrategyRangeResult:
@@ -336,4 +342,5 @@ class EmaPullbackRangeEvaluator:
             warnings=(
                 "managed exit policy is available through /v1/strategy-evaluations/managed-replay",
             ),
+            ema_stack_episode=_episode_wire(evaluation),
         )
