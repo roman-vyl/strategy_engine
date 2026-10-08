@@ -26,5 +26,5 @@
 
 ## 5. Parity and gate
 
-- [ ] 5.1 Parity with the research reference `counter_v6.py` (rebuilt to this geometry) on BTCUSDT.P and ETHUSDT.P 5m, both sides, per bar and per entity, compared by `time_ms` (run on the owner's Mac)
+- [x] 5.1 Parity with the research reference `counter_v6.py` (rebuilt to this geometry) on BTCUSDT.P and ETHUSDT.P 5m, both sides, per bar and per entity, compared by `time_ms` (run on the owner's Mac)
 - [x] 5.2 ruff, mypy, full suite, `openspec validate ema-stack-episode-v1 --strict`
