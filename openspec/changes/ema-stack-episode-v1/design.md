@@ -61,8 +61,13 @@ Phases:
 | Phase | Behaviour |
 |---|---|
 | `away` | If `above(t-1)` and `L(t) <= A(t)`, zone `touch_number + 1` opens. Nothing else opens a zone. |
-| `in_zone` | A contact or below bar sets last contact = `t`. A contact resets the below-run; a below bar increases it. A below-run greater than `window_bars` starts a false break. An above bar resets the below-run, and ends the zone when `t − last_contact > window_bars`. |
+| `in_zone` | A contact bar sets last contact = `t` and resets the below-run. A wholly-below bar is not a contact: it does not move the last contact, it only increases the below-run, and it never ends the zone by the timer. A below-run greater than `window_bars` turns the same zone into a false break. An above bar resets the below-run, and ends the zone when `t − last_contact > window_bars`. |
 | `false_break` | The first `C > A` is the comeback: the phase becomes `away`, with no number. |
+
+Clarifications:
+
+- On the stack-break bar the zone logic does not run. An open zone or false break becomes final with `known_at` on that bar, and `in_zone`, `in_false_break` and `away` are 0 on it.
+- There is no zone ceiling: a zone lasts as long as the rules above keep it open.
 
 ### D4 Entities and wave geometry
 
@@ -102,7 +107,9 @@ Forming and final:
 
 Ranges:
 
-- Every range carries `start_bar`, `end_bar`, `bars`, `high`, `low`, `range = high − low`, `final` and `known_at`.
+- Every range carries `start_bar`, `end_bar`, `bars = end_bar − start_bar + 1`, `high`, `low`, `range = high − low`, `final` and `known_at`.
+- A wave's `touch_price` is the low of the touch bar (short: the high).
+- If touch 1 falls on the episode start bar, wave 1 has an empty interval and does not exist.
 - The short side mirrors highs and lows. `range` and `depth` are positive in the trade's favour.
 - Entities are kept as ordered lists per episode, so later aggregates can read them unchanged.
 
@@ -169,7 +176,8 @@ Identity:
 ### D8 Live history and censoring
 
 - Required history: `history_bars` plus the EMA warm-up from the existing policy.
-- An episode whose start is not visible in the evaluated range is `censored`. All its values except `active` and `censored` are missing.
+- An episode is `censored` when it starts before the slow EMA's warm-up, as given by the existing per-feature policy, has elapsed from the first bar of the evaluated range. Its start cannot be trusted there: at the window start the three EMAs coincide, so an order seen early may be an artefact of the warm-up.
+- All values of a censored episode except `active` and `censored` are missing.
 
 ### D9 Cost
 
@@ -182,6 +190,3 @@ Identity:
 - A Python loop per bar. Mitigation: one pass per identity per batch. Time it on the full BTC range.
 - Censoring hides the first episode of each live window. Mitigation: a deep default `history_bars`.
 
-## Open Questions
-
-- Is a zone ceiling needed? v5 had a 24-hour consolidation label. It is dropped here.

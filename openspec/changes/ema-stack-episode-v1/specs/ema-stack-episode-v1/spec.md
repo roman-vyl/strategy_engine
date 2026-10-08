@@ -70,9 +70,13 @@ Opening a zone: when the episode is away from the anchor, a bar with `above(t-1)
 Inside a zone:
 
 - a contact bar SHALL set the last contact to `t` and reset the below-run;
-- a below bar SHALL set the last contact to `t` and increase the below-run by 1;
-- when the below-run exceeds `window_bars`, a false break SHALL start, with `false_break_start` 1;
+- a below bar SHALL NOT be a contact. It SHALL NOT move the last contact and SHALL NOT end the zone; it SHALL only increase the below-run by 1;
+- when the below-run exceeds `window_bars`, the same zone SHALL turn into a false break, with `false_break_start` 1;
 - an above bar SHALL reset the below-run, and when `t − last_contact > window_bars` it SHALL end the zone, with `zone_end` 1.
+
+There SHALL be no limit on the length of a zone.
+
+On the bar where the stack breaks, the zone rules SHALL NOT run. An open zone or false break SHALL become final with `known_at` on that bar, and `in_zone`, `in_false_break` and `away` SHALL be 0 on it.
 
 During a false break, the first bar with `close > A` SHALL be the comeback, with `comeback` 1. `touch_number` SHALL NOT change.
 
@@ -84,8 +88,14 @@ During a false break, the first bar with `close > A` SHALL be the comeback, with
 
 #### Scenario: Saw is one zone
 
-- **WHEN** contacts, and below-runs of at most `window_bars` bars, follow a touch with gaps of at most `window_bars` bars
-- **THEN** they SHALL belong to one zone with one number.
+- **WHEN** after a touch every above bar comes at most `window_bars` bars after the last contact, and every below-run lasts at most `window_bars` bars
+- **THEN** all those bars SHALL belong to one zone with one number.
+
+#### Scenario: Below bars do not extend the zone timer
+
+- **WHEN** the last contact is on bar `c`, bars `c+1 … c+j` are wholly below the anchor with `j ≤ window_bars`, and bar `c+j+1` is wholly above it with `j + 1 > window_bars`
+- **THEN** the zone SHALL end on bar `c+j+1`
+- **AND** the zone's range SHALL end on bar `c`.
 
 #### Scenario: False break then stack break
 
@@ -134,7 +144,7 @@ While the touch of zone `k` has not happened, wave `k` SHALL be forming:
 - its peak SHALL be the running highest high after that low, reset whenever a new low is made;
 - its down leg SHALL end on the current bar.
 
-Wave `k` SHALL be final from the touch of zone `k`. A wave forming when the stack breaks SHALL stay non-final.
+Wave `k` SHALL be final from the touch of zone `k`. A wave forming when the stack breaks SHALL stay non-final. A wave's `touch_price` SHALL be the low of the touch bar (short: the high). If touch 1 falls on the episode start bar, wave 1 SHALL NOT exist.
 
 The short side SHALL mirror highs and lows, with leg ranges positive.
 
@@ -160,7 +170,7 @@ The short side SHALL mirror highs and lows, with leg ranges positive.
 
 Every range entity (zone, false break, up leg, down leg) SHALL carry:
 
-- `start_bar`, `end_bar`, `bars`;
+- `start_bar`, `end_bar`, `bars = end_bar − start_bar + 1`;
 - `high`, `low`, and `range = high − low`;
 - `final` and `known_at`.
 
@@ -175,7 +185,7 @@ The projection SHALL keep zones, false breaks and waves as ordered lists per epi
 
 Every state value and entity value on bar `t` SHALL depend only on bars `≤ t`. The projection SHALL be rebuilt from candles for every evaluation and SHALL NOT be stored between evaluations.
 
-An episode whose start lies on the first bar of the evaluated range where the order is determinable SHALL be `censored`. Its values other than `active` and `censored` SHALL be missing.
+An episode that starts before the slow EMA's warm-up, as given by the existing per-feature policy, has elapsed from the first bar of the evaluated range SHALL be `censored`. Its values other than `active` and `censored` SHALL be missing.
 
 #### Scenario: Truncation invariance
 
