@@ -139,6 +139,30 @@ def test_only_an_approach_from_above_opens_a_zone() -> None:
     assert _bars_of("zone_end", episode) == [6]
 
 
+@pytest.mark.parametrize("side", ["long", "short"])
+def test_gap_from_above_to_wholly_below_is_not_a_touch(side: str) -> None:
+    # Bar 2 gaps from wholly above to wholly below the anchor: no zone, no
+    # contact. The next touch is the contact on bar 6 after an above bar.
+    bars = _bars("XUDDDUCUUUU")
+    if side == "short":
+        bars = {
+            "high": 200.0 - bars["low"],
+            "low": 200.0 - bars["high"],
+            "close": 200.0 - bars["close"],
+            "fast": 200.0 - bars["fast"],
+            "anchor": 200.0 - bars["anchor"],
+            "slow": 200.0 - bars["slow"],
+        }
+    episode = project_side(*(bars[key] for key in _ORDER), _params(window=3), side)
+    assert _bars_of("touch_start", episode) == [6]
+    assert _bars_of("false_break_start", episode) == []
+    assert episode.state["touch_number"][1:6].tolist() == [0.0] * 5
+    assert episode.state["in_zone"][2:6].tolist() == [0.0] * 4
+    assert episode.state["touch_number"][6] == 1.0
+    zone = _wire(episode)["zones"][0]
+    assert zone["start"]["bar"] == 6 and zone["end"]["bar"] == 6
+
+
 def test_saw_is_one_zone() -> None:
     episode = _project("XUCUUCUDDCUUUU", window=3)
     assert _bars_of("touch_start", episode) == [2]

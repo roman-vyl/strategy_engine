@@ -384,7 +384,9 @@ def _project_long(
             elif not math.isfinite(a):
                 update_forming(i)
             elif phase == _AWAY:
-                if lo[i - 1] > an[i - 1] and lo[i] <= a:
+                if lo[i - 1] > an[i - 1] and lo[i] <= a <= hi[i]:
+                    # Only above(t-1) -> contact(t) opens a zone: a gap from
+                    # wholly above to wholly below is not a touch.
                     # Wave `touch_number + 1` is final here: its interval
                     # ends on the bar before the touch, its down leg on it.
                     wave = {
@@ -400,7 +402,6 @@ def _project_long(
                         "down_low": min(d_low, lo[i]),
                     }
                     touch_number += 1
-                    below = hi[i] < a
                     zone = {
                         "episode_id": episode_id,
                         "number": touch_number,
@@ -424,7 +425,7 @@ def _project_long(
                     touches.append(zone)
                     last_contact = i
                     all_low, all_high = lo[i], hi[i]
-                    run = 1 if below else 0
+                    run = 0
                     run_low, run_high = lo[i], hi[i]
                     phase = _ZONE
                     events = {"touch_start": 1.0}

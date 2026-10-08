@@ -65,7 +65,7 @@ For the long side on bar `t`, with anchor value `A`:
 
 The short side SHALL mirror highs and lows.
 
-Opening a zone: when the episode is away from the anchor, a bar with `above(t-1)` and `low(t) <= A(t)` SHALL open zone `touch_number + 1`, with `touch_start` 1. No other bar SHALL open a zone.
+Opening a zone: when the episode is away from the anchor, a bar with `above(t-1)` and `contact(t)`, that is `low(t) <= A(t) <= high(t)`, SHALL open zone `touch_number + 1`, with `touch_start` 1. A gap from a wholly-above bar to a wholly-below bar SHALL NOT be a touch. No other bar SHALL open a zone.
 
 Inside a zone:
 
@@ -85,6 +85,12 @@ During a false break, the first bar with `close > A` SHALL be the comeback, with
 - **WHEN** a long false break ends with a comeback and the next bars stay in contact with the anchor
 - **THEN** no zone SHALL open until a bar wholly above the anchor is followed by a bar reaching it
 - **AND** that bar SHALL open zone `touch_number + 1`.
+
+#### Scenario: Gap below is not a touch
+
+- **WHEN** the episode is away, bar `t−1` is wholly above the anchor and bar `t` is wholly below it
+- **THEN** bar `t` SHALL NOT open a zone and SHALL NOT be a contact
+- **AND** the next zone SHALL open only on a contact bar that follows a bar wholly above the anchor.
 
 #### Scenario: Saw is one zone
 

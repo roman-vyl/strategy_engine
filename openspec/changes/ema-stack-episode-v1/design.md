@@ -60,7 +60,7 @@ Phases:
 
 | Phase | Behaviour |
 |---|---|
-| `away` | If `above(t-1)` and `L(t) <= A(t)`, zone `touch_number + 1` opens. Nothing else opens a zone. |
+| `away` | If `above(t-1)` and `contact(t)` (`L(t) <= A(t) <= H(t)`), zone `touch_number + 1` opens. A gap from wholly above to wholly below is not a touch. Nothing else opens a zone. |
 | `in_zone` | A contact bar sets last contact = `t` and resets the below-run. A wholly-below bar is not a contact: it does not move the last contact, it only increases the below-run, and it never ends the zone by the timer. A below-run greater than `window_bars` turns the same zone into a false break. An above bar resets the below-run, and ends the zone when `t − last_contact > window_bars`. |
 | `false_break` | The first `C > A` is the comeback: the phase becomes `away`, with no number. |
 
