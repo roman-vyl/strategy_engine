@@ -52,6 +52,8 @@ from strategy_engine.strategies.ema_pullback.managed import (
     _mapping,
 )
 from strategy_engine.strategies.ema_pullback.predicates import (
+    Compare,
+    Predicate,
     PredicateIdentity,
     StatePredicate,
     TemporalPredicate,
@@ -291,12 +293,23 @@ def _needs_bundle(predicate: object) -> bool:
         return True
     if isinstance(predicate, TemporalPredicate):
         return _needs_bundle(predicate.of)
+    if isinstance(predicate, Predicate):
+        return any(
+            operand.episode is not None
+            for condition in (predicate.long, predicate.short)
+            if condition is not None
+            for operand in (
+                (condition.left, condition.right)
+                if isinstance(condition, Compare)
+                else (condition.operand,)
+            )
+        )
     return False
 
 
 def composites_need_context_bundle(raw_spec: Mapping[str, Any]) -> bool:
-    """True iff some composite phase condition has a `state` predicate,
-    directly or inside `temporal` (design D7)."""
+    """True iff some composite phase condition has a `state` predicate or an
+    EMA stack episode operand, directly or inside `temporal` (design D7)."""
 
     trade_management = raw_spec.get("trade_management")
     if not isinstance(trade_management, Mapping):

@@ -50,6 +50,7 @@ def serialize_strategy_result(result: StrategyRangeResult) -> dict[str, object]:
         "validity": result.validity,
         "state_artifact": result.state_artifact,
         "warnings": list(result.warnings),
+        **({"ema_stack_episode": result.ema_stack_episode} if result.ema_stack_episode else {}),
     }
 
 
@@ -357,4 +358,5 @@ def serialize_strategy_diagnostic_evaluation(
         "potential_entries": result.potential_entries,
         "component_evidence": result.component_evidence,
         "warnings": list(result.warnings),
+        **({"ema_stack_episode": result.ema_stack_episode} if result.ema_stack_episode else {}),
     }

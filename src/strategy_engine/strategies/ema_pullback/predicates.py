@@ -28,6 +28,12 @@ from strategy_engine.indicators.contracts import FeatureFrameLike, PlannedFeatur
 from strategy_engine.indicators.evaluation_context import EvaluationContext, compute_through
 from strategy_engine.indicators.feature_kinds import plan_feature_request
 from strategy_engine.indicators.market_arrays import frame_market_arrays
+from strategy_engine.strategies.ema_pullback.stack_episode import (
+    EpisodeRef,
+    episode_identity_key,
+    episode_operand_values,
+    parse_episode_ref,
+)
 
 if TYPE_CHECKING:
     from strategy_engine.strategies.ema_pullback.contexts import ContextBundle
@@ -46,12 +52,13 @@ _SIDES = frozenset({"long", "short"})
 
 @dataclass(frozen=True, slots=True)
 class Operand:
-    """Exactly one of a canonical feature request, a base-bar price field or
-    a numeric constant."""
+    """Exactly one of a canonical feature request, an EMA stack episode
+    reference, a base-bar price field or a numeric constant."""
 
     feature: PlannedFeature | None = None
     price: str | None = None
     const: float | None = None
+    episode: EpisodeRef | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,35 +193,44 @@ def _feature(raw: object, path: str) -> PlannedFeature:
     return plan_feature_request(kind, timeframe, source, params)
 
 
-def _operand(raw: object, path: str) -> Operand:
+_OPERAND_KEYS = "feature, episode, price or const"
+
+
+def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Operand:
     payload = _mapping(raw, path)
     if len(payload) != 1:
-        raise InvalidRequestError(f"{path} must carry exactly one of feature, price or const")
+        raise InvalidRequestError(f"{path} must carry exactly one of {_OPERAND_KEYS}")
     ((key, value),) = payload.items()
     if key == "feature":
         return Operand(feature=_feature(value, f"{path}.feature"))
+    if key == "episode":
+        return Operand(episode=parse_episode_ref(value, f"{path}.episode", episode_refs))
     if key == "price":
         if value not in _PRICE_FIELDS:
             raise InvalidRequestError(f"{path}.price must be open, high, low or close")
         return Operand(price=str(value))
     if key == "const":
         return Operand(const=_number(value, f"{path}.const"))
-    raise InvalidRequestError(f"{path} must carry exactly one of feature, price or const")
+    raise InvalidRequestError(f"{path} must carry exactly one of {_OPERAND_KEYS}")
 
 
-def _compare(payload: Mapping[str, Any], path: str) -> Compare:
+def _compare(
+    payload: Mapping[str, Any], path: str, episode_refs: frozenset[str] | None
+) -> Compare:
     op = payload.get("op")
     if op not in _COMPARE_OPS:
         raise InvalidRequestError(f"{path}.op must be one of >, >=, <, <=", op=op)
-    left = _operand(payload.get("left"), f"{path}.left")
-    right = _operand(payload.get("right"), f"{path}.right")
+    left = _operand(payload.get("left"), f"{path}.left", episode_refs)
+    right = _operand(payload.get("right"), f"{path}.right", episode_refs)
     if left.const is not None and right.const is not None:
         raise InvalidRequestError(f"{path} must compare at least one non-constant operand")
     return Compare(left, str(op), right)
 
 
-def _change(payload: Mapping[str, Any], path: str) -> Change:
-    operand = _operand(payload.get("operand"), f"{path}.operand")
+def _change(
+    payload: Mapping[str, Any], path: str, episode_refs: frozenset[str] | None
+) -> Change:
+    operand = _operand(payload.get("operand"), f"{path}.operand", episode_refs)
     if operand.feature is None:
         raise InvalidRequestError(f"{path}.operand must be a feature reference")
     lookback = payload.get("lookback")
@@ -226,10 +242,12 @@ def _change(payload: Mapping[str, Any], path: str) -> Change:
     return Change(operand, int(lookback), str(op), _number(payload.get("value"), f"{path}.value"))
 
 
-def _range(payload: Mapping[str, Any], path: str) -> Range:
-    operand = _operand(payload.get("operand"), f"{path}.operand")
+def _range(
+    payload: Mapping[str, Any], path: str, episode_refs: frozenset[str] | None
+) -> Range:
+    operand = _operand(payload.get("operand"), f"{path}.operand", episode_refs)
     if operand.const is not None:
-        raise InvalidRequestError(f"{path}.operand must be a feature or a price")
+        raise InvalidRequestError(f"{path}.operand must be a feature, an episode or a price")
     low = _number(payload.get("min"), f"{path}.min")
     high = _number(payload.get("max"), f"{path}.max")
     if low > high:
@@ -243,6 +261,25 @@ _CLASS_FIELDS: dict[str, tuple[set[str], set[str]]] = {
     "range": ({"operand", "min", "max"}, {"min", "max"}),
     "change": ({"operand", "lookback", "op", "value"}, {"op", "value"}),
 }
+
+
+def _check_episode_override(
+    long: Condition, short: Condition, override: Mapping[str, Any], path: str
+) -> None:
+    """ema-stack-episode-v1: a `short` override never introduces an episode
+    operand, and over an episode predicate it replaces only `op`, constant
+    operands, `min` or `max` (the episode is read per side already)."""
+
+    has_episode = any(operand.episode is not None for operand in _operands(long))
+    for role, short_operand in zip(("left", "right"), _operands(short), strict=False):
+        if role not in override:
+            continue
+        if short_operand.episode is not None:
+            raise InvalidRequestError(f"{path}.{role} must not be an episode reference")
+        if has_episode and short_operand.const is None:
+            raise InvalidRequestError(
+                f"{path}.{role} of an episode predicate may only be a constant"
+            )
 
 
 _REGIMES = frozenset({"aligned", "countertrend", "neutral"})
@@ -274,7 +311,10 @@ def _state(
 
 
 def _temporal(
-    payload: Mapping[str, Any], path: str, context_refs: Collection[str] | None
+    payload: Mapping[str, Any],
+    path: str,
+    context_refs: Collection[str] | None,
+    episode_refs: Collection[str] | None,
 ) -> TemporalPredicate:
     _only_fields(payload, {"kind", "mode", "bars", "of"}, path)
     mode = payload.get("mode")
@@ -283,46 +323,57 @@ def _temporal(
     bars = payload.get("bars")
     if isinstance(bars, bool) or not isinstance(bars, int) or bars < 1:
         raise InvalidRequestError(f"{path}.bars must be a positive integer", bars=bars)
-    inner = parse_predicate(payload.get("of"), f"{path}.of", context_refs=context_refs)
+    inner = parse_predicate(
+        payload.get("of"), f"{path}.of", context_refs=context_refs, episode_refs=episode_refs
+    )
     if isinstance(inner, TemporalPredicate):
         raise InvalidRequestError(f"{path}.of must not be temporal")
     return TemporalPredicate(str(mode), bars, inner)
 
 
 def parse_predicate(
-    raw: object, path: str, *, context_refs: Collection[str] | None = None
+    raw: object,
+    path: str,
+    *,
+    context_refs: Collection[str] | None = None,
+    episode_refs: Collection[str] | None = None,
 ) -> AnyPredicate:
     """Parse and validate one predicate object. Feature operands are
     validated by the canonical feature-kind contract, never here.
-    `context_refs`: the spec's declared contexts (None skips that check;
-    evaluation then fails closed on an unknown context)."""
+    `context_refs` / `episode_refs`: the spec's declared contexts and EMA
+    stack episodes (None skips that check; evaluation then fails closed on
+    an unknown one)."""
 
     payload = _mapping(raw, path)
     kind = payload.get("kind")
     if kind == "state":
         return _state(payload, path, context_refs)
     if kind == "temporal":
-        return _temporal(payload, path, context_refs)
+        return _temporal(payload, path, context_refs, episode_refs)
     if kind not in _CLASS_FIELDS:
         raise InvalidRequestError(
             f"{path}.kind must be compare, range, change, state or temporal", kind=kind
         )
     fields, overridable = _CLASS_FIELDS[kind]
     _only_fields(payload, {"kind", "short", *fields}, path)
-    parsers: dict[str, Callable[[Mapping[str, Any], str], Condition]] = {
+    refs = frozenset(episode_refs) if episode_refs is not None else None
+    parsers: dict[
+        str, Callable[[Mapping[str, Any], str, frozenset[str] | None], Condition]
+    ] = {
         "compare": _compare,
         "range": _range,
         "change": _change,
     }
     parse = parsers[kind]
-    long = parse(payload, path)
+    long = parse(payload, path, refs)
     short: Condition | None = None
     if payload.get("short") is not None:
         override = _mapping(payload.get("short"), f"{path}.short")
         if not override:
             raise InvalidRequestError(f"{path}.short must not be empty")
         _only_fields(override, overridable, f"{path}.short")
-        short = parse({**payload, **override}, f"{path}.short")
+        short = parse({**payload, **override}, f"{path}.short", refs)
+        _check_episode_override(long, short, override, f"{path}.short")
     return Predicate(long, short)
 
 
@@ -351,12 +402,28 @@ def _values(
     operand: Operand,
     frame: FeatureFrameLike,
     context: EvaluationContext | None,
-    column_ids: Mapping[str, NodeSpec] | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
 ) -> np.ndarray | float:
     if operand.const is not None:
         return operand.const
     if operand.price is not None:
         return frame_market_arrays(frame).array(operand.price)
+    if operand.episode is not None:
+        episodes = bundle.episodes if bundle is not None else None
+        if episodes is None:
+            raise InvalidRequestError(
+                "episode operand has no evaluated episode", episode_ref=operand.episode.ref
+            )
+        return compute_through(
+            context,
+            identity.episode_ids.get(operand.episode) if identity is not None else None,
+            functools.partial(
+                episode_operand_values, episodes.side(operand.episode.ref, side), operand.episode
+            ),
+        )
+    column_ids = identity.column_ids if identity is not None else None
     assert operand.feature is not None
     label = operand.feature.output_id
     return compute_through(
@@ -392,16 +459,18 @@ def _evaluate_condition(
     condition: Condition,
     frame: FeatureFrameLike,
     context: EvaluationContext | None,
-    column_ids: Mapping[str, NodeSpec] | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
 ) -> np.ndarray:
     length = len(frame.time_ms)
     if isinstance(condition, Compare):
-        left = _values(condition.left, frame, context, column_ids)
-        right = _values(condition.right, frame, context, column_ids)
+        left = _values(condition.left, frame, context, identity, side, bundle)
+        right = _values(condition.right, frame, context, identity, side, bundle)
         result = _finite(left) & _finite(right) & _COMPARE_OPS[condition.op](left, right)
     elif isinstance(condition, Change):
         assert condition.operand.feature is not None
-        current = _values(condition.operand, frame, context, column_ids)
+        current = _values(condition.operand, frame, context, identity, side, bundle)
         assert isinstance(current, np.ndarray)
         shift = condition.lookback * _feature_bar_ratio(condition.operand.feature, frame)
         earlier = np.full(length, np.nan)
@@ -414,7 +483,7 @@ def _evaluate_condition(
                 & _COMPARE_OPS[condition.op](current - earlier, condition.value)
             )
     else:
-        value = _values(condition.operand, frame, context, column_ids)
+        value = _values(condition.operand, frame, context, identity, side, bundle)
         result = _finite(value) & (value >= condition.min) & (value <= condition.max)
     mask = np.broadcast_to(np.asarray(result, dtype=bool), (length,)).copy()
     mask.flags.writeable = False
@@ -469,8 +538,9 @@ def _evaluate(
     bundle: ContextBundle | None,
 ) -> np.ndarray:
     if isinstance(predicate, Predicate):
-        column_ids = identity.column_ids if identity is not None else None
-        return _evaluate_condition(predicate.for_side(side), frame, context, column_ids)
+        return _evaluate_condition(
+            predicate.for_side(side), frame, context, identity, side, bundle
+        )
     if isinstance(predicate, StatePredicate):
         return _state_mask(predicate, frame, side, bundle)
     inner = evaluate_predicate(
@@ -519,6 +589,7 @@ class PredicateIdentity:
     nested: tuple[NodeSpec, ...] = ()
     column_ids: Mapping[str, NodeSpec] = field(default_factory=dict)
     inner: PredicateIdentity | None = None
+    episode_ids: Mapping[EpisodeRef, NodeSpec] = field(default_factory=dict)
 
 
 def column_node(feature: NodeSpec) -> NodeSpec:
@@ -527,11 +598,26 @@ def column_node(feature: NodeSpec) -> NodeSpec:
     )
 
 
+def episode_operand_node(episode: NodeSpec, operand: EpisodeRef) -> NodeSpec:
+    """One episode operand: its `entity`, `index` and `field` over the
+    episode node of the evaluated side (the `ref` label is not identity)."""
+
+    entity, index, field_name = operand.identity_params()
+    return node_spec(
+        "predicate.episode_operand",
+        version=PREDICATE_NODE_VERSION,
+        params={"entity": entity, "index": index, "field": field_name},
+        upstream={"episode": episode},
+    )
+
+
 def _operand_param(operand: Operand) -> tuple[object, ...]:
     if operand.const is not None:
         return ("const", operand.const)
     if operand.price is not None:
         return ("price", operand.price)
+    if operand.episode is not None:
+        return ("episode",)
     return ("feature",)
 
 
@@ -580,8 +666,20 @@ def resolve_predicate(
     upstream: dict[str, NodeSpec] = {}
     columns: list[NodeSpec] = []
     column_ids: dict[str, NodeSpec] = {}
+    episode_ids: dict[EpisodeRef, NodeSpec] = {}
     roles = ("left", "right") if isinstance(condition, Compare) else ("operand",)
     for role, operand in zip(roles, _operands(condition), strict=True):
+        if operand.episode is not None:
+            episode = (contexts or {}).get(episode_identity_key(operand.episode.ref, side))
+            if episode is None:
+                raise InvalidRequestError(
+                    "episode operand is not declared", episode_ref=operand.episode.ref
+                )
+            node = episode_operand_node(episode, operand.episode)
+            upstream[role] = node
+            columns.append(node)
+            episode_ids[operand.episode] = node
+            continue
         if operand.feature is None:
             continue
         label = operand.feature.output_id
@@ -615,6 +713,6 @@ def resolve_predicate(
         version=PREDICATE_NODE_VERSION,
         params=params,
         upstream=upstream,
-        side=side if predicate.short is not None else None,
+        side=side if predicate.short is not None or episode_ids else None,
     )
-    return PredicateIdentity(local, tuple(columns), column_ids)
+    return PredicateIdentity(local, tuple(columns), column_ids, episode_ids=episode_ids)

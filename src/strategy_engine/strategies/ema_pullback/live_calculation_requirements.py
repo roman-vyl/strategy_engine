@@ -34,6 +34,10 @@ from strategy_engine.strategies.ema_pullback.predicates import (
     TemporalPredicate,
     parse_predicate,
 )
+from strategy_engine.strategies.ema_pullback.stack_episode import (
+    SECTION,
+    parse_episode_section,
+)
 from strategy_engine.strategies.live_calculation.contracts import HistoryRequirement
 
 
@@ -188,6 +192,7 @@ class EmaPullbackLiveCalculationRequirements:
         root = _mapping(raw_spec, "raw_spec")
         requirements: list[HistoryRequirement] = []
         requirements.extend(self._contexts(root))
+        requirements.extend(self._episodes(root))
         requirements.extend(self._direction(root))
         requirements.extend(self._setups(root))
         requirements.extend(self._blockers(root))
@@ -221,6 +226,25 @@ class EmaPullbackLiveCalculationRequirements:
                 )
             )
         return out
+
+    # -- EMA stack episodes ----------------------------------------------
+
+    def _episodes(self, root: Mapping[str, Any]) -> list[HistoryRequirement]:
+        """ema-stack-episode-v1: `history_bars` base bars per declared
+        episode; its three EMAs' warm-up is counted by the per-feature
+        policy. Nothing for a spec without `ema_stack_episode`."""
+
+        return [
+            HistoryRequirement(
+                timeframe=_BASE,
+                bars=params.history_bars,
+                reason=(
+                    f"{SECTION}.{episode_ref}: history_bars={params.history_bars} base bars "
+                    "to rebuild the episode, EMA warm-up counted separately"
+                ),
+            )
+            for episode_ref, params in parse_episode_section(root).items()
+        ]
 
     # -- direction ---------------------------------------------------------
 

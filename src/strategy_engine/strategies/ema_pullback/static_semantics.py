@@ -16,6 +16,9 @@ from strategy_engine.strategies.ema_pullback.composite_spec import (
     phase_rule_composites,
     require_no_internal_key_collision,
 )
+from strategy_engine.strategies.ema_pullback.context_consumption import (
+    consumption_context_refs,
+)
 from strategy_engine.strategies.ema_pullback.entry_change import (
     CHANGE_SINCE_ENTRY,
     change_since_entry_of,
@@ -43,6 +46,7 @@ from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     resolve_setup_identity,
     resolve_trigger_rule,
 )
+from strategy_engine.strategies.ema_pullback.stack_episode import parse_episode_section
 
 _EXIT_GROUPS = ("always_on", "aligned", "countertrend", "neutral")
 
@@ -111,8 +115,9 @@ def check_ema_pullback_static_semantics(raw_spec: Mapping[str, Any]) -> None:
     context_refs = (
         frozenset(str(ref) for ref in contexts) if isinstance(contexts, Mapping) else None
     )
-    _check_composite_setups(setups, context_refs)
-    _check_composite_phase_conditions(raw_spec, context_refs)
+    episode_refs = _check_episodes(raw_spec, context_refs)
+    _check_composite_setups(setups, context_refs, episode_refs)
+    _check_composite_phase_conditions(raw_spec, context_refs, episode_refs)
 
     exit_rule_groups = resolve_exit_rule_groups(raw_spec)
     exit_identity_pairs: list[tuple[object, str]] = []
@@ -134,8 +139,34 @@ def check_ema_pullback_static_semantics(raw_spec: Mapping[str, Any]) -> None:
     require_initial_r_stops(raw_spec)
 
 
+def _check_episodes(
+    raw_spec: Mapping[str, Any], context_refs: frozenset[str] | None
+) -> frozenset[str]:
+    """`ema_stack_episode` (ema-stack-episode-v1): parameters are valid, no
+    episode_ref is also a context_ref, and no context consumption (a gate
+    or the exit profile) names an episode -- an episode is never a context
+    provider."""
+
+    refs = frozenset(parse_episode_section(raw_spec))
+    if not refs:
+        return refs
+    shared = refs & (context_refs or frozenset())
+    if shared:
+        raise InvalidRequestError(
+            "episode_ref must differ from every context_ref", refs=sorted(shared)
+        )
+    consumed = refs & consumption_context_refs(raw_spec)
+    if consumed:
+        raise InvalidRequestError(
+            "an EMA stack episode cannot be consumed as a context", refs=sorted(consumed)
+        )
+    return refs
+
+
 def _check_composite_setups(
-    setups: tuple[object, ...], context_refs: frozenset[str] | None
+    setups: tuple[object, ...],
+    context_refs: frozenset[str] | None,
+    episode_refs: frozenset[str],
 ) -> None:
     """Structural validation of every `composite_setup` (design D1, D12)."""
 
@@ -154,6 +185,7 @@ def _check_composite_setups(
                     child.predicate,
                     f"setup[{spec.instance_id}].{child.child_id}.predicate",
                     context_refs=context_refs,
+                    episode_refs=episode_refs,
                 )
     require_no_internal_key_collision(
         tuple(str(item.get("instance_id", "")) for item in items), composites
@@ -161,7 +193,9 @@ def _check_composite_setups(
 
 
 def _check_composite_phase_conditions(
-    raw_spec: Mapping[str, Any], context_refs: frozenset[str] | None
+    raw_spec: Mapping[str, Any],
+    context_refs: frozenset[str] | None,
+    episode_refs: frozenset[str],
 ) -> None:
     """Structural validation of every `composite_phase_condition`
     (`composite-managed-phase-condition-v1` design D1, D10). Atomic phase
@@ -197,6 +231,7 @@ def _check_composite_phase_conditions(
                     child.predicate,
                     f"phase_rules[{index}].condition.{child.child_id}.predicate",
                     context_refs=context_refs,
+                    episode_refs=episode_refs,
                 )
             elif child.condition is not None:
                 change_since_entry_of(

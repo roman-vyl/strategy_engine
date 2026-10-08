@@ -43,6 +43,14 @@ def _ema_convergence_bars(period: int, tolerance: float) -> int:
     return max(1, math.ceil(math.log(tolerance) / math.log(decay_base)))
 
 
+def ema_warmup_bars(period: int) -> int:
+    """The live EMA warm-up policy, in bars of the EMA's own timeframe, at
+    the calibrated tolerance: the per-feature policy other consumers (the
+    EMA stack episode's censoring) reuse instead of re-deriving it."""
+
+    return _ema_convergence_bars(period, _CALIBRATED_EMA_CONVERGENCE_TOLERANCE)
+
+
 def _wilder_convergence_bars(period: int, tolerance: float) -> int:
     """Bars for one Wilder RMA smoothing pass to converge below tolerance.
 
