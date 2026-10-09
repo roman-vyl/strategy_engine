@@ -22,9 +22,9 @@
 - [x] 3.3a Repaired historical candle with unchanged bounds: recomputed after revalidation; unchanged hash after revalidation does not recompute
 - [x] 3.3b Pinned pages: all pages with the first hash succeed; a history change between pages gives 409 and no page; a wrong pin on a valid entry gives 409 with no extra read; a pin on an expired entry is checked after revalidation
 - [x] 3.4 Parameter errors equal to the strategy section; determinism and identity
-- [ ] 3.5 Time and size of the full BTCUSDT.P 5m history, reported
+- [x] 3.5 Time and size of the full BTCUSDT.P 5m history (Mac): cold 10.2 s (market data read 9.0 s, EMAs 1.3 s, projection of both sides 2.1 s), cached 0.1 to 0.3 s, a page of 500 episodes 536 KB in 0.37 s, wrong pin 409 in 0.063 s
 
 ## 4. Parity and gate
 
-- [ ] 4.1 HTTP parity with `counter_v6.py` on BTCUSDT.P and ETHUSDT.P 5m, both sides (owner's Mac)
+- [x] 4.1 HTTP parity with `counter_v6.py` on BTCUSDT.P and ETHUSDT.P 5m, both sides, whole history (owner's Mac, commit 2e17674): 0 mismatches in episodes, zones, false breaks, final and forming waves, current episode and known_at; equal market_data_hash
 - [x] 4.2 ruff, mypy, full suite without `tests/parity`, `openspec validate ema-stack-episode-query-v1 --strict`
