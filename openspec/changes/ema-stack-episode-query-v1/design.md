@@ -105,6 +105,6 @@ Censoring stays the rule of `ema-stack-episode-v1`: only an episode that starts 
 
 ## Risks
 
-- **First request cost:** a cache miss computes the whole history. The projection is 1.6 to 2.5 s per side for 600,000 synthetic bars; the candle load and the three EMAs come on top. The full BTCUSDT.P 5m time is measured and reported before merge (task 3.4). If it is too slow for the chart, the next step is an incremental continuation of the projection, not a change of this contract.
+- **First request cost:** a cache miss computes the whole history. Measured on the full BTCUSDT.P 5m history (687,966 bars): the projection takes 0.62 s (long) and 0.67 s (short), the three EMAs hundredths of a second; the candle load comes on top. The route's own end-to-end time is measured and reported before merge (task 3.5). If it is too slow for the chart, the next step is an incremental continuation of the projection, not a change of this contract.
 - **Earliest candle changes:** a backfill of older data changes the history; the caller sees a new `earliest_ms` and drops its cache for that `history_id`.
 - **Memory:** bounded by the LRU size.
