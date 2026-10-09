@@ -72,3 +72,12 @@ class TargetBarNotCommittedError(StrategyEngineError):
 class TradeHistoryUnavailableError(StrategyEngineError):
     def __init__(self, message: str = "Trade history is unavailable", **details: Any) -> None:
         super().__init__("trade_history_unavailable", message, details, 409)
+
+
+class MarketDataVersionChangedError(StrategyEngineError):
+    def __init__(
+        self,
+        message: str = "Market data changed since the version the caller started from",
+        **details: Any,
+    ) -> None:
+        super().__init__("market_data_version_changed", message, details, 409)

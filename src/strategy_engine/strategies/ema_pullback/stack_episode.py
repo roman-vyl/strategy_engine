@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import functools
 import math
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -122,6 +122,58 @@ def _stack_period(raw_spec: Mapping[str, Any], role: str) -> int:
     return _positive_int(item.get("period"), f"anchor_stack.{role}.period")
 
 
+def parse_episode_params(
+    params: Mapping[str, Any],
+    path: str,
+    *,
+    default_period: Callable[[str], int] | None,
+    keys: frozenset[str] = _PARAM_KEYS,
+) -> EpisodeParams:
+    """The one parser of episode parameters, shared by the strategy section
+    and the episode history route. `default_period(role)` supplies a period
+    that `params` omits (the strategy's `anchor_stack`); `None` makes the
+    three periods required. Keys outside `keys` are rejected."""
+
+    unknown = set(params) - keys
+    if unknown:
+        raise InvalidRequestError(f"{path} has unknown fields", fields=sorted(unknown))
+    periods: dict[str, int] = {}
+    for role in ("fast", "anchor", "slow"):
+        name = f"{role}_period"
+        if name in params:
+            periods[role] = _positive_int(params[name], f"{path}.{name}")
+        elif default_period is not None:
+            periods[role] = default_period(role)
+        else:
+            raise InvalidRequestError(f"{path}.{name} is required")
+    if not periods["fast"] < periods["anchor"] < periods["slow"]:
+        raise InvalidRequestError(
+            f"{path} periods must satisfy fast_period < anchor_period < slow_period",
+            **{f"{role}_period": value for role, value in periods.items()},
+        )
+    window = (
+        _positive_int(params["window_bars"], f"{path}.window_bars")
+        if "window_bars" in params
+        else DEFAULT_WINDOW_BARS
+    )
+    return EpisodeParams(
+        fast_period=periods["fast"],
+        anchor_period=periods["anchor"],
+        slow_period=periods["slow"],
+        window_bars=window,
+        break_bars=(
+            _positive_int(params["break_bars"], f"{path}.break_bars")
+            if "break_bars" in params
+            else window
+        ),
+        history_bars=(
+            _positive_int(params["history_bars"], f"{path}.history_bars")
+            if "history_bars" in params
+            else DEFAULT_HISTORY_BARS
+        ),
+    )
+
+
 def parse_episode_section(raw_spec: Mapping[str, Any]) -> dict[str, EpisodeParams]:
     """`episode_ref -> effective parameters`, in declared order. Empty when
     the spec declares no `ema_stack_episode` section."""
@@ -136,43 +188,10 @@ def parse_episode_section(raw_spec: Mapping[str, Any]) -> dict[str, EpisodeParam
         path = f"{SECTION}.{ref}"
         if not ref.strip():
             raise InvalidRequestError(f"{SECTION} episode_ref must be a non-empty string")
-        params = _mapping(params_raw if params_raw is not None else {}, path)
-        unknown = set(params) - _PARAM_KEYS
-        if unknown:
-            raise InvalidRequestError(f"{path} has unknown fields", fields=sorted(unknown))
-        periods = {
-            role: (
-                _positive_int(params[f"{role}_period"], f"{path}.{role}_period")
-                if f"{role}_period" in params
-                else _stack_period(raw_spec, role)
-            )
-            for role in ("fast", "anchor", "slow")
-        }
-        if not periods["fast"] < periods["anchor"] < periods["slow"]:
-            raise InvalidRequestError(
-                f"{path} periods must satisfy fast_period < anchor_period < slow_period",
-                **{f"{role}_period": value for role, value in periods.items()},
-            )
-        window = (
-            _positive_int(params["window_bars"], f"{path}.window_bars")
-            if "window_bars" in params
-            else DEFAULT_WINDOW_BARS
-        )
-        out[ref] = EpisodeParams(
-            fast_period=periods["fast"],
-            anchor_period=periods["anchor"],
-            slow_period=periods["slow"],
-            window_bars=window,
-            break_bars=(
-                _positive_int(params["break_bars"], f"{path}.break_bars")
-                if "break_bars" in params
-                else window
-            ),
-            history_bars=(
-                _positive_int(params["history_bars"], f"{path}.history_bars")
-                if "history_bars" in params
-                else DEFAULT_HISTORY_BARS
-            ),
+        out[ref] = parse_episode_params(
+            _mapping(params_raw if params_raw is not None else {}, path),
+            path,
+            default_period=functools.partial(_stack_period, raw_spec),
         )
     return out
 
@@ -682,6 +701,20 @@ def side_to_wire(episode: SideEpisode, time_ms: tuple[int, ...]) -> dict[str, ob
     """State series on the frame's time axis and the entity tables of every
     non-censored episode. Bars are given as index and as `time_ms`."""
 
+    return {
+        "state": {
+            key: [_float_or_none(value) for value in episode.state[key].tolist()]
+            for key in (*STATE_FIELDS, *EVENT_FIELDS)
+        },
+        **side_entities_to_wire(episode, time_ms),
+    }
+
+
+def side_entities_to_wire(episode: SideEpisode, time_ms: tuple[int, ...]) -> dict[str, object]:
+    """The entity tables of `side_to_wire` without the dense state series:
+    the episodes, and the zones, false breaks and waves of every
+    non-censored episode."""
+
     def at(bar: object) -> dict[str, int | None]:
         index = _int_or_none(bar)
         return {"bar": index, "time_ms": None if index is None else time_ms[index]}
@@ -773,10 +806,6 @@ def side_to_wire(episode: SideEpisode, time_ms: tuple[int, ...]) -> dict[str, ob
             }
         )
     return {
-        "state": {
-            key: [_float_or_none(value) for value in episode.state[key].tolist()]
-            for key in (*STATE_FIELDS, *EVENT_FIELDS)
-        },
         "episodes": [
             {
                 "episode_id": row["episode_id"],
@@ -806,7 +835,7 @@ def _series(frame: FeatureFrameLike, output_id: str) -> np.ndarray:
     return array
 
 
-def _compute_side(
+def compute_side_episode(
     frame: FeatureFrameLike, columns: Mapping[str, str], params: EpisodeParams, side: str
 ) -> SideEpisode:
     market = frame_market_arrays(frame)
@@ -846,7 +875,7 @@ def build_episode_bundle(
             side: compute_through(
                 context,
                 identities.get(episode_identity_key(ref, side)) if identities else None,
-                functools.partial(_compute_side, frame, columns, params, side),
+                functools.partial(compute_side_episode, frame, columns, params, side),
             )
             for side in _SIDES
         }

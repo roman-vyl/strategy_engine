@@ -41,7 +41,7 @@ A chart needs the episodes of a market without a strategy. Finished episodes nev
 For a request the Engine:
 
 1. reads the market's committed bounds from market data (`earliest_committed_open_time_ms`, `latest_committed_open_time_ms`), a cheap call;
-2. looks up the cache entry of `(ticker, base_timeframe, params_hash, side)` and checks it is valid (D3);
+2. looks up the cache entry of `(ticker, base_timeframe, params_hash)` and checks it is valid (D3);
 3. on a missing or invalid entry loads the candles of `[earliest, latest]`, takes the `market_data_hash` that market data returns for exactly that range, computes `EMA(fast)`, `EMA(anchor)` and `EMA(slow)` through the indicator range evaluation with the EMA kind the strategy feature plan uses, and runs `project_side` once;
 4. stores the entity tables with the entry's version (bounds, `market_data_hash`, load time) and serves the page from them.
 
@@ -58,7 +58,7 @@ Censoring stays the rule of `ema-stack-episode-v1`: only an episode that starts 
 
 ## D3 Cache and data version
 
-- In-process, bounded LRU of projection results, configured by entry count (default 16). Each entry holds the entity tables of one side, a few megabytes at most.
+- In-process, bounded LRU of projection results, configured by entry count (default 16). One entry per `(ticker, base_timeframe, params_hash)` holds both sides, so one candle read and one EMA computation serve both; it keeps the entity tables only (a few megabytes at most), not the per-bar series.
 - **The version of an entry is the market data it was computed from**, not only the last candle:
   - the earliest and latest committed candle at load time;
   - the `market_data_hash` that market data returned for the loaded range. The engine treats it as opaque, as in `mds-historical-read-consumer-v1`;
