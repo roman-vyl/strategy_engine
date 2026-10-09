@@ -292,6 +292,9 @@ def _project_long(
     fa = fast.tolist()
     an = anchor.tolist()
     sl = slow.tolist()
+    # Nearest bar at or before each bar whose range covers the anchor (-1: none).
+    contact = (low <= anchor) & (anchor <= high)
+    latest_contact = np.maximum.accumulate(np.where(contact, np.arange(size), -1)).tolist()
 
     state = {key: [nan] * size for key in _STATE_KEYS}
     state["active"] = [0.0] * size
@@ -328,6 +331,20 @@ def _project_long(
         s_low = lo[i]
         p_high = d_high = hi[i]
         d_low = lo[i]
+
+    def seed_first_wave(i: int) -> None:
+        # The first wave of an episode takes the lower of two origins: the
+        # running lowest low from the start bar (already set by reset_forming)
+        # and the low of the nearest anchor contact left of the start bar.
+        nonlocal s_bar, p_bar, s_low, p_high, d_low, d_high
+        j = latest_contact[i - 1] if i > 0 else -1
+        if j < 0 or not lo[j] < lo[i]:
+            return
+        s_bar = j
+        s_low = lo[j]
+        p_bar = j + int(np.argmax(high[j : i + 1]))
+        p_high = d_high = hi[p_bar]
+        d_low = float(low[p_bar : i + 1].min())
 
     def update_forming(i: int) -> None:
         nonlocal s_bar, p_bar, s_low, p_high, d_low, d_high
@@ -373,6 +390,7 @@ def _project_long(
             phase = _AWAY
             zone = None
             reset_forming(i)
+            seed_first_wave(i)
             episodes.append(
                 {"episode_id": episode_id, "start_bar": i, "end_bar": None, "censored": censored}
             )
