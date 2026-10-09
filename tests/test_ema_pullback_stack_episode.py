@@ -316,6 +316,89 @@ def test_peak_before_the_low_is_ignored() -> None:
     assert wave1["origin"]["bar"] <= wave1["peak"]["bar"] <= wave1["touch"]["bar"]
 
 
+def _first_wave_rows(
+    rows: list[tuple[float, float, float]], start: int, side: str
+) -> dict[str, Any]:
+    """Wave 1 of an episode whose stack forms on bar `start` (earlier bars have
+    a broken order). The short case mirrors every price around the anchor."""
+
+    high = np.array([row[0] for row in rows])
+    low = np.array([row[1] for row in rows])
+    close = np.array([row[2] for row in rows])
+    size = len(rows)
+    fast = np.where(np.arange(size) < start, 99.0, 101.0)
+    slow = np.full(size, 99.0)
+    if side == "short":
+        high, low, close = 2 * A - low, 2 * A - high, 2 * A - close
+        fast, slow = 2 * A - fast, 2 * A - slow
+    episode = project_side(high, low, close, fast, np.full(size, A), slow, _params(window=2), side)
+    return next(item for item in _wire(episode)["waves"] if item["number"] == 1)
+
+
+# Bar 1 is the nearest anchor contact left of the stack bar 4 (low 97); bar 2 is
+# wholly below the anchor and lower still, so it is not a candidate; the
+# pre-start bar 3 holds the highest high; bar 6 is a pullback bar above the
+# anchor with a lower low than every bar since the start.
+_FORK_ROWS = [
+    (106, 104, 105),  # 0
+    (100.5, 97, 99),  # 1 contact: candidate 2
+    (99, 95, 97),  # 2 wholly below: not a contact
+    (112, 101, 106),  # 3 before the stack forms, highest high
+    (105, 102, 104),  # 4 stack bar
+    (110, 106, 109),  # 5
+    (101.5, 100.2, 101),  # 6 lower low than bars 4-5 but above the anchor
+    (100.6, 99.5, 100.2),  # 7 touch 1
+]
+
+
+@pytest.mark.parametrize("side", ["long", "short"])
+def test_first_wave_origin_is_the_lower_of_run_minimum_and_left_contact(side: str) -> None:
+    wave = _first_wave_rows(_FORK_ROWS, 4, side)
+    sign = 1.0 if side == "long" else -1.0
+    mirror = (lambda price: price) if side == "long" else (lambda price: 2 * A - price)
+    # S* is the left contact, not the pullback bar 6 that used to collapse the leg.
+    assert wave["origin"]["bar"] == 1 and wave["origin_price"] == pytest.approx(mirror(97.0))
+    # P is the highest high from S*, here on bar 3 left of the stack bar.
+    assert wave["peak"]["bar"] == 3 and wave["peak_price"] == pytest.approx(mirror(112.0))
+    assert wave["touch"]["bar"] == 7 and wave["touch_price"] == pytest.approx(mirror(99.5))
+    assert sign * (wave["peak_price"] - wave["origin_price"]) == pytest.approx(15.0)
+    assert wave["origin"]["bar"] <= wave["peak"]["bar"] <= wave["touch"]["bar"]
+
+
+def test_first_wave_origin_keeps_the_running_minimum_when_it_is_lower() -> None:
+    rows = [
+        (106, 104, 105),  # 0
+        (100.5, 99.5, 100),  # 1 contact: candidate 2 (low 99.5)
+        (103, 101, 102),  # 2
+        (99, 97, 98),  # 3 stack bar, wholly below the anchor: low 97 < 99.5
+        (110, 103, 109),  # 4
+        (101.5, 100.2, 101),  # 5
+        (100.6, 99.8, 100.2),  # 6 touch 1
+    ]
+    wave = _first_wave_rows(rows, 3, "long")
+    assert wave["origin"]["bar"] == 3 and wave["origin_price"] == 97.0
+    assert wave["peak"]["bar"] == 4 and wave["touch"]["bar"] == 6
+
+
+def test_first_wave_without_a_left_contact_is_unchanged() -> None:
+    rows = [
+        (106, 104, 105),  # 0
+        (112, 101, 106),  # 1 no contact anywhere left of the stack bar
+        (105, 102, 104),  # 2 stack bar
+        (110, 106, 109),  # 3
+        (101.5, 100.2, 101),  # 4 lowest low since the start: the origin moves here
+        (100.6, 99.5, 100.2),  # 5 touch 1
+    ]
+    wave = _first_wave_rows(rows, 2, "long")
+    assert wave["origin"]["bar"] == 4 and wave["peak"]["bar"] == 4
+
+
+def test_second_wave_origin_is_not_affected_by_left_contacts() -> None:
+    episode = _project("XUCUUUUUUCU", window=2)
+    waves = {item["number"]: item for item in _wire(episode)["waves"]}
+    assert waves[2]["origin"]["bar"] == 2  # the touch bar of zone 1, as before
+
+
 def test_forming_wave_runs_to_the_current_bar() -> None:
     episode = _project("XUCUUUUUU", window=2)
     bars = _value(episode, {"ref": "e", "entity": "down_leg", "index": "forming", "field": "bars"})
@@ -583,7 +666,8 @@ def test_drawing_wave_origin_in_false_break() -> None:
     assert false_break["low"] == pytest.approx(99.527314, abs=1e-6)
     waves = [(w["number"], w["origin"]["bar"], w["peak"]["bar"], w["touch"]["bar"])
              for w in wire["waves"] if w["final"]]
-    assert waves == [(1, 8, 23, 34), (2, 34, 50, 57), (3, 77, 99, 108), (4, 108, 121, 130)]
+    # Wave 1 starts on bar 7, the anchor contact left of the stack bar 8 with the lower low.
+    assert waves == [(1, 7, 23, 34), (2, 34, 50, 57), (3, 77, 99, 108), (4, 108, 121, 130)]
     at = 130
     assert _value(episode, {"ref": "e", "field": "touch_number"})[at] == 4.0
     depth = _value(episode, {"ref": "e", "entity": "false_break", "index": -2, "field": "depth"})
