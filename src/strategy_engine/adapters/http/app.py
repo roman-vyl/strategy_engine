@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from strategy_engine.adapters.http.episode_routes import router as episode_router
 from strategy_engine.adapters.http.errors import install_exception_handlers
 from strategy_engine.adapters.http.health import router as health_router
 from strategy_engine.adapters.http.indicator_routes import router as indicator_router
@@ -38,4 +39,5 @@ def create_app(
     app.include_router(health_router)
     app.include_router(indicator_router)
     app.include_router(strategy_router)
+    app.include_router(episode_router)
     return app

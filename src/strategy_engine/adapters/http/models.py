@@ -14,6 +14,11 @@ from strategy_engine.indicators.contracts import (
     IndicatorRangeRequest,
     PlannedFeature,
 )
+from strategy_engine.strategies.application.query_episode_history import (
+    MAX_PAGE_LIMIT,
+    QUERY_PARAM_KEYS,
+    EpisodeHistoryRequest,
+)
 from strategy_engine.strategies.contracts import (
     ExecutedTradeReceipt,
     LiveEntryProjectionRequest,
@@ -25,6 +30,7 @@ from strategy_engine.strategies.contracts import (
     StrategyRangeBatchRequest,
     StrategyRangeRequest,
 )
+from strategy_engine.strategies.ema_pullback.stack_episode import parse_episode_params
 
 
 class MarketRangeModel(BaseModel):
@@ -367,3 +373,43 @@ class ErrorResponseModel(BaseModel):
     message: StrictStr
     details: dict[str, Any]
     request_id: StrictStr
+
+
+class EpisodeHistoryPageModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    before_start_ms: StrictInt | None = None
+    limit: StrictInt = Field(default=50, ge=1, le=MAX_PAGE_LIMIT)
+
+
+class EpisodeHistoryMarketModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: StrictStr
+    base_timeframe: StrictStr
+
+
+class EpisodeHistoryRequestModel(BaseModel):
+    """`POST /v1/ema-stack-episodes/history` (OpenSpec
+    `ema-stack-episode-query-v1`). `episode` goes through the canonical
+    episode parameter parser, with the three periods required."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    market: EpisodeHistoryMarketModel
+    episode: dict[str, Any]
+    side: StrictStr
+    page: EpisodeHistoryPageModel = Field(default_factory=EpisodeHistoryPageModel)
+    expected_market_data_hash: StrictStr | None = None
+
+    def to_domain(self) -> EpisodeHistoryRequest:
+        return EpisodeHistoryRequest(
+            market=MarketStream(self.market.ticker, self.market.base_timeframe),
+            params=parse_episode_params(
+                self.episode, "episode", default_period=None, keys=QUERY_PARAM_KEYS
+            ),
+            side=self.side,
+            before_start_ms=self.page.before_start_ms,
+            limit=self.page.limit,
+            expected_market_data_hash=self.expected_market_data_hash,
+        )

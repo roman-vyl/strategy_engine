@@ -35,6 +35,7 @@ from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
 )
 from strategy_engine.strategies.ema_pullback.stack_episode import (
     SECTION,
+    EpisodeParams,
     parse_episode_section,
 )
 
@@ -52,6 +53,7 @@ class EmaPullbackFeaturePlan:
     ema_columns: dict[tuple[str, int], str] = field(default_factory=dict)
     htf_context_columns_by_ref: dict[str, dict[str, str]] = field(default_factory=dict)
     episode_columns_by_ref: dict[str, dict[str, str]] = field(default_factory=dict)
+    episode_params_by_ref: dict[str, dict[str, int]] = field(default_factory=dict)
 
     def to_wire(self) -> dict[str, object]:
         wire: dict[str, object] = {
@@ -77,6 +79,7 @@ class EmaPullbackFeaturePlan:
         }
         if self.episode_columns_by_ref:
             wire["episode_columns_by_ref"] = self.episode_columns_by_ref
+            wire["episode_params_by_ref"] = self.episode_params_by_ref
         return wire
 
 
@@ -133,6 +136,25 @@ def _ema_feature(source: str, timeframe: str, period: int) -> PlannedFeature:
     collide in plan deduplication and the first-planned one wins)."""
 
     return PlannedFeature(_ema_id(timeframe, period), "ema", timeframe, source, {"period": period})
+
+
+def episode_indicator_plan(params: EpisodeParams) -> tuple[IndicatorPlan, dict[str, str]]:
+    """The indicator plan of one episode query: the three base-timeframe
+    EMAs the strategy feature plan would plan for the same parameters, and
+    their `fast/anchor/slow -> output_id` columns."""
+
+    columns: dict[str, str] = {}
+    features: list[PlannedFeature] = []
+    for role, period in (
+        ("fast", params.fast_period),
+        ("anchor", params.anchor_period),
+        ("slow", params.slow_period),
+    ):
+        feature = _ema_feature("close", "base", period)
+        columns[role] = feature.output_id
+        if feature not in features:
+            features.append(feature)
+    return IndicatorPlan("bbb_v1", tuple(features)), columns
 
 
 def _context_ema_features(
@@ -232,7 +254,9 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
     # ema-stack-episode-v1 D2: the episode's base-timeframe EMAs, planned
     # only when the section is declared.
     episode_columns: dict[str, dict[str, str]] = {}
+    episode_params: dict[str, dict[str, int]] = {}
     for episode_ref, episode in parse_episode_section(root).items():
+        episode_params[episode_ref] = episode.to_wire()
         episode_columns[episode_ref] = {
             role: add_ema({"period": period}, f"{SECTION}.{episode_ref}.{role}_period")
             for role, period in (
@@ -481,6 +505,7 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
         ema_columns=ema_columns,
         htf_context_columns_by_ref=htf_columns,
         episode_columns_by_ref=episode_columns,
+        episode_params_by_ref=episode_params,
     )
 
 

@@ -28,6 +28,7 @@ from strategy_engine.strategies.application.evaluate_open_trade_projection impor
 from strategy_engine.strategies.application.evaluate_range import EvaluateStrategyRange
 from strategy_engine.strategies.application.evaluate_range_batch import EvaluateStrategyRangeBatch
 from strategy_engine.strategies.application.load_live_feature_frame import LoadLiveFeatureFrame
+from strategy_engine.strategies.application.query_episode_history import QueryEpisodeHistory
 from strategy_engine.strategies.application.validate_live_strategy_spec import (
     ValidateLiveStrategySpec,
 )
@@ -53,6 +54,7 @@ class ApplicationServices:
     load_live_feature_frame: LoadLiveFeatureFrame | None = None
     evaluate_live_entry_projection: EvaluateLiveEntryProjection | None = None
     evaluate_open_trade_projection: EvaluateOpenTradeProjection | None = None
+    query_episode_history: QueryEpisodeHistory | None = None
     build_strategy_feature_plan: BuildStrategyFeaturePlan = field(
         default_factory=BuildStrategyFeaturePlan
     )
@@ -125,5 +127,11 @@ def build_services(settings: Settings) -> ApplicationServices:
         load_live_feature_frame=live_frame_loader,
         evaluate_live_entry_projection=EvaluateLiveEntryProjection(live_frame_loader),
         evaluate_open_trade_projection=EvaluateOpenTradeProjection(live_frame_loader),
+        query_episode_history=QueryEpisodeHistory(
+            market_data_client,
+            evaluate_indicator_range,
+            revalidate_seconds=settings.episode_history_revalidate_seconds,
+            max_entries=settings.episode_history_cache_entries,
+        ),
         market_data_client=market_data_client,
     )

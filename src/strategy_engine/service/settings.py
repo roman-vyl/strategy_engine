@@ -14,6 +14,8 @@ class Settings:
     mds_connect_timeout_seconds: float = 2.0
     mds_read_timeout_seconds: float = 30.0
     max_batch_variants: int = 500
+    episode_history_revalidate_seconds: float = 300.0
+    episode_history_cache_entries: int = 16
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -28,4 +30,10 @@ class Settings:
                 os.getenv("STRATEGY_ENGINE_MDS_READ_TIMEOUT_SECONDS", "30")
             ),
             max_batch_variants=int(os.getenv("STRATEGY_ENGINE_MAX_BATCH_VARIANTS", "500")),
+            episode_history_revalidate_seconds=float(
+                os.getenv("STRATEGY_ENGINE_EPISODE_HISTORY_REVALIDATE_SECONDS", "300")
+            ),
+            episode_history_cache_entries=int(
+                os.getenv("STRATEGY_ENGINE_EPISODE_HISTORY_CACHE_ENTRIES", "16")
+            ),
         )
