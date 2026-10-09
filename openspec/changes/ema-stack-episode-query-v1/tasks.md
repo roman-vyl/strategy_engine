@@ -1,22 +1,23 @@
 ## 1. Shared parameters
 
-- [ ] 1.1 Extract `parse_episode_params` from `parse_episode_section`; the section parser adds only the `anchor_stack` defaults
+- [ ] 1.1 Extract `parse_episode_params` from `parse_episode_section`; the section parser adds only the `anchor_stack` and `history_bars` defaults
 - [ ] 1.2 `episode_params_by_ref` in the feature plan wire (only when episodes are declared); no-regression test on plan and `plan_hash`
 
-## 2. Query
+## 2. History
 
-- [ ] 2.1 Request model and validation (`market`, `episode`, `sides`, `series`, `expected_market_data_hash`)
-- [ ] 2.2 History: `computed_from_ms` from the slow-EMA warm-up and `history_bars`, clamped to the earliest committed candle
-- [ ] 2.3 EMAs through the indicator range evaluation; projection through `project_side`
-- [ ] 2.4 Clip of entities to the display range, segments, optional series, identity fields
-- [ ] 2.5 Route `POST /v1/ema-stack-episodes/range`
+- [ ] 2.1 Request model and validation (`market`, `episode`, `side`, `page`, `expected_market_data_hash`)
+- [ ] 2.2 Whole committed history from market-data bounds; EMAs through the indicator range evaluation; projection through `project_side`
+- [ ] 2.3 Bounded in-memory LRU keyed by market, parameters, side and the latest committed candle; single compute for concurrent misses
+- [ ] 2.4 Pages of whole finished episodes, current episode, identity fields
+- [ ] 2.5 Route `POST /v1/ema-stack-episodes/history`
 
 ## 3. Tests
 
-- [ ] 3.1 Equality with diagnostics episode tables for the same parameters and computed range, both sides
-- [ ] 3.2 Clip, segments and series on hand-built bars; an episode started before `from_ms` keeps its touch numbers
-- [ ] 3.3 Parameter errors equal to the strategy section; determinism and identity
-- [ ] 3.4 Size and time of one year of BTCUSDT.P 5m, reported
+- [ ] 3.1 Equality with diagnostics episode tables for the same parameters over the same history, both sides
+- [ ] 3.2 Paging covers the history once with stable touch numbers; current episode and refresh after a new candle
+- [ ] 3.3 Cache: one compute for two pages and for concurrent requests; a new candle recomputes
+- [ ] 3.4 Parameter errors equal to the strategy section; determinism and identity
+- [ ] 3.5 Time and size of the full BTCUSDT.P 5m history, reported
 
 ## 4. Parity and gate
 
