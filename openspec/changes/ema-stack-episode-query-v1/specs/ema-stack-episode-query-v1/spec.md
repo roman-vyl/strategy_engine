@@ -58,14 +58,45 @@ Every response SHALL carry `current`: the episode without a stack break as of th
 - **THEN** every finished episode returned before SHALL be returned unchanged, identified by its start
 - **AND** `current` SHALL reflect the new candle.
 
-### Requirement: One computation per data version
+### Requirement: One computation per market data version
 
-The engine SHALL compute the projection at most once per `(ticker, base_timeframe, effective parameters, side, latest committed candle)` while the entry is in its bounded in-memory cache. Later pages and repeated requests for the same key SHALL be served from the cache. Concurrent requests for the same missing key SHALL compute once. The cache SHALL NOT be persisted.
+The engine SHALL compute the projection at most once per `(ticker, base_timeframe, effective parameters, side)` and market data version while the entry is in its bounded in-memory cache. The market data version of an entry SHALL be the earliest and latest committed candle and the `market_data_hash` returned by market data for the loaded range, not the latest candle alone. Later pages and repeated requests over the same version SHALL be served from the cache. Concurrent requests for the same missing or invalid entry SHALL compute once. The cache SHALL NOT be persisted.
+
+An entry SHALL be valid only while the current committed bounds equal its bounds and it was loaded or revalidated at most `revalidate_seconds` ago. Revalidation SHALL reload the candle range and compare `market_data_hash`; an equal hash SHALL keep the entry without recomputing, a different hash SHALL recompute and replace it.
 
 #### Scenario: Second page does not recompute
 
 - **WHEN** a caller requests the first page and then the second page over the same data version
 - **THEN** the projection SHALL be computed once.
+
+#### Scenario: Repaired historical candle with unchanged bounds
+
+- **WHEN** market data replaces a historical candle and the earliest and latest committed candle stay the same
+- **AND** a request arrives after `revalidate_seconds`
+- **THEN** the engine SHALL detect the new `market_data_hash` and recompute the projection
+- **AND** the response SHALL carry the new `market_data_hash`.
+
+#### Scenario: Unchanged data after revalidation
+
+- **WHEN** an entry is revalidated and market data returns the same `market_data_hash`
+- **THEN** the projection SHALL NOT be recomputed.
+
+### Requirement: Pinned version across pages
+
+When a request carries `expected_market_data_hash` that differs from the hash of the valid cache entry, the engine SHALL revalidate the entry once at once. If the hash still differs, the engine SHALL fail closed with the error `market_data_version_changed` (HTTP 409) and SHALL NOT return a page. When the hash equals the entry's hash, the page SHALL be served from the entry.
+
+#### Scenario: History changes between pages
+
+- **WHEN** a caller received the first page with `market_data_hash` `h1`
+- **AND** market data then changes a historical candle so that its hash for the range becomes `h2`
+- **AND** the caller requests the second page with `expected_market_data_hash` `h1`
+- **THEN** the engine SHALL answer 409 `market_data_version_changed` with both hashes in the details
+- **AND** SHALL NOT return a page of the new history.
+
+#### Scenario: Pages of one version
+
+- **WHEN** a caller requests every page with the hash of the first page and the data does not change
+- **THEN** every page SHALL be served and their union SHALL be the whole history.
 
 ### Requirement: Identified response
 

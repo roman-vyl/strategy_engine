@@ -34,33 +34,44 @@ A chart needs the episodes of a market without a strategy. Finished episodes nev
 - `episode` is validated by the canonical parameter parser shared with `raw_spec.ema_stack_episode` (`parse_episode_params`, extracted from `parse_episode_section`). The three periods are required, since there is no `anchor_stack` to default from. `window_bars` defaults to 24 and `break_bars` to `window_bars`, as in the section. `history_bars` is not accepted: the history is the whole committed history. Unknown keys are rejected.
 - `side` is `long` or `short`. A chart asks for each side separately; both reuse one cache entry per side.
 - `page.before_start_ms`: return finished episodes that start before this `time_ms`; `null` means the newest. `page.limit`: 1 to 500 episodes, default 50.
-- Optional `expected_market_data_hash`: the same meaning as in `/strategy-evaluations/range`.
+- Optional `expected_market_data_hash`: the `market_data_hash` of the load the caller started from. A caller that pages through the history sends the hash of the first page in every later request; see D3. A refresh of the current episode starts a new load and sends no hash.
 
 ## D2 History and computation
 
 For a request the Engine:
 
-1. reads the market's committed bounds from market data (`earliest_committed_open_time_ms`, `latest_committed_open_time_ms`);
-2. uses the version key `(ticker, base_timeframe, params_hash, side, latest_committed_open_time_ms)`;
-3. on a cache miss loads the candles of `[earliest, latest]`, computes `EMA(fast)`, `EMA(anchor)` and `EMA(slow)` through the indicator range evaluation with the EMA kind the strategy feature plan uses, and runs `project_side` once;
-4. stores the projection's entity tables in the cache and serves the page from them.
+1. reads the market's committed bounds from market data (`earliest_committed_open_time_ms`, `latest_committed_open_time_ms`), a cheap call;
+2. looks up the cache entry of `(ticker, base_timeframe, params_hash, side)` and checks it is valid (D3);
+3. on a missing or invalid entry loads the candles of `[earliest, latest]`, takes the `market_data_hash` that market data returns for exactly that range, computes `EMA(fast)`, `EMA(anchor)` and `EMA(slow)` through the indicator range evaluation with the EMA kind the strategy feature plan uses, and runs `project_side` once;
+4. stores the entity tables with the entry's version (bounds, `market_data_hash`, load time) and serves the page from them.
 
 ```text
-request ──► parse_episode_params ──► cache key (market, params, side, last candle)
-                                        │ hit ─────────────────────────────┐
-                                        ▼ miss                             │
-                     candles [earliest, latest] ─► 3 EMAs ─► project_side ─┤
-                                                                           ▼
-                                                     page of whole episodes + current episode
+request ──► parse_episode_params ──► bounds ──► entry valid? (D3)
+                                                   │ yes ────────────────────────────┐
+                                                   ▼ no                              │
+                     candles [earliest, latest] ─► 3 EMAs ─► project_side ─► entry ──┤
+                                                                                     ▼
+                                                      page of whole episodes + current episode
 ```
 
 Censoring stays the rule of `ema-stack-episode-v1`: only an episode that starts inside the slow-EMA warm-up at the start of the market's history is censored. It is returned with `censored: true` and without entities.
 
-## D3 Cache
+## D3 Cache and data version
 
 - In-process, bounded LRU of projection results, configured by entry count (default 16). Each entry holds the entity tables of one side, a few megabytes at most.
-- An entry is never mutated. A new closed candle changes `latest_committed_open_time_ms` and so the key; the old entry ages out.
-- Concurrent misses for the same key compute once.
+- **The version of an entry is the market data it was computed from**, not only the last candle:
+  - the earliest and latest committed candle at load time;
+  - the `market_data_hash` that market data returned for the loaded range. The engine treats it as opaque, as in `mds-historical-read-consumer-v1`;
+  - the load time.
+- **An entry is valid** when the current bounds equal its bounds and it was loaded or revalidated at most `revalidate_seconds` ago (setting `STRATEGY_ENGINE_EPISODE_HISTORY_REVALIDATE_SECONDS`, default 300).
+- **Revalidation** reloads the candles of the entry's range and compares the returned `market_data_hash` with the entry's. Equal: the entry stays and its load time is reset, with no recompute. Different: the projection is recomputed and the entry replaced. So a repaired historical candle is picked up within `revalidate_seconds` even when the bounds are unchanged.
+- **Pinned version.** When a request carries `expected_market_data_hash`:
+  - if it equals the valid entry's hash, the page is served from the entry;
+  - if it differs, the engine revalidates the entry once, immediately; if the hash still differs, it fails closed with `market_data_version_changed` (HTTP 409, details `expected_market_data_hash` and `actual_market_data_hash`) and returns no page;
+  - a pinned request that misses the cache loads the history; that load is the revalidation, and the same comparison applies to its hash;
+  - the pin never selects an older entry: there is one entry per key.
+- A caller therefore pages with the hash of its first page, and any change of the history between pages ends the paging with 409; the caller restarts from the first page.
+- Concurrent misses or revalidations for the same key run once.
 - The cache is a memo: losing it only costs a recompute. Nothing is persisted.
 
 ## D4 Pages and the current episode
@@ -102,9 +113,13 @@ Censoring stays the rule of `ema-stack-episode-v1`: only an episode that starts 
 - Invalid parameters, unknown keys or unordered periods: the same `InvalidRequestError` messages as the strategy section, with paths under `episode`.
 - An unknown side, a `limit` outside 1 to 500: `InvalidRequestError`.
 - A market without committed candles: the market-data error of the other routes.
+- `expected_market_data_hash` that differs from the history's hash after revalidation: `market_data_version_changed`, HTTP 409. The caller restarts from the first page.
 
 ## Risks
 
 - **First request cost:** a cache miss computes the whole history. Measured on the full BTCUSDT.P 5m history (687,966 bars): the projection takes 0.62 s (long) and 0.67 s (short), the three EMAs hundredths of a second; the candle load comes on top. The route's own end-to-end time is measured and reported before merge (task 3.5). If it is too slow for the chart, the next step is an incremental continuation of the projection, not a change of this contract.
+- **Rewritten history, unchanged bounds:** detected by revalidation within `revalidate_seconds`, and by the pin between pages. It relies on market data changing `market_data_hash` whenever any candle of the returned range changes. This is the contract the engine already assumes for the hash of a loaded range (`live-feature-frame-acquisition-v1`); the market-data side of the contract is checked in task 1.3.
 - **Earliest candle changes:** a backfill of older data changes the history; the caller sees a new `earliest_ms` and drops its cache for that `history_id`.
+- **Refresh and older episodes:** a refresh starts a new load and carries no pin, so a caller that keeps finished episodes across refreshes does not learn from the pin that older history was rewritten. It is out of scope here; the caller can drop its cache when `earliest_ms` or the `market_data_hash` of a full reload requires it.
 - **Memory:** bounded by the LRU size.
+- **Revalidation cost:** market data returns the hash of a range only together with a read of that range (measured on the owner's Mac: a full-history read of BTCUSDT.P 5m, 687,801 candles, costs 7.0 to 7.6 s in the market data audit; the bounds call costs 0.07 s and carries no content revision). So a revalidation is a full candle read without a recompute, at most one per key per `revalidate_seconds`. Detecting a correction without any full read would need a content revision counter in market data, which this change does not ask for.
