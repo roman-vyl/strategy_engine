@@ -10,7 +10,7 @@
 - [x] 2.1 Request model and validation (`market`, `episode`, `side`, `page`, `expected_market_data_hash`)
 - [x] 2.2 Whole committed history from market-data bounds; EMAs through the indicator range evaluation; projection through `project_side`
 - [x] 2.3 Bounded in-memory LRU keyed by market and parameters, both sides in one entry; entry version = bounds + `market_data_hash` + load time; revalidation after `STRATEGY_ENGINE_EPISODE_HISTORY_REVALIDATE_SECONDS` (default 300); single compute for concurrent misses
-- [x] 2.3a Pinned version: `expected_market_data_hash` mismatch revalidates once, then 409 `market_data_version_changed`
+- [x] 2.3a Pinned version: `expected_market_data_hash` mismatch on a valid entry gives 409 `market_data_version_changed` at once, without a candle read; an expired entry is revalidated first
 - [x] 2.4 Pages of whole finished episodes, current episode, identity fields
 - [x] 2.5 Route `POST /v1/ema-stack-episodes/history`
 
@@ -20,7 +20,7 @@
 - [x] 3.2 Paging covers the history once with stable touch numbers; current episode and refresh after a new candle
 - [x] 3.3 Cache: one compute for two pages and for concurrent requests; a new candle recomputes
 - [x] 3.3a Repaired historical candle with unchanged bounds: recomputed after revalidation; unchanged hash after revalidation does not recompute
-- [x] 3.3b Pinned pages: all pages with the first hash succeed; a history change between pages gives 409 and no page
+- [x] 3.3b Pinned pages: all pages with the first hash succeed; a history change between pages gives 409 and no page; a wrong pin on a valid entry gives 409 with no extra read; a pin on an expired entry is checked after revalidation
 - [x] 3.4 Parameter errors equal to the strategy section; determinism and identity
 - [ ] 3.5 Time and size of the full BTCUSDT.P 5m history, reported
 

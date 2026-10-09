@@ -67,7 +67,8 @@ Censoring stays the rule of `ema-stack-episode-v1`: only an episode that starts 
 - **Revalidation** reloads the candles of the entry's range and compares the returned `market_data_hash` with the entry's. Equal: the entry stays and its load time is reset, with no recompute. Different: the projection is recomputed and the entry replaced. So a repaired historical candle is picked up within `revalidate_seconds` even when the bounds are unchanged.
 - **Pinned version.** When a request carries `expected_market_data_hash`:
   - if it equals the valid entry's hash, the page is served from the entry;
-  - if it differs, the engine revalidates the entry once, immediately; if the hash still differs, it fails closed with `market_data_version_changed` (HTTP 409, details `expected_market_data_hash` and `actual_market_data_hash`) and returns no page;
+  - if it differs and the entry is valid (current bounds equal its bounds, within `revalidate_seconds`), the engine fails closed at once with `market_data_version_changed` (HTTP 409, details `expected_market_data_hash` and `actual_market_data_hash`) and returns no page, without reading the candles again;
+  - if the entry is not valid (expired or bounds changed), it is revalidated first, as for any request, and the pin is compared with the resulting hash: equal serves the page, different gives the 409;
   - a pinned request that misses the cache loads the history; that load is the revalidation, and the same comparison applies to its hash;
   - the pin never selects an older entry: there is one entry per key.
 - A caller therefore pages with the hash of its first page, and any change of the history between pages ends the paging with 409; the caller restarts from the first page.
@@ -113,7 +114,7 @@ Censoring stays the rule of `ema-stack-episode-v1`: only an episode that starts 
 - Invalid parameters, unknown keys or unordered periods: the same `InvalidRequestError` messages as the strategy section, with paths under `episode`.
 - An unknown side, a `limit` outside 1 to 500: `InvalidRequestError`.
 - A market without committed candles: the market-data error of the other routes.
-- `expected_market_data_hash` that differs from the history's hash after revalidation: `market_data_version_changed`, HTTP 409. The caller restarts from the first page.
+- `expected_market_data_hash` that differs from the hash of a valid entry, or of the entry after its due revalidation: `market_data_version_changed`, HTTP 409. The caller restarts from the first page.
 
 ## Risks
 

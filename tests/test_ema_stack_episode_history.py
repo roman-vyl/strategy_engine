@@ -483,15 +483,34 @@ def test_history_changed_between_pages_fails_closed(
     assert again["market_data_hash"] == error.details["actual_market_data_hash"]
 
 
-def test_a_wrong_pin_revalidates_once_then_fails_closed(
+def test_a_wrong_pin_on_a_valid_entry_fails_at_once_without_a_read(
     world: tuple[SyntheticMarket, Clock, QueryEpisodeHistory],
 ) -> None:
     market, _, service = world
     service.execute(_request(limit=1))
     with pytest.raises(MarketDataVersionChangedError):
         service.execute(_request(limit=1, expected_market_data_hash="not-the-hash"))
-    assert market.load_range_calls == 2  # one load, one revalidation
+    assert market.load_range_calls == 1  # no second candle read
     assert CountingIndicators.computed == 1
+
+
+def test_a_pin_on_an_expired_entry_is_revalidated_first(
+    world: tuple[SyntheticMarket, Clock, QueryEpisodeHistory],
+) -> None:
+    market, clock, service = world
+    first = service.execute(_request(limit=1))
+    pinned = str(first["market_data_hash"])
+    clock.now += 400.0  # the entry is due for revalidation
+    # Unchanged data: the old pin is still the truth, the page is served.
+    page = service.execute(_request(limit=1, expected_market_data_hash=pinned))
+    assert page["market_data_hash"] == pinned
+    assert market.load_range_calls == 2  # the revalidation read
+    assert CountingIndicators.computed == 1
+    # A wrong pin on an expired entry is checked against the reloaded data.
+    clock.now += 400.0
+    with pytest.raises(MarketDataVersionChangedError):
+        service.execute(_request(limit=1, expected_market_data_hash="not-the-hash"))
+    assert market.load_range_calls == 3
 
 
 def test_pin_on_a_cache_miss_is_checked_against_the_fresh_load() -> None:

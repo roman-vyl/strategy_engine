@@ -83,16 +83,21 @@ An entry SHALL be valid only while the current committed bounds equal its bounds
 
 ### Requirement: Pinned version across pages
 
-When a request carries `expected_market_data_hash` that differs from the hash of the valid cache entry, the engine SHALL revalidate the entry once at once. If the hash still differs, the engine SHALL fail closed with the error `market_data_version_changed` (HTTP 409) and SHALL NOT return a page. When the hash equals the entry's hash, the page SHALL be served from the entry.
+When a request carries `expected_market_data_hash` that differs from the hash of the valid cache entry, the engine SHALL fail closed at once with the error `market_data_version_changed` (HTTP 409) and SHALL NOT return a page, without reading the candles again. An entry that is not valid (expired or with changed bounds) SHALL be revalidated first, and the pin SHALL be compared with the resulting hash. When the hash equals the entry's hash, the page SHALL be served from the entry.
 
 #### Scenario: History changes between pages
 
 - **WHEN** a caller received the first page with `market_data_hash` `h1`
 - **AND** market data then changes a historical candle so that its hash for the range becomes `h2`
-- **AND** the engine revalidates the entry, because it is older than `revalidate_seconds` or because the request carries a pin that differs from the entry
+- **AND** the engine revalidates the entry, because it is older than `revalidate_seconds`
 - **AND** the caller requests the second page with `expected_market_data_hash` `h1`
 - **THEN** the engine SHALL answer 409 `market_data_version_changed` with both hashes in the details
 - **AND** SHALL NOT return a page of the new history.
+
+#### Scenario: Wrong pin on a valid entry
+
+- **WHEN** the entry is valid and the request carries a pin that differs from its hash
+- **THEN** the engine SHALL answer 409 `market_data_version_changed` without reading market data.
 
 #### Scenario: Pages served from the entry of the pinned version
 

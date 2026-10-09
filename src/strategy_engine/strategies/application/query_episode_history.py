@@ -239,19 +239,17 @@ class QueryEpisodeHistory:
         slot = self._cache.slot(key)
         with slot.lock:
             entry = slot.entry
-            loaded_now = False
             if entry is None or not self._valid(entry, earliest, latest):
                 entry = self._refresh(slot, request, earliest, latest)
-                loaded_now = True
             pinned = request.expected_market_data_hash
             if pinned is not None and pinned != entry.market_data_hash:
-                if not loaded_now:
-                    entry = self._refresh(slot, request, earliest, latest)
-                if pinned != entry.market_data_hash:
-                    raise MarketDataVersionChangedError(
-                        expected_market_data_hash=pinned,
-                        actual_market_data_hash=entry.market_data_hash,
-                    )
+                # A valid entry (current bounds, within the revalidation
+                # interval) is the verified version: fail closed at once,
+                # without reading the candles again.
+                raise MarketDataVersionChangedError(
+                    expected_market_data_hash=pinned,
+                    actual_market_data_hash=entry.market_data_hash,
+                )
         return self._page(request, entry)
 
     def _valid(self, entry: _HistoryEntry, earliest: int, latest: int) -> bool:
