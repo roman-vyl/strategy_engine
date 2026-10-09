@@ -14,5 +14,5 @@
 
 ## 3. Parity and gate
 
-- [ ] 3.1 Mac: reference with the same fork, full history BTC and ETH, both sides, wave 1 only; the other entities equal to before
-- [ ] 3.2 Example `ema_pullback:163782b777c0c4d8cd38c79c` trade 6 shows the long leg
+- [x] 3.1 Mac dev Engine (6174ccf) against the previous Engine, BTC 5m full history (500/1000/2000, window 48, break 12, 213 episodes): zones, false breaks, stack breaks and waves from the second are identical; degenerate first waves 63 long and 52 short before, 0 and 1 after. A reference with the fork for counter_v6.py was not built
+- [x] 3.2 Example `ema_pullback:163782b777c0c4d8cd38c79c` trade 6: S* 2026-07-14 12:30 (62923.1), P 2026-07-15 15:50 (65566.6), touch 2026-07-16 07:40; owner checked it visually: no remarks
