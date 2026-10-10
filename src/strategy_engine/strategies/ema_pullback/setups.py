@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from math import isfinite
@@ -44,6 +45,7 @@ from strategy_engine.strategies.ema_pullback.predicates import (
     PredicateIdentity,
     evaluate_predicate,
     parse_predicate,
+    predicate_value,
     resolve_predicate,
 )
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
@@ -623,6 +625,9 @@ class CompositeCore:
 
     local: tuple[bool, ...]
     child_masks: tuple[tuple[bool, ...], ...]
+    # Operand value per bar (None where missing) of a child that is a range
+    # over a segment or ratio, else None (a1-band-filter-v1, design D6).
+    child_values: tuple[tuple[float | None, ...] | None, ...]
     path_masks: tuple[tuple[bool, ...], ...]
     at_least_counts: tuple[tuple[int, ...] | None, ...]
     winning_index: tuple[int, ...]
@@ -643,6 +648,7 @@ def _composite_core(
 
     length = len(frame.time_ms)
     child_masks: list[tuple[bool, ...]] = []
+    child_values: list[tuple[float | None, ...] | None] = []
     arrays: dict[str, np.ndarray] = {}
     for index, child in enumerate(spec.children):
         child_identity = children[index] if children is not None else None
@@ -661,6 +667,22 @@ def _composite_core(
                 )
             child_masks.append(tuple(predicate_mask.tolist()))
             arrays[child.child_id] = predicate_mask
+            operand_value = predicate_value(
+                parse_predicate(child.predicate, f"setup[{spec.instance_id}].{child.child_id}"),
+                frame,
+                side,
+                context=context,
+                identity=child_identity.predicate if child_identity else None,
+                bundle=bundle,
+            )
+            child_values.append(
+                None
+                if operand_value is None
+                else tuple(
+                    float(item) if math.isfinite(item) else None
+                    for item in operand_value.tolist()
+                )
+            )
             continue
         item = child_setup_item(spec, child)
         component_id, instance_id, params = _setup_head(item, side)
@@ -682,6 +704,7 @@ def _composite_core(
                 "composite child mask length mismatch", child_id=child.child_id
             )
         child_masks.append(mask)
+        child_values.append(None)
         arrays[child.child_id] = np.asarray(mask, dtype=bool)
     path_masks: list[tuple[bool, ...]] = []
     counts: list[tuple[int, ...] | None] = []
@@ -706,6 +729,7 @@ def _composite_core(
     return CompositeCore(
         local=tuple(local.tolist()),
         child_masks=tuple(child_masks),
+        child_values=tuple(child_values),
         path_masks=tuple(path_masks),
         at_least_counts=tuple(counts),
         winning_index=tuple(winning.tolist()),
@@ -718,8 +742,12 @@ def _composite_trace(spec: CompositeSpec, core: CompositeCore) -> dict[str, tupl
     core yet each get their own labels)."""
 
     trace: dict[str, tuple[object, ...]] = {}
-    for child, mask in zip(spec.children, core.child_masks, strict=True):
+    for child, mask, values in zip(
+        spec.children, core.child_masks, core.child_values, strict=True
+    ):
         trace[f"child:{child.child_id}"] = mask
+        if values is not None:
+            trace[f"child:{child.child_id}:value"] = values
     for composite_path, mask, count in zip(
         spec.paths, core.path_masks, core.at_least_counts, strict=True
     ):

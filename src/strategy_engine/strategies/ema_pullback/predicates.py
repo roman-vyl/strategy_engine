@@ -30,6 +30,7 @@ from strategy_engine.indicators.feature_kinds import plan_feature_request
 from strategy_engine.indicators.market_arrays import frame_market_arrays
 from strategy_engine.strategies.ema_pullback.stack_episode import (
     EpisodeRef,
+    SideEpisode,
     episode_identity_key,
     episode_operand_values,
     parse_episode_ref,
@@ -51,14 +52,50 @@ _SIDES = frozenset({"long", "short"})
 
 
 @dataclass(frozen=True, slots=True)
+class SegmentSeries:
+    """The series a segment aggregates: one feature, or `left - right` of
+    two features (OpenSpec `a1-band-filter-v1`, design D2)."""
+
+    left: PlannedFeature
+    right: PlannedFeature | None = None
+
+    def features(self) -> tuple[PlannedFeature, ...]:
+        return (self.left,) if self.right is None else (self.left, self.right)
+
+
+@dataclass(frozen=True, slots=True)
+class Segment:
+    """An aggregate of a series over a leg of the current touch of an EMA
+    stack episode (`a1-band-filter-v1`, design D2)."""
+
+    episode: str
+    series: SegmentSeries
+    start: str
+    end: str
+    aggregate: str
+    value: str = "level"
+    last_n: int | None = None
+    negate: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Ratio:
+    left: Operand
+    right: Operand
+
+
+@dataclass(frozen=True, slots=True)
 class Operand:
     """Exactly one of a canonical feature request, an EMA stack episode
-    reference, a base-bar price field or a numeric constant."""
+    reference, a segment aggregate, a ratio, a base-bar price field or a
+    numeric constant."""
 
     feature: PlannedFeature | None = None
     price: str | None = None
     const: float | None = None
     episode: EpisodeRef | None = None
+    segment: Segment | None = None
+    ratio: Ratio | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,8 +152,7 @@ class Predicate:
         out: list[PlannedFeature] = []
         for condition in (self.long, self.short):
             for operand in _operands(condition):
-                if operand.feature is not None:
-                    out.append(operand.feature)
+                out.extend(operand_features(operand))
         return tuple(out)
 
 
@@ -146,6 +182,28 @@ class TemporalPredicate:
 
 
 AnyPredicate = Predicate | StatePredicate | TemporalPredicate
+
+
+def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
+    """Every feature request an operand reads, in evaluation order."""
+
+    if operand.feature is not None:
+        return (operand.feature,)
+    if operand.segment is not None:
+        return operand.segment.series.features()
+    if operand.ratio is not None:
+        return (*operand_features(operand.ratio.left), *operand_features(operand.ratio.right))
+    return ()
+
+
+def operand_needs_episode(operand: Operand) -> bool:
+    """True iff the operand reads the EMA stack episode bundle."""
+
+    if operand.episode is not None or operand.segment is not None:
+        return True
+    return operand.ratio is not None and (
+        operand_needs_episode(operand.ratio.left) or operand_needs_episode(operand.ratio.right)
+    )
 
 
 def _operands(condition: Condition | None) -> tuple[Operand, ...]:
@@ -199,7 +257,92 @@ def _feature(raw: object, path: str) -> PlannedFeature:
     return plan_feature_request(kind, timeframe, source, params)
 
 
-_OPERAND_KEYS = "feature, episode, price or const"
+_OPERAND_KEYS = "feature, episode, segment, ratio, price or const"
+_SEGMENT_FIELDS = {
+    "episode", "of", "from", "to", "aggregate", "value", "window", "negate"
+}
+_SEGMENT_REQUIRED = ("episode", "of", "from", "to", "aggregate")
+_SEGMENT_SPANS = frozenset({("origin", "peak"), ("peak", "current"), ("origin", "current")})
+_SEGMENT_AGGREGATES = frozenset({"sum", "mean_per_bar"})
+_SEGMENT_VALUES = frozenset({"level", "change"})
+
+
+def _segment_series(raw: object, path: str) -> SegmentSeries:
+    payload = _mapping(raw, path)
+    if "difference" not in payload:
+        return SegmentSeries(_feature(payload, path))
+    if len(payload) != 1:
+        raise InvalidRequestError(f"{path} must carry only difference")
+    difference = _mapping(payload["difference"], f"{path}.difference")
+    _only_fields(difference, {"left", "right"}, f"{path}.difference")
+    return SegmentSeries(
+        _feature(difference.get("left"), f"{path}.difference.left"),
+        _feature(difference.get("right"), f"{path}.difference.right"),
+    )
+
+
+def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Segment:
+    payload = _mapping(raw, path)
+    _only_fields(payload, _SEGMENT_FIELDS, path)
+    for key in _SEGMENT_REQUIRED:
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    start, end = payload["from"], payload["to"]
+    if (start, end) not in _SEGMENT_SPANS:
+        raise InvalidRequestError(
+            f"{path}.from/to must be origin-peak, peak-current or origin-current",
+            start=start,
+            end=end,
+        )
+    aggregate = payload["aggregate"]
+    if aggregate not in _SEGMENT_AGGREGATES:
+        raise InvalidRequestError(
+            f"{path}.aggregate must be sum or mean_per_bar", aggregate=aggregate
+        )
+    value = payload.get("value", "level")
+    if value not in _SEGMENT_VALUES:
+        raise InvalidRequestError(f"{path}.value must be level or change", value=value)
+    last_n: int | None = None
+    window = payload.get("window")
+    if window is not None:
+        window = _mapping(window, f"{path}.window")
+        _only_fields(window, {"last_n"}, f"{path}.window")
+        last_n = window.get("last_n")
+        if isinstance(last_n, bool) or not isinstance(last_n, int) or last_n < 1:
+            raise InvalidRequestError(
+                f"{path}.window.last_n must be a positive integer", last_n=last_n
+            )
+    negate = payload.get("negate", False)
+    if not isinstance(negate, bool):
+        raise InvalidRequestError(f"{path}.negate must be a boolean")
+    return Segment(
+        ref,
+        _segment_series(payload["of"], f"{path}.of"),
+        str(start),
+        str(end),
+        str(aggregate),
+        str(value),
+        last_n,
+        negate,
+    )
+
+
+def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"left", "right"}, path)
+    left = _operand(payload.get("left"), f"{path}.left", episode_refs)
+    right = _operand(payload.get("right"), f"{path}.right", episode_refs)
+    if left.ratio is not None or right.ratio is not None:
+        raise InvalidRequestError(f"{path} must not nest a ratio")
+    if left.const is not None and right.const is not None:
+        raise InvalidRequestError(f"{path} must have at least one non-constant side")
+    return Ratio(left, right)
+
 
 
 def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Operand:
@@ -211,6 +354,10 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         return Operand(feature=_feature(value, f"{path}.feature"))
     if key == "episode":
         return Operand(episode=parse_episode_ref(value, f"{path}.episode", episode_refs))
+    if key == "segment":
+        return Operand(segment=_segment(value, f"{path}.segment", episode_refs))
+    if key == "ratio":
+        return Operand(ratio=_ratio(value, f"{path}.ratio", episode_refs))
     if key == "price":
         if value not in _PRICE_FIELDS:
             raise InvalidRequestError(f"{path}.price must be open, high, low or close")
@@ -300,12 +447,14 @@ def _check_episode_override(
     operand, and over an episode predicate it replaces only `op`, constant
     operands, `min` or `max` (the episode is read per side already)."""
 
-    has_episode = any(operand.episode is not None for operand in _operands(long))
+    has_episode = any(operand_needs_episode(operand) for operand in _operands(long))
     for role, short_operand in zip(("left", "right"), _operands(short), strict=False):
         if role not in override:
             continue
-        if short_operand.episode is not None:
-            raise InvalidRequestError(f"{path}.{role} must not be an episode reference")
+        if operand_needs_episode(short_operand):
+            raise InvalidRequestError(
+                f"{path}.{role} must not be an episode, segment or ratio reference"
+            )
         if has_episode and short_operand.const is None:
             raise InvalidRequestError(
                 f"{path}.{role} of an episode predicate may only be a constant"
@@ -428,6 +577,21 @@ def _column_array(frame: FeatureFrameLike, output_id: str) -> np.ndarray:
     return array
 
 
+def _feature_array(
+    feature: PlannedFeature,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+) -> np.ndarray:
+    column_ids = identity.column_ids if identity is not None else None
+    label = feature.output_id
+    return compute_through(
+        context,
+        column_ids.get(label) if column_ids is not None else None,
+        functools.partial(_column_array, frame, label),
+    )
+
+
 def _values(
     operand: Operand,
     frame: FeatureFrameLike,
@@ -435,6 +599,7 @@ def _values(
     identity: PredicateIdentity | None,
     side: str,
     bundle: ContextBundle | None,
+    path: str = "operand",
 ) -> np.ndarray | float:
     if operand.const is not None:
         return operand.const
@@ -453,14 +618,158 @@ def _values(
                 episode_operand_values, episodes.side(operand.episode.ref, side), operand.episode
             ),
         )
-    column_ids = identity.column_ids if identity is not None else None
+    node = identity.operand_ids.get(path) if identity is not None else None
+    if operand.segment is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _segment_operand, operand.segment, frame, context, identity, side, bundle
+            ),
+        )
+    if operand.ratio is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _ratio_operand, operand.ratio, frame, context, identity, side, bundle, path
+            ),
+        )
     assert operand.feature is not None
-    label = operand.feature.output_id
-    return compute_through(
-        context,
-        column_ids.get(label) if column_ids is not None else None,
-        functools.partial(_column_array, frame, label),
+    return _feature_array(operand.feature, frame, context, identity)
+
+
+def _segment_operand(
+    segment: Segment,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "segment operand has no evaluated episode", episode_ref=segment.episode
+        )
+    base = frame.market.base_timeframe
+    for feature in segment.series.features():
+        if feature.timeframe not in ("base", base):
+            raise InvalidRequestError(
+                "segment series must be on the base timeframe",
+                output_id=feature.output_id,
+                timeframe=feature.timeframe,
+            )
+    arrays = [_feature_array(f, frame, context, identity) for f in segment.series.features()]
+    series = arrays[0] if len(arrays) == 1 else arrays[0] - arrays[1]
+    if side == "short":
+        series = -series
+    return segment_values(episodes.side(segment.episode, side), series, segment)
+
+
+def _ratio_operand(
+    ratio: Ratio,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+    path: str,
+) -> np.ndarray:
+    length = len(frame.time_ms)
+    left = np.broadcast_to(
+        _values(ratio.left, frame, context, identity, side, bundle, f"{path}.left"), (length,)
     )
+    right = np.broadcast_to(
+        _values(ratio.right, frame, context, identity, side, bundle, f"{path}.right"), (length,)
+    )
+    valid = np.isfinite(left) & np.isfinite(right) & (right > 0)
+    out = np.full(length, math.nan)
+    np.divide(left, right, out=out, where=valid)
+    out.flags.writeable = False
+    return out
+
+
+def _take_rows(column: np.ndarray, rows: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    out = np.full(len(rows), math.nan)
+    out[mask] = column[rows[mask]]
+    return out
+
+
+def segment_values(episode: SideEpisode, series: np.ndarray, segment: Segment) -> np.ndarray:
+    """The segment on every bar as a read-only float64 array (OpenSpec
+    `a1-band-filter-v1`, design D2). `series` is already side-signed. The
+    leg runs between two points of the touch row of the current touch
+    `touch_number[t]`, both ends inclusive; only bars `<= t` are read. O(bars)
+    through prefix sums."""
+
+    size = len(series)
+    state = episode.state
+    touch_number = state["touch_number"]
+    live = np.isfinite(touch_number)
+    count = np.where(live, touch_number, 0.0)
+    valid = live & (count >= 1)
+    episode_id = np.where(live, state["episode_id"], 0.0).astype(np.int64)
+    first = episode.first_row[np.clip(episode_id, 0, len(episode.first_row) - 1)]
+    rows = np.where(valid, first + count.astype(np.int64) - 1, 0)
+    points = {
+        "origin": _take_rows(episode.touches["origin_bar"], rows, valid),
+        "peak": _take_rows(episode.touches["peak_bar"], rows, valid),
+        "current": np.arange(size, dtype=np.float64),
+    }
+    begin, end = points[segment.start], points[segment.end]
+    with np.errstate(invalid="ignore"):
+        ok = valid & np.isfinite(begin) & np.isfinite(end) & (begin <= end)
+    a = np.where(ok, begin, 0).astype(np.int64)
+    e = np.where(ok, end, 0).astype(np.int64)
+    s = a if segment.last_n is None else np.maximum(a, e - segment.last_n + 1)
+
+    finite = np.isfinite(series)
+    bad = np.zeros(size + 1, dtype=np.int64)
+    np.cumsum(~finite, out=bad[1:])
+    clean = np.where(finite, series, 0.0)
+    if segment.value == "level":
+        cumulative = np.zeros(size + 1)
+        np.cumsum(clean, out=cumulative[1:])
+        total = cumulative[e + 1] - cumulative[s]
+        ok &= (bad[e + 1] - bad[s]) == 0
+    else:
+        before = s - 1
+        ok &= before >= 0
+        before = np.maximum(before, 0)
+        total = clean[e] - clean[before]
+        ok &= (bad[e + 1] - bad[before]) == 0
+    result = total if segment.aggregate == "sum" else total / (e - s + 1)
+    if segment.negate:
+        result = -result
+    out = np.where(ok, result, math.nan)
+    out.flags.writeable = False
+    return out
+
+
+def predicate_value(
+    predicate: AnyPredicate,
+    frame: FeatureFrameLike,
+    side: str,
+    *,
+    context: EvaluationContext | None = None,
+    identity: PredicateIdentity | None = None,
+    bundle: ContextBundle | None = None,
+) -> np.ndarray | None:
+    """The operand value of a `range` over a segment or a ratio, for the
+    evidence trace (design D6); None for every other predicate."""
+
+    if not isinstance(predicate, Predicate):
+        return None
+    condition = predicate.for_side(side)
+    if not (
+        isinstance(condition, Range)
+        and (condition.operand.segment is not None or condition.operand.ratio is not None)
+    ):
+        return None
+    value = _values(condition.operand, frame, context, identity, side, bundle, "operand")
+    assert isinstance(value, np.ndarray)
+    return value
 
 
 def _finite(values: np.ndarray | float) -> np.ndarray | bool:
@@ -495,8 +804,8 @@ def _evaluate_condition(
 ) -> np.ndarray:
     length = len(frame.time_ms)
     if isinstance(condition, Compare):
-        left = _values(condition.left, frame, context, identity, side, bundle)
-        right = _values(condition.right, frame, context, identity, side, bundle)
+        left = _values(condition.left, frame, context, identity, side, bundle, "left")
+        right = _values(condition.right, frame, context, identity, side, bundle, "right")
         result = _finite(left) & _finite(right) & _COMPARE_OPS[condition.op](left, right)
     elif isinstance(condition, Change):
         assert condition.operand.feature is not None
@@ -634,6 +943,11 @@ class PredicateIdentity:
     column_ids: Mapping[str, NodeSpec] = field(default_factory=dict)
     inner: PredicateIdentity | None = None
     episode_ids: Mapping[EpisodeRef, NodeSpec] = field(default_factory=dict)
+    # Segment and ratio operand nodes by operand path (`operand`, `left`,
+    # `right`, `<path>.left`, ...) and, for a range over one of them, the
+    # node whose value feeds the evidence trace (design D5, D6).
+    operand_ids: Mapping[str, NodeSpec] = field(default_factory=dict)
+    value_node: NodeSpec | None = None
 
 
 def column_node(feature: NodeSpec) -> NodeSpec:
@@ -662,6 +976,10 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("price", operand.price)
     if operand.episode is not None:
         return ("episode",)
+    if operand.segment is not None:
+        return ("segment",)
+    if operand.ratio is not None:
+        return ("ratio",)
     return ("feature",)
 
 
@@ -711,30 +1029,15 @@ def resolve_predicate(
     columns: list[NodeSpec] = []
     column_ids: dict[str, NodeSpec] = {}
     episode_ids: dict[EpisodeRef, NodeSpec] = {}
+    operand_ids: dict[str, NodeSpec] = {}
     roles = ("left", "right") if isinstance(condition, Compare) else ("operand",)
     for role, operand in zip(roles, _operands(condition), strict=True):
-        if operand.episode is not None:
-            episode = (contexts or {}).get(episode_identity_key(operand.episode.ref, side))
-            if episode is None:
-                raise InvalidRequestError(
-                    "episode operand is not declared", episode_ref=operand.episode.ref
-                )
-            node = episode_operand_node(episode, operand.episode)
+        node, consumed = _resolve_operand(
+            operand, role, feature_ids, side, contexts, column_ids, episode_ids, operand_ids
+        )
+        if node is not None:
             upstream[role] = node
-            columns.append(node)
-            episode_ids[operand.episode] = node
-            continue
-        if operand.feature is None:
-            continue
-        label = operand.feature.output_id
-        try:
-            feature = feature_ids[label]
-        except KeyError as exc:
-            raise InvalidRequestError("missing planned feature series", output_id=label) from exc
-        column = column_node(feature)
-        upstream[role] = column
-        columns.append(column)
-        column_ids[label] = column
+            columns.extend(consumed)
     if isinstance(condition, Compare):
         kind = "predicate.compare"
         params: dict[str, object] = {
@@ -763,6 +1066,122 @@ def resolve_predicate(
         version=PREDICATE_NODE_VERSION,
         params=params,
         upstream=upstream,
-        side=side if predicate.short is not None or episode_ids else None,
+        side=side
+        if predicate.short is not None
+        or any(operand_needs_episode(item) for item in _operands(condition))
+        else None,
     )
-    return PredicateIdentity(local, tuple(columns), column_ids, episode_ids=episode_ids)
+    value_node = (
+        operand_ids.get("operand")
+        if isinstance(condition, Range)
+        and (condition.operand.segment is not None or condition.operand.ratio is not None)
+        else None
+    )
+    return PredicateIdentity(
+        local,
+        tuple(columns),
+        column_ids,
+        episode_ids=episode_ids,
+        operand_ids=operand_ids,
+        value_node=value_node,
+    )
+
+
+def _resolve_operand(
+    operand: Operand,
+    path: str,
+    feature_ids: Mapping[str, NodeSpec],
+    side: str,
+    contexts: Mapping[str, NodeSpec] | None,
+    column_ids: dict[str, NodeSpec],
+    episode_ids: dict[EpisodeRef, NodeSpec],
+    operand_ids: dict[str, NodeSpec],
+) -> tuple[NodeSpec | None, list[NodeSpec]]:
+    """Identity twin of `_values` for one operand: the node it contributes as
+    upstream of its parent (None for a price or a constant) and the nodes its
+    evaluation consumes, in order, the operand's own node first."""
+
+    if operand.episode is not None:
+        episode = (contexts or {}).get(episode_identity_key(operand.episode.ref, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "episode operand is not declared", episode_ref=operand.episode.ref
+            )
+        node = episode_operand_node(episode, operand.episode)
+        episode_ids[operand.episode] = node
+        return node, [node]
+    if operand.feature is not None:
+        column = _column_identity(operand.feature, feature_ids, column_ids)
+        return column, [column]
+    if operand.segment is not None:
+        segment = operand.segment
+        episode = (contexts or {}).get(episode_identity_key(segment.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "segment episode is not declared", episode_ref=segment.episode
+            )
+        upstream: dict[str, NodeSpec] = {"episode": episode}
+        consumed: list[NodeSpec] = []
+        for role, feature in zip(("left", "right"), segment.series.features(), strict=False):
+            column = _column_identity(feature, feature_ids, column_ids)
+            upstream[role] = column
+            consumed.append(column)
+        node = node_spec(
+            "predicate.segment",
+            version=PREDICATE_NODE_VERSION,
+            params={
+                "from": segment.start,
+                "to": segment.end,
+                "value": segment.value,
+                "window": segment.last_n,
+                "aggregate": segment.aggregate,
+                "negate": segment.negate,
+            },
+            upstream=upstream,
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node, *consumed]
+    if operand.ratio is not None:
+        ratio = operand.ratio
+        upstream = {}
+        consumed = []
+        for role, child in (("left", ratio.left), ("right", ratio.right)):
+            child_node, child_consumed = _resolve_operand(
+                child,
+                f"{path}.{role}",
+                feature_ids,
+                side,
+                contexts,
+                column_ids,
+                episode_ids,
+                operand_ids,
+            )
+            if child_node is not None:
+                upstream[role] = child_node
+                consumed.extend(child_consumed)
+        node = node_spec(
+            "predicate.ratio",
+            version=PREDICATE_NODE_VERSION,
+            params={"left": _operand_param(ratio.left), "right": _operand_param(ratio.right)},
+            upstream=upstream,
+            side=side if operand_needs_episode(operand) else None,
+        )
+        operand_ids[path] = node
+        return node, [node, *consumed]
+    return None, []
+
+
+def _column_identity(
+    feature: PlannedFeature,
+    feature_ids: Mapping[str, NodeSpec],
+    column_ids: dict[str, NodeSpec],
+) -> NodeSpec:
+    label = feature.output_id
+    try:
+        node = feature_ids[label]
+    except KeyError as exc:
+        raise InvalidRequestError("missing planned feature series", output_id=label) from exc
+    column = column_node(node)
+    column_ids[label] = column
+    return column
