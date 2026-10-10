@@ -8,6 +8,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from test_ema_pullback_stack_episode import _project
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.market import MarketBar, MarketFrame, MarketStream
@@ -20,10 +21,13 @@ from strategy_engine.indicators.implementations.range_evaluator import (
 )
 from strategy_engine.strategies.ema_pullback.predicates import (
     Range,
+    Segment,
+    SegmentSeries,
     column_node,
     evaluate_predicate,
     parse_predicate,
     resolve_predicate,
+    segment_values,
 )
 
 STEP_MS = 300_000
@@ -219,3 +223,265 @@ def test_band_settings_enter_the_identity_only_when_not_default() -> None:
     base = local()
     assert local(bounds="inclusive", empty="block") == base
     assert len({base, local(bounds="exclusive"), local(empty="pass"), local(max=None)}) == 4
+
+
+# -- segment: parsing -----------------------------------------------------------
+
+EMA5 = {"kind": "ema", "params": {"period": 5}}
+EMA200 = {"kind": "ema", "params": {"period": 200}}
+
+
+def _segment(**fields: Any) -> dict[str, Any]:
+    return {
+        "episode": "trend",
+        "of": {"difference": {"left": EMA5, "right": EMA200}},
+        "from": "peak",
+        "to": "current",
+        "aggregate": "mean_per_bar",
+        **fields,
+    }
+
+
+def _seg_range(operand: dict[str, Any], **fields: Any) -> dict[str, Any]:
+    return {"kind": "range", "operand": operand, "min": 0.9, "max": None, **fields}
+
+
+def test_valid_segment_parses_and_plans_both_series() -> None:
+    raw = _seg_range(
+        {"segment": _segment(value="change", window={"last_n": 75}, negate=True)},
+        bounds="exclusive",
+        empty="pass",
+    )
+    predicate = parse_predicate(raw, "p", episode_refs=["trend"])
+    assert isinstance(predicate.long, Range)
+    segment = predicate.long.operand.segment
+    assert segment is not None
+    assert (segment.start, segment.end, segment.value, segment.last_n, segment.negate) == (
+        "peak",
+        "current",
+        "change",
+        75,
+        True,
+    )
+    assert [f.output_id for f in predicate.features()] == [
+        f.output_id for f in segment.series.features()
+    ]
+    assert len(predicate.features()) == 2
+
+
+def test_segment_defaults() -> None:
+    segment = parse_predicate(_seg_range({"segment": _segment()}), "p").long.operand.segment  # type: ignore[union-attr]
+    assert segment is not None
+    assert (segment.value, segment.last_n, segment.negate) == ("level", None, False)
+    single = parse_predicate(_seg_range({"segment": _segment(of=RSI)}), "p")
+    assert len(single.features()) == 1
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        {"episode": ""},
+        {"episode": "other"},
+        {"from": "current", "to": "peak"},
+        {"from": "peak", "to": "peak"},
+        {"from": "origin", "to": "touch"},
+        {"aggregate": "max"},
+        {"aggregate": "mean"},
+        {"value": "delta"},
+        {"window": {"last_n": 0}},
+        {"window": {"last_n": 1.5}},
+        {"window": {"last_n": True}},
+        {"window": {"top_fraction": 0.5}},
+        {"window": 75},
+        {"negate": 1},
+        {"select": "positive"},
+        {"of": {"difference": {"left": EMA5}}},
+        {"of": {"difference": {"left": EMA5, "right": EMA200, "extra": 1}}},
+        {"of": {"kind": "ema", "params": {"period": 0}}},
+    ],
+)
+def test_invalid_segment_is_rejected(mutation: dict[str, Any]) -> None:
+    raw = _seg_range({"segment": _segment(**mutation)})
+    with pytest.raises(InvalidRequestError):
+        parse_predicate(raw, "p", episode_refs=["trend"])
+
+
+@pytest.mark.parametrize("missing", ["episode", "of", "from", "to", "aggregate"])
+def test_segment_required_fields(missing: str) -> None:
+    segment = _segment()
+    del segment[missing]
+    with pytest.raises(InvalidRequestError):
+        parse_predicate(_seg_range({"segment": segment}), "p")
+
+
+def test_segment_is_not_a_change_operand_and_not_a_short_override() -> None:
+    change = {
+        "kind": "change",
+        "operand": {"segment": _segment()},
+        "lookback": 2,
+        "op": ">",
+        "value": 0,
+    }
+    with pytest.raises(InvalidRequestError):
+        parse_predicate(change, "p")
+    compare = {
+        "kind": "compare",
+        "left": {"feature": RSI},
+        "op": ">",
+        "right": {"const": 1},
+        "short": {"left": {"segment": _segment()}},
+    }
+    with pytest.raises(InvalidRequestError):
+        parse_predicate(compare, "p")
+
+
+def test_ratio_parsing() -> None:
+    segment = {"segment": _segment()}
+    ok = parse_predicate(_seg_range({"ratio": {"left": segment, "right": segment}}), "p")
+    assert len(ok.features()) == 4
+    for ratio in (
+        {"left": segment},
+        {"left": {"const": 1}, "right": {"const": 2}},
+        {"left": {"ratio": {"left": segment, "right": segment}}, "right": segment},
+        {"left": segment, "right": segment, "extra": 1},
+    ):
+        with pytest.raises(InvalidRequestError):
+            parse_predicate(_seg_range({"ratio": ratio}), "p")
+
+
+# -- ratio on plain operands ----------------------------------------------------
+
+
+@pytest.mark.parametrize(("denominator", "empty"), [(0, "pass"), (0, "block"), (-2, "pass")])
+def test_ratio_is_missing_for_a_non_positive_denominator(denominator: float, empty: str) -> None:
+    frame, _ = _rsi_column(_market_frame())
+    raw = _seg_range(
+        {"ratio": {"left": {"price": "close"}, "right": {"const": denominator}}},
+        min=None,
+        max=None,
+        empty=empty,
+    )
+    mask = evaluate_predicate(parse_predicate(raw, "p"), frame, "long")
+    assert mask.all() == (empty == "pass")
+    assert mask.any() == (empty == "pass")
+
+
+def test_ratio_value_is_left_over_right() -> None:
+    frame, column = _rsi_column(_market_frame())
+    raw = {
+        "kind": "compare",
+        "left": {"ratio": {"left": {"feature": RSI}, "right": {"const": 4}}},
+        "op": ">",
+        "right": {"const": 12.5},
+    }
+    mask = evaluate_predicate(parse_predicate(raw, "p"), frame, "long")
+    with np.errstate(invalid="ignore"):
+        assert np.array_equal(mask, np.isfinite(column) & (column / 4 > 12.5))
+
+
+# -- segment: values against a brute-force reference ----------------------------
+
+# Several touches in one episode (window 3): wave rows with origin, peak and touch bars.
+_SHAPE = "X" + "UUUCUU" * 6 + "UC" + "UUUU"
+
+
+def _reference(episode: Any, x: np.ndarray, segment: Segment) -> np.ndarray:
+    state, touches = episode.state, episode.touches
+    out = np.full(len(x), np.nan)
+    for t in range(len(x)):
+        number = state["touch_number"][t]
+        if not np.isfinite(number) or number < 1:
+            continue
+        row = int(episode.first_row[int(state["episode_id"][t])]) + int(number) - 1
+        points = {
+            "origin": int(touches["origin_bar"][row]),
+            "peak": int(touches["peak_bar"][row]),
+            "current": t,
+        }
+        a, e = points[segment.start], points[segment.end]
+        s = a if segment.last_n is None else max(a, e - segment.last_n + 1)
+        if segment.value == "level":
+            values = x[s : e + 1]
+        else:
+            if s - 1 < 0:
+                continue
+            values = np.diff(x[s - 1 : e + 1])
+        if not np.isfinite(values).all():
+            continue
+        total = float(np.sum(values))
+        result = total if segment.aggregate == "sum" else total / (e - s + 1)
+        out[t] = -result if segment.negate else result
+    return out
+
+
+def _segment_args(**fields: Any) -> Segment:
+    base: dict[str, Any] = {
+        "episode": "trend",
+        "series": SegmentSeries(parse_predicate(_range(), "p").features()[0]),
+        "start": "peak",
+        "end": "current",
+        "aggregate": "mean_per_bar",
+    }
+    return Segment(**{**base, **fields})
+
+
+@pytest.mark.parametrize(
+    "start_end", [("origin", "peak"), ("peak", "current"), ("origin", "current")]
+)
+@pytest.mark.parametrize("value", ["level", "change"])
+@pytest.mark.parametrize("last_n", [None, 1, 2, 5, 500])
+@pytest.mark.parametrize("aggregate", ["sum", "mean_per_bar"])
+@pytest.mark.parametrize("negate", [False, True])
+def test_segment_matches_the_reference(
+    start_end: tuple[str, str], value: str, last_n: int | None, aggregate: str, negate: bool
+) -> None:
+    episode = _project(_SHAPE, window=3)
+    rng = np.random.default_rng(3)
+    x = np.cumsum(rng.normal(0, 1, len(_SHAPE)))
+    segment = _segment_args(
+        start=start_end[0], end=start_end[1], value=value, last_n=last_n,
+        aggregate=aggregate, negate=negate,
+    )
+    got = segment_values(episode, x, segment)
+    expected = _reference(episode, x, segment)
+    assert np.isfinite(expected).sum() > 10
+    np.testing.assert_allclose(got, expected, rtol=1e-12, atol=1e-12, equal_nan=True)
+    assert not got.flags.writeable
+
+
+def test_segment_is_missing_when_a_value_it_reads_is_not_finite() -> None:
+    episode = _project(_SHAPE, window=3)
+    x = np.arange(len(_SHAPE), dtype=float)
+    x[10] = np.nan
+    for value in ("level", "change"):
+        segment = _segment_args(start="origin", end="current", value=value)
+        got = segment_values(episode, x, segment)
+        np.testing.assert_allclose(
+            got, _reference(episode, x, segment), equal_nan=True, rtol=1e-12
+        )
+        assert np.isnan(got[10])
+    # the value read by `change` at bar 10 also covers bar 11 (x[11] - x[10])
+    change_segment = _segment_args(start="origin", end="current", value="change")
+    change = segment_values(episode, x, change_segment)
+    assert np.isnan(change[11])
+
+
+def test_segment_is_missing_before_a_touch_and_without_an_episode() -> None:
+    episode = _project("XUUU" + "UUUU", window=3)
+    got = segment_values(episode, np.arange(8, dtype=float), _segment_args())
+    assert np.isnan(got).all()
+    none = _project("UUUU", window=3)
+    assert np.isnan(segment_values(none, np.arange(4, dtype=float), _segment_args())).all()
+
+
+def test_segment_uses_only_bars_up_to_the_evaluated_bar() -> None:
+    episode = _project(_SHAPE, window=3)
+    rng = np.random.default_rng(5)
+    x = rng.normal(0, 1, len(_SHAPE))
+    segment = _segment_args(start="origin", end="current", value="change", last_n=4)
+    full = segment_values(episode, x, segment)
+    for cut in (20, 30, 40):
+        y = x.copy()
+        y[cut + 1 :] = rng.normal(0, 100, len(y) - cut - 1)
+        changed = segment_values(episode, y, segment)
+        np.testing.assert_array_equal(full[: cut + 1], changed[: cut + 1])
