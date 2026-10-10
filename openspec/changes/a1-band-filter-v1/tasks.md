@@ -1,45 +1,45 @@
 ## 0. Baseline
 
-- [ ] 0.1 Confirm the invariants this change keeps for specs without the new operands or range fields: the existing memo
+- [x] 0.1 Confirm the invariants this change keeps for specs without the new operands or range fields: the existing memo
       compute-count, node-identity, plan-label, predicate and composite suites pass unchanged on `main` and after every
       group. Verify: suite run before group 1 and after each group.
 
 ## 1. Range extension
 
-- [ ] 1.1 Parse `min`/`max` as number or `null`, `bounds` (`inclusive` default | `exclusive`), `empty` (`block` default |
+- [x] 1.1 Parse `min`/`max` as number or `null`, `bounds` (`inclusive` default | `exclusive`), `empty` (`block` default |
       `pass`); validation of `min ≤ max` / `min < max`; `short` override may replace `min`, `max`, `bounds`, `empty`.
       Verify: acceptance and rejection tests.
-- [ ] 1.2 Evaluation with `null` sides, both bound modes and both empty policies. Verify: tests, including both `null`.
-- [ ] 1.3 Identity: `bounds` and `empty` in params only when not default. Verify: every existing range config keeps its mask
+- [x] 1.2 Evaluation with `null` sides, both bound modes and both empty policies. Verify: tests, including both `null`.
+- [x] 1.3 Identity: `bounds` and `empty` in params only when not default. Verify: every existing range config keeps its mask
       and identity (test pinned against the pre-change identity).
 
 ## 2. Segment and ratio operands
 
-- [ ] 2.1 Parse `segment` (required `episode`, `of`, `from`, `to`, `aggregate`; optional `value`, `window`, `negate`;
+- [x] 2.1 Parse `segment` (required `episode`, `of`, `from`, `to`, `aggregate`; optional `value`, `window`, `negate`;
       `of` = feature or `difference` of two features; allowed pairs; unknown fields rejected; declared episode) and `ratio`
       (no nested ratio, not both constants); allow them in `compare` and `range`, reject them in `change`; `short` override
       never introduces them. `Predicate.features()` includes the segment series. Verify: static validation tests.
-- [ ] 2.2 Segment evaluation on the side's episode: points from the current touch row, inclusive ends, side sign, `level` and
+- [x] 2.2 Segment evaluation on the side's episode: points from the current touch row, inclusive ends, side sign, `level` and
       `change`, `last_n` and whole leg, `sum` / `mean_per_bar` / `negate` by prefix sums (telescoping for `change`), missing
       on no touch / non-finite used / non-base timeframe (fail closed). Verify: long and short, every `value` × `window` ×
       `aggregate` against a brute-force loop, `last_n` longer and shorter than the leg, empty and NaN cases, bar `P` in both
       legs, the EMA-difference series.
-- [ ] 2.3 Ratio evaluation, missing on a missing side or `right ≤ 0`. Verify: zero and negative denominator tests, impulse
+- [x] 2.3 Ratio evaluation, missing on a missing side or `right ≤ 0`. Verify: zero and negative denominator tests, impulse
       mean ≤ 0.
-- [ ] 2.4 Identity twins `predicate.segment` and `predicate.ratio`, nested consumption order in `PredicateIdentity.nested`,
+- [x] 2.4 Identity twins `predicate.segment` and `predicate.ratio`, nested consumption order in `PredicateIdentity.nested`,
       memo pre-pass. Verify: memo on = memo off, zero `unforeseen_consumptions`, band candidates differing only in bounds
       share EMA columns, segments and ratio in one batch.
-- [ ] 2.5 `composites_need_context_bundle` detects segments inside a ratio or a temporal predicate. Verify: test.
-- [ ] 2.6 Live history: zero-additional entry for predicates over segment or ratio. Verify: planner test.
+- [x] 2.5 `composites_need_context_bundle` detects segments inside a ratio or a temporal predicate. Verify: test.
+- [x] 2.6 Live history: zero-additional entry for predicates over segment or ratio. Verify: planner test.
 
 ## 3. Evidence
 
-- [ ] 3.1 `composite_setup` trace `child:<child_id>:value` for a range over a segment or ratio; nothing new for other
+- [x] 3.1 `composite_setup` trace `child:<child_id>:value` for a range over a segment or ratio; nothing new for other
       children. Verify: trace test and unchanged trace for an existing composite.
 
 ## 4. A1 end to end (fixture)
 
-- [ ] 4.1 A1 as one `composite_setup` child on a synthetic market with an EMA-stack episode: value equals a reference loop
+- [x] 4.1 A1 as one `composite_setup` child on a synthetic market with an EMA-stack episode: value equals a reference loop
       written like research (`d`, `Δ`, last 75 bars of `S*..P` and `P..t`), band masks for `(low, null)`, `(low, high)`,
       `(null, null)`. Verify: test.
 
@@ -54,5 +54,5 @@
 
 ## 6. Gate
 
-- [ ] 6.1 ruff, mypy, the full suite without `tests/parity`.
-- [ ] 6.2 `openspec validate a1-band-filter-v1 --strict`.
+- [x] 6.1 ruff, mypy, the full suite without `tests/parity`.
+- [x] 6.2 `openspec validate a1-band-filter-v1 --strict`.

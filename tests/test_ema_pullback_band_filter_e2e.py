@@ -178,3 +178,41 @@ def test_static_validation_and_live_history() -> None:
         check_ema_pullback_static_semantics(undeclared)
     requirements = EmaPullbackLiveCalculationRequirements().execute(spec)
     assert any(item.reason.startswith("ema_stack_episode.") for item in requirements)
+
+
+def test_only_range_over_segment_or_ratio_adds_a_value_trace() -> None:
+    spec = _spec(0.9, 10)
+    spec["setups"][0]["params"]["children"].append(
+        {
+            "child_id": "plain",
+            "predicate": {
+                "kind": "compare",
+                "left": {"price": "close"},
+                "op": ">",
+                "right": {"const": 0},
+            },
+        }
+    )
+    spec["setups"][0]["params"]["paths"][0]["require"].append("plain")
+    recorder, _ = _run([_variant("trace", spec)])
+    (capture,) = recorder.captures
+    for side in ("long", "short"):
+        trace = _setup(capture, side).trace
+        assert "child:a1:value" in trace
+        assert "child:plain" in trace
+        assert "child:plain:value" not in trace
+
+
+def test_bundle_detection_sees_a_segment_inside_a_ratio() -> None:
+    from parity.composite_phase_corpus import _composite, _pred
+    from parity.composite_phase_corpus import _spec as managed_spec
+
+    from strategy_engine.strategies.ema_pullback.managed_composite import (
+        composites_need_context_bundle,
+    )
+
+    spec = managed_spec(
+        _composite([_pred("a1", _a1(0.9, 10))], [{"path_id": "p", "require": ["a1"]}])
+    )
+    spec["ema_stack_episode"] = {"trend": {"window_bars": WINDOW}}
+    assert composites_need_context_bundle(spec)
