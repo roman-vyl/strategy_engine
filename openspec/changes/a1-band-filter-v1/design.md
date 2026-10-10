@@ -144,11 +144,8 @@ Agreement to 1e-9 needs a frame that starts early enough; the acceptance run use
 - A general arithmetic expression operand: the layer rejects arithmetic expressions; one ratio and one difference are enough.
 - `empty = pass` as the default: changes existing behaviour.
 
-## Open questions for the owner
+## Decisions of the owner
 
-- **Q1. Slider and default grid.** Defaults from the owner: low 0.4 … 1.2 step 0.1, high 6 / 9 / 12 / 15, each side `null`,
-  default selection both `null`. The Engine accepts any finite value or `null`; its catalog has no `composite_setup` entry and
-  its field schema has no `step`, `marks` or `nullable`, and Research and the front bind values through the manifest
-  (`materialize.strategy_template` + `bindings` + `options`). Recommendation: no Engine catalog change; the grid is the option
-  list of the manifest binding of `min` / `max` (with `null`). Alternative: extend `ParamFieldSchema` with `step`, `marks`,
-  `nullable` and add an A1 preset to the catalog.
+- **Q1. Slider and default grid: manifest (owner, 2026-10-10 21:07).** The Engine accepts any finite value or `null` for
+  `min` / `max` and its catalog does not change. The default grid (low 0.4 … 1.2 step 0.1, high 6 / 9 / 12 / 15, each side
+  also `null`, default selection both `null`) is the option list of the manifest binding of `min` / `max` in Research.
