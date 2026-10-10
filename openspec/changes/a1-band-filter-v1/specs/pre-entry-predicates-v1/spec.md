@@ -53,7 +53,7 @@ side. A missing value (no active episode, a censored episode, an entity
 not reached yet, or an index out of range) SHALL be non-finite.
 
 A segment reference and a ratio SHALL be defined by the requirements
-"Segment operand shape", "Segment points", "Segment value" and "Ratio operand".
+"Segment source fields", "Segment aggregation fields", "Segment points", "Segment window", "Segment value" and "Ratio operand".
 
 Any other class, operator or operand SHALL be rejected. In particular
 the layer SHALL reject:
@@ -189,10 +189,8 @@ for any other predicate.
 
 #### Scenario: Segment on the short side
 
-- **WHEN** a segment over `macd_hist` with `select` positive is
-  evaluated for the short side
-- **THEN** it SHALL aggregate `max(−h, 0)` over the segment of the
-  short side's episode.
+- **WHEN** a segment over the series `x` with `value` level and `aggregate` sum is evaluated for the short side
+- **THEN** it SHALL aggregate `−x` over the segment of the short side's episode.
 
 ### Requirement: Non-finite values are not satisfied
 
@@ -225,32 +223,48 @@ missing operand.
 
 ### Requirement: Segment operand shape
 
-A segment reference SHALL be `{"segment": {"episode", "of", "from", "to", "select", "aggregate"}}`, every field required and
-no other field allowed:
-
-- `episode`: an episode declared in `raw_spec.ema_stack_episode`;
-- `of`: a feature reference resolved by the canonical feature-kind contract, on the base timeframe;
-- `from` → `to`: `origin → peak`, `peak → current` or `origin → current`;
-- `select`: `all`, `positive` or `negative_abs`;
-- `aggregate`: `sum`, `mean_per_bar` or `max`.
+A segment reference SHALL be `{"segment": {"episode", "of", "from", "to", "aggregate", "value"?, "window"?, "negate"?}}`;
+`episode`, `of`, `from`, `to` and `aggregate` are required and no other field is allowed. Their values are defined by the
+requirements "Segment source fields" and "Segment aggregation fields".
 
 #### Scenario: Malformed segment
 
-- **WHEN** a segment names an undeclared episode, an unknown kind, a pair such as `current → peak`, an unknown `select` or
-  `aggregate`, a missing field, or an unknown field such as `window`
+- **WHEN** a segment names an undeclared episode, an unknown kind, a pair such as `current → peak`, an unknown `aggregate`,
+  `value` or `window`, a non-positive `last_n`, a missing required field, or an unknown field such as `select`
 - **THEN** static validation SHALL reject the spec.
+
+### Requirement: Segment source fields
+
+`episode` SHALL name an episode declared in `raw_spec.ema_stack_episode`. `of` SHALL be a feature reference resolved by the
+canonical feature-kind contract, or `{"difference": {"left", "right"}}` of two such references (the series `left − right`),
+every feature on the base timeframe. `from` → `to` SHALL be `origin → peak`, `peak → current` or `origin → current`.
 
 #### Scenario: Higher-timeframe series
 
-- **WHEN** `of` is on a timeframe other than the base timeframe
+- **WHEN** a feature of `of` is on a timeframe other than the base timeframe
 - **THEN** evaluation SHALL fail closed.
+
+#### Scenario: Difference of two EMAs
+
+- **WHEN** `of` is the difference of `ema` (period 5) and `ema` (period 500)
+- **THEN** the series SHALL equal EMA5 − EMA500 on every bar where both are finite, and be non-finite elsewhere.
+
+### Requirement: Segment aggregation fields
+
+`aggregate` SHALL be `sum` or `mean_per_bar`. `value` SHALL be `level` (default) or `change`. `window` SHALL be `null`
+(default, the whole leg) or `{"last_n": N}` with `N` a positive integer. `negate` SHALL be a boolean, default `false`.
+
+#### Scenario: Invalid aggregation field
+
+- **WHEN** `aggregate`, `value` or `window` has another value, or `last_n` is not a positive integer
+- **THEN** static validation SHALL reject the spec.
 
 ### Requirement: Segment points
 
 On base bar `t`, for the evaluated side, the points SHALL come from the current touch `m = touch_number[t]` of the episode:
-`origin` is the origin bar `S*` of wave `m`, `peak` its peak bar `P`, `current` is `t`. The segment SHALL be the bars `a..b`
-of the chosen pair, both ends inclusive, with `bars = b − a + 1`. Only bars `≤ t` SHALL be read and the operand SHALL have
-no lookback window of its own.
+`origin` is the origin bar `S*` of wave `m`, `peak` its peak bar `P`, `current` is `t`. The leg SHALL be the bars `a..e`
+of the chosen pair, both ends inclusive. Only bars `≤ t` SHALL be read and the operand SHALL have no lookback window other
+than its declared `window`.
 
 #### Scenario: Peak bar belongs to both legs
 
@@ -262,22 +276,34 @@ no lookback window of its own.
 - **WHEN** the episode is active and `touch_number` is 0, or the episode is inactive or censored
 - **THEN** the segment SHALL be missing.
 
+### Requirement: Segment window
+
+With `x` the series of `of`, negated on the short side before everything else, the window SHALL be the bars `s..e` of the
+leg, with `s = a` for `window = null` and `s = max(a, e − N + 1)` for `{"last_n": N}`, so a leg shorter than `N` is used
+whole; `bars = e − s + 1`.
+
+#### Scenario: Window longer than the leg
+
+- **WHEN** `last_n` is larger than the number of bars of the leg
+- **THEN** the whole leg SHALL be used
+- **AND** the result SHALL equal the one with `window` null.
+
 ### Requirement: Segment value
 
-With `x` the plan column of `of`, `y = x` for long and `y = −x` for short, each bar SHALL contribute `y` (`all`),
-`max(y, 0)` (`positive`) or `max(−y, 0)` (`negative_abs`). `sum` SHALL add these over `a..b`, `mean_per_bar` SHALL divide
-that sum by `bars`, and `max` SHALL take their largest value. The value SHALL be missing when any `x` on `a..b` is
-non-finite. Cost SHALL NOT depend on segment lengths beyond a logarithmic factor for `max`.
+With `x` and the window `s..e` as above, `value = level` SHALL aggregate `x[u]` and `value = change` SHALL aggregate
+`Δ[u] = x[u] − x[u−1]` (reading `x[s−1]`), for `u = s..e`. `sum` SHALL be the sum and `mean_per_bar` the sum divided by
+`bars`. `negate = true` SHALL multiply the result by −1. Every bar SHALL count with its sign. The value SHALL be missing
+when any `x` it reads is non-finite, and its cost SHALL NOT depend on leg lengths.
 
-#### Scenario: Pullback strength against the trade
+#### Scenario: Pullback speed toward the anchor
 
-- **WHEN** a segment is `macd_hist` (5m, 48-78-48), `peak → current`, `negative_abs`, `mean_per_bar`, long side, bar `t`,
-  current touch `m ≥ 1`
-- **THEN** its value SHALL be `Σ max(−h, 0)` over bars `P_m..t` divided by `t − P_m + 1`.
+- **WHEN** a segment is the difference EMA5 − EMA500, `peak → current`, `change`, `last_n` 75, `mean_per_bar`, `negate`, long
+  side, bar `t`, current touch `m ≥ 1`
+- **THEN** its value SHALL be `−(x[t] − x[s−1]) / bars` with `s = max(P_m, t − 74)` and `bars = t − s + 1`.
 
-#### Scenario: Non-finite value inside the segment
+#### Scenario: Non-finite value inside the window
 
-- **WHEN** the series is non-finite on any bar of the segment
+- **WHEN** a value the window reads is non-finite
 - **THEN** the segment SHALL be missing on that bar.
 
 ### Requirement: Ratio operand

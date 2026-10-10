@@ -12,7 +12,7 @@ Every predicate, predicate column array, derived operand and composite local nod
   carries `op`, `value` and `lookback` and whose upstream is the
   column node of its operand. It SHALL carry a side only when it has
   a `short` override.
-- A segment operand SHALL have its own node family whose identity carries `from`, `to`, `select` and `aggregate`, whose
+- A segment operand SHALL have its own node family whose identity carries `from`, `to`, `value`, `window`, `aggregate` and `negate`, whose
   upstream is the episode node of the evaluated side and the column node of its series, and which carries the side.
 - A ratio operand SHALL have its own node family whose identity carries its sides and whose upstream is the nodes of its
   non-constant sides; it SHALL carry a side when any side does.
@@ -39,13 +39,13 @@ A successful memoized evaluation of any spec containing
 #### Scenario: Band candidates differing in the bounds
 
 - **WHEN** a batch contains candidates that differ only in `min` or `max` of one range over a ratio of two segments
-- **THEN** the MACD columns, both segments and the ratio SHALL each be computed once per batch per side.
+- **THEN** the EMA columns, both segments and the ratio SHALL each be computed once per batch per side.
 
 ## ADDED Requirements
 
 ### Requirement: No compute regression without segment or ratio operands
 
-For specs that use no MACD kind, no segment, no ratio and no new range field, evaluation outputs, node identities and
+For specs that use no segment, no ratio and no new range field, evaluation outputs, node identities and
 memoized compute counts per node family SHALL be identical to the evaluation before this change.
 
 #### Scenario: Existing parity corpus
