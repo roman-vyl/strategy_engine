@@ -70,9 +70,15 @@ class Compare:
 
 @dataclass(frozen=True, slots=True)
 class Range:
+    """`min` / `max` of None are "no control" on that side; `bounds` picks
+    inclusive or exclusive comparison, `empty` the result on a non-finite
+    operand (OpenSpec `a1-band-filter-v1`, design D4)."""
+
     operand: Operand
-    min: float
-    max: float
+    min: float | None
+    max: float | None
+    bounds: str = "inclusive"
+    empty: str = "block"
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,23 +248,47 @@ def _change(
     return Change(operand, int(lookback), str(op), _number(payload.get("value"), f"{path}.value"))
 
 
+_RANGE_BOUNDS = frozenset({"inclusive", "exclusive"})
+_RANGE_EMPTY = frozenset({"block", "pass"})
+
+
+def _optional_bound(payload: Mapping[str, Any], key: str, path: str) -> float | None:
+    if key not in payload:
+        raise InvalidRequestError(f"{path}.{key} is required (a number or null)")
+    value = payload[key]
+    return None if value is None else _number(value, f"{path}.{key}")
+
+
 def _range(
     payload: Mapping[str, Any], path: str, episode_refs: frozenset[str] | None
 ) -> Range:
     operand = _operand(payload.get("operand"), f"{path}.operand", episode_refs)
     if operand.const is not None:
         raise InvalidRequestError(f"{path}.operand must be a feature, an episode or a price")
-    low = _number(payload.get("min"), f"{path}.min")
-    high = _number(payload.get("max"), f"{path}.max")
-    if low > high:
+    low = _optional_bound(payload, "min", path)
+    high = _optional_bound(payload, "max", path)
+    bounds = payload.get("bounds", "inclusive")
+    if bounds not in _RANGE_BOUNDS:
+        raise InvalidRequestError(f"{path}.bounds must be inclusive or exclusive", bounds=bounds)
+    empty = payload.get("empty", "block")
+    if empty not in _RANGE_EMPTY:
+        raise InvalidRequestError(f"{path}.empty must be block or pass", empty=empty)
+    if (
+        low is not None
+        and high is not None
+        and (low > high or (bounds == "exclusive" and low == high))
+    ):
         raise InvalidRequestError(f"{path}.min must not exceed max")
-    return Range(operand, low, high)
+    return Range(operand, low, high, str(bounds), str(empty))
 
 
 _CLASS_FIELDS: dict[str, tuple[set[str], set[str]]] = {
     # class -> (condition fields, fields a `short` override may replace)
     "compare": ({"left", "op", "right"}, {"left", "op", "right"}),
-    "range": ({"operand", "min", "max"}, {"min", "max"}),
+    "range": (
+        {"operand", "min", "max", "bounds", "empty"},
+        {"min", "max", "bounds", "empty"},
+    ),
     "change": ({"operand", "lookback", "op", "value"}, {"op", "value"}),
 }
 
@@ -484,10 +514,24 @@ def _evaluate_condition(
             )
     else:
         value = _values(condition.operand, frame, context, identity, side, bundle)
-        result = _finite(value) & (value >= condition.min) & (value <= condition.max)
+        result = _range_mask(condition, value)
     mask = np.broadcast_to(np.asarray(result, dtype=bool), (length,)).copy()
     mask.flags.writeable = False
     return mask
+
+
+def _range_mask(condition: Range, value: np.ndarray | float) -> np.ndarray:
+    """A set side imposes its comparison on a finite value; a missing side
+    imposes nothing. A non-finite value follows `empty` (design D4)."""
+
+    finite = np.asarray(_finite(value), dtype=bool)
+    exclusive = condition.bounds == "exclusive"
+    ok = finite.copy()
+    if condition.min is not None:
+        ok &= (value > condition.min) if exclusive else (value >= condition.min)
+    if condition.max is not None:
+        ok &= (value < condition.max) if exclusive else (value <= condition.max)
+    return ok | ~finite if condition.empty == "pass" else ok
 
 
 def _state_mask(
@@ -708,6 +752,12 @@ def resolve_predicate(
             "min": condition.min,
             "max": condition.max,
         }
+        # Non-default only, so every range written before a1-band-filter-v1
+        # keeps its identity.
+        if condition.bounds != "inclusive":
+            params["bounds"] = condition.bounds
+        if condition.empty != "block":
+            params["empty"] = condition.empty
     local = node_spec(
         kind,
         version=PREDICATE_NODE_VERSION,
