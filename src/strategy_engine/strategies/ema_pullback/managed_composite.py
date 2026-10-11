@@ -58,6 +58,7 @@ from strategy_engine.strategies.ema_pullback.predicates import (
     StatePredicate,
     TemporalPredicate,
     evaluate_predicate,
+    operand_needs_episode,
     parse_predicate,
     resolve_predicate,
 )
@@ -295,7 +296,7 @@ def _needs_bundle(predicate: object) -> bool:
         return _needs_bundle(predicate.of)
     if isinstance(predicate, Predicate):
         return any(
-            operand.episode is not None
+            operand_needs_episode(operand)
             for condition in (predicate.long, predicate.short)
             if condition is not None
             for operand in (

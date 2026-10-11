@@ -2,7 +2,9 @@
 
 ## Purpose
 Compute, without any I/O, a bounded history start timestamp that is sufficient, under a set of configured indicator-convergence and strategy-semantic warm-up policies, to evaluate a given live strategy spec at a target bar — so the live acquisition path stops reading history that scales with total accumulated market-data depth.
+
 ## Requirements
+
 ### Requirement: Pure history-start planning
 
 The planner SHALL compute a bounded history start (`from_ms`) from a strategy spec's indicator plan, the base timeframe, the strategy's event/lookback requirements, and a caller-supplied history anchor timestamp.
@@ -291,3 +293,15 @@ For each declared episode in `raw_spec.ema_stack_episode`, the live history plan
 - **WHEN** the live window starts inside an episode
 - **THEN** that episode SHALL be censored and every episode operand reading it SHALL be False.
 
+### Requirement: History policy for segment and ratio operands
+
+A `compare` or `range` predicate whose operands include a segment or a ratio SHALL contribute the explicit
+zero-additional-history entry of a current-bar predicate. The bars a segment reads back to `S*` of the current touch (and one
+bar earlier for `change`) lie inside the history of the episode it names, which every declared episode already requires
+(`history_bars`), and the warm-up of the series is counted by the per-feature policy.
+
+#### Scenario: Band filter child
+
+- **WHEN** a composite child is a `range` over a ratio of two segments on episode `trend`
+- **THEN** the child SHALL contribute a zero-additional entry
+- **AND** the requirements SHALL still include `history_bars` of `trend` and the EMA warm-up of the series it reads.
