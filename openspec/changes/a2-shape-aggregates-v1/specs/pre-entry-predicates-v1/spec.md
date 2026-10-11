@@ -14,24 +14,24 @@ requirements "Segment source fields", "Segment aggregation fields", "Segment k-b
 
 ### Requirement: Segment aggregation fields
 
-`aggregate` SHALL be `sum`, `mean_per_bar`, `max`, `min`, `abs_sum` or `top_abs_sum`. `value` SHALL be `level` (default),
+`aggregate` SHALL be `sum`, `mean_per_bar`, `max`, `min`, `abs_sum`, `top_abs_sum` or `top_abs_share`. `value` SHALL be `level` (default),
 `change` or `change_over`. `window` SHALL be `null` (default, the whole leg) or `{"last_n": N}` with `N` a positive integer.
-`negate` SHALL be a boolean, default `false`. `max`, `min`, `abs_sum` and `top_abs_sum` SHALL be allowed only with `value`
-`change` or `change_over`, and `sum` and `mean_per_bar` SHALL be rejected with `change_over`. `top_abs_sum` SHALL require `top` (a positive integer) and a non-null `window`; `top`
+`negate` SHALL be a boolean, default `false`. `max`, `min`, `abs_sum`, `top_abs_sum` and `top_abs_share` SHALL be allowed only with `value`
+`change` or `change_over`, and `sum` and `mean_per_bar` SHALL be rejected with `change_over`. `top_abs_sum` and `top_abs_share` SHALL require `top` (a positive integer) and a non-null `window`; `top`
 SHALL be rejected with any other aggregate.
 
 #### Scenario: Invalid aggregation field
 
 - **WHEN** `aggregate`, `value` or `window` has another value, `last_n` is not a positive integer, `max` is used with `level`,
   `sum` is used with `change_over`,
-  `top_abs_sum` has no `top` or a null `window`, or `top` is given with another aggregate
+  `top_abs_sum` or `top_abs_share` has no `top` or a null `window`, or `top` is given with another aggregate
 - **THEN** static validation SHALL reject the spec.
 
 ### Requirement: Segment value
 
 With `x` and the window `s..e` as above, `value = level` SHALL aggregate `x[u]`, `value = change` SHALL aggregate
 `Δ[u] = x[u] − x[u−1]` (reading `x[s−1]`) and `value = change_over` SHALL aggregate the `span`-bar changes defined by the requirement "Segment k-bar change", for `u = s..e` (`level`, `change`). `sum` SHALL be the sum and `mean_per_bar` the sum divided by
-`bars`; `max`, `min`, `abs_sum` and `top_abs_sum` SHALL be defined by the requirements "Segment extremum aggregates" and "Segment absolute-change aggregates". `negate = true` SHALL multiply the result by −1. Every bar SHALL count with its sign. The value SHALL be missing
+`bars`; `max`, `min`, `abs_sum`, `top_abs_sum` and `top_abs_share` SHALL be defined by the requirements "Segment extremum aggregates" and "Segment absolute-change aggregates". `negate = true` SHALL multiply the result by −1. Every bar SHALL count with its sign. The value SHALL be missing
 when any `x` it reads is non-finite, and its cost SHALL NOT depend on leg lengths.
 
 #### Scenario: Pullback speed toward the anchor
@@ -90,17 +90,24 @@ Ties SHALL NOT change the sum.
 
 - **WHEN** the window has 3 bars and `top` is 5
 - **THEN** `top_abs_sum` SHALL equal `abs_sum`
-- **AND** a ratio of the two SHALL be 1 when `abs_sum` is greater than 0.
+- **AND** `top_abs_share` SHALL be missing (a window of `top` bars or fewer has no normalized share).
+
+#### Scenario: Normalized share
+
+- **WHEN** a segment is `peak → current`, `change`, `last_n` 75, `top_abs_share` with `top` 5 and the window has `N` > 5 bars
+- **THEN** its value SHALL be `(S ÷ A − 5/N) ÷ (1 − 5/N)` with `S` the sum of the five largest `|x[u] − x[u−1]|` and `A` their sum over all `N` bars
+- **AND** it SHALL be 0 when all `N` changes have equal magnitude and 1 when only five are non-zero
+- **AND** it SHALL be missing when `A` is 0.
 
 ### Requirement: Segment eligibility shape
 
-A segment MAY carry `eligibility: {"legs_min_bars", "window", "impulse_positive"}`. All keys SHALL be optional;
-`legs_min_bars` and `window` SHALL be positive integers and `impulse_positive` a boolean; `impulse_positive` SHALL require
+A segment MAY carry `eligibility: {"legs_min_bars", "window", "impulse_positive", "pullback_min_bars"}`. All keys SHALL be optional;
+`legs_min_bars`, `window` and `pullback_min_bars` SHALL be positive integers and `impulse_positive` a boolean; `impulse_positive` SHALL require
 `window`; unknown keys SHALL be rejected. The `window` of the eligibility SHALL be independent of the segment's own `window`.
 
 #### Scenario: Malformed eligibility
 
-- **WHEN** `eligibility` has an unknown key, a non-positive `legs_min_bars` or `window`, a non-boolean `impulse_positive`, or
+- **WHEN** `eligibility` has an unknown key, a non-positive `legs_min_bars`, `window` or `pullback_min_bars`, a non-boolean `impulse_positive`, or
   `impulse_positive` without `window`
 - **THEN** static validation SHALL reject the spec.
 
@@ -115,6 +122,16 @@ evaluated on the legs of the segment's episode whatever leg the segment itself r
 - **WHEN** the pullback has 2 bars and `legs_min_bars` is 3
 - **THEN** the segment SHALL be missing
 - **AND** a range over a ratio of such segments with `empty: pass` SHALL not block the bar.
+
+### Requirement: Segment eligibility pullback length
+
+With `pullback_min_bars` M, a segment SHALL be missing on bar `t` unless `peak → current` of the current touch has at least M
+bars (inclusive ends), counted on the whole leg, whatever leg the segment itself reads.
+
+#### Scenario: Boundary
+
+- **WHEN** `pullback_min_bars` is 24 and the pullback has 23 bars, then 24 bars
+- **THEN** the segment SHALL be missing on the first and have its value on the second.
 
 ### Requirement: Segment eligibility window
 

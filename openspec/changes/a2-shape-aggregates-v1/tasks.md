@@ -17,6 +17,7 @@
 - [x] 2.3a Division: a numerator ≤ 0 gives a value ≤ 0, not missing (A2.1, A2.2); a denominator ≤ 0 gives missing. Verify: tests.
 - [x] 2.4 A2.1, A2.2, A2.3 as `range(ratio(...))` end to end on the BTC fixture against a research-style reference loop,
       including band masks for `(low, null)`, `(null, high)`, `(low, high)`, `(null, null)`. Verify: test.
+- [x] 2.6 Revision 4: `top_abs_share` (normalized A2.3, missing for zero total or `N ≤ top`) and `eligibility.pullback_min_bars` (A2.1 24, A2.3 20); boundaries 19/20 and 23/24 bars, even window = 0, window of `top` bars = missing. Verify: unit tests against the revision 4 research loop.
 - [x] 2.5 Anchor as a parameter: the same checks with a different anchor period. Verify: unit test.
 
 ## 3. Identity, memo, cost
@@ -29,14 +30,13 @@
 
 ## 4. Parity with the research reference (owner's Mac, separate session, after the owner's word)
 
-- [ ] 4.0 Before the comparison: confirm that the csv export equals `a2_ideas_{coin}.npz` (the csv generator is not in the treatise directory) and that the research leg windows (`MT.window`) are inclusive at both ends.
-- [ ] 4.1 Coins: BTC 2185 and ETH 1970 EMA500 entries, per branch: values to 1e-9, NaN equal, `S*` and `P` equal.
+- [ ] 4.0 Before the comparison: confirm that the revision 4 csv export `a2v2_engine_ref_{btc,eth}.csv.gz` equals what the research code computes (`a2_ideas_*.npz` is revision 3, not valid for parity) and that the research leg windows (`MT.window`) are inclusive at both ends.
+- [ ] 4.1 Coins: BTC 2185 and ETH 1970 EMA500 entries from `a2v2_engine_ref_*` (non-missing BTC 1673/2009/1865, ETH 1518/1809/1685), per branch: values to 1e-9, NaN equal, `S*` and `P` equal.
 - [ ] 4.2 Both sides checked separately; every situation label in the export (short legs, NaN and zero cases, ties, later
       touches, thresholds exactly at a bound); situations without a real entry through synthetic series from the same
       reference code.
-- [ ] 4.3 Block counts per branch at several thresholds per side on both coins; bound mode reproduces the research counts.
-- [ ] 4.4 Full runs by a standard research-service batch run against the deployed Engine, to the cent: BTC A2.1 ≥ 2.5,
-      ETH A2.2 ≤ 0.5, ETH A2.3 ≥ 0.35, and one run with all bounds null equal to the run with no filter.
+- [ ] 4.3 Block counts per branch on the 8 thresholds per coin of `a2v2_parity_*.json`; bound mode reproduces the research counts.
+- [ ] 4.4 Full runs by a standard research-service batch run against the deployed Engine, to the cent: the 8 single-branch control cells of `a2v2_parity_{btc,eth}.json` (source of truth), and one run with all bounds null equal to the run with no filter.
 - [ ] 4.5 Backward compatibility: A1 configs and existing range and segment configs identical.
 - [ ] 4.6 Report: parity table case × branch (rows compared, max |diff|, NaN mismatches, block-count diffs, full-run diffs),
       wire format of the new fields; stop for the owner's review.

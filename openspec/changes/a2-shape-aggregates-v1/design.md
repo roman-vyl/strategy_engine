@@ -39,10 +39,13 @@ changes inside the trimmed 75-bar window (`np.convolve(..., "valid")`); bars bef
 | `max`, `min` | change, change_over | largest / smallest value over the window |
 | `abs_sum` | change, change_over | sum of absolute values of all bars of the window |
 | `top_abs_sum` (+ `top`) | change, change_over | sum of the `top` largest absolute values; `top` a positive integer; `window.last_n` required |
+| `top_abs_share` (+ `top`) | change, change_over | `(share − top/N) ÷ (1 − top/N)`, `share = top_abs_sum ÷ abs_sum`, `N` = bars of the window; missing if `abs_sum` is 0 or `N ≤ top` (revision 4, A2.3) |
 
 `negate` multiplies the result by −1 after the aggregate (A2.2 numerator = −min of the 3-bar change = the strongest move toward
 the anchor). `max`/`min` keep their sign. `abs_sum` and `top_abs_sum` count every bar of the window, toward or away from the
-anchor; with fewer than `top` values `top_abs_sum` is the sum of all of them, so A2.3 is exactly 1 on a 3–4 bar window.
+anchor; with fewer than `top` values `top_abs_sum` is the sum of all of them. A2.3 uses `top_abs_share` (revision 4): the raw
+share is 1 by arithmetic on a window of `top` bars or fewer and has the floor `top/N`, so the vote fired on length; the
+normalization removes the floor and `pullback_min_bars` 20 removes the short windows.
 
 *Confirmed against the reference* (line 19): `np.sort(abs(dr))[-5:].sum() / abs(dr).sum()` over all bars of the trimmed window; a sum of 0 gives no value.
 
@@ -58,18 +61,20 @@ anchor; with fewer than `top` values `top_abs_sum` is the sum of all of them, so
 
 ### D5. Eligibility
 
-`eligibility` is an optional object `{"legs_min_bars": N, "window": W, "impulse_positive": bool}`, all keys optional,
+`eligibility` is an optional object `{"legs_min_bars": N, "window": W, "impulse_positive": bool, "pullback_min_bars": M}`, all keys optional,
 `impulse_positive` requiring `window`, unknown keys rejected. It is evaluated on the current touch of the segment's episode
 whatever leg the segment itself reads, and its window `W` is independent of the segment's own `window`:
 
 - `legs_min_bars`: both `origin → peak` and `peak → current` have at least `N` bars (inclusive ends, counted on the whole
   legs before any window);
 - `window`: every one-bar change in the last `W` bars of the impulse and of the pullback is finite;
-- `impulse_positive`: the sum of the one-bar changes of the last `W` bars of the impulse is strictly greater than 0.
+- `impulse_positive`: the sum of the one-bar changes of the last `W` bars of the impulse is strictly greater than 0;
+- `pullback_min_bars` (revision 4): `peak → current` has at least `M` bars (inclusive ends, whole leg). With `M ≤ W`, as in
+  research (24 and 20 against 75), this is the same as a pullback window of at least `M` bars.
 
 A segment that fails its eligibility is missing, so a ratio over it is missing and, with `empty: pass`, the bar is not blocked.
-A2.1, A2.2 and A2.3 all carry `{"legs_min_bars": 3, "window": 75, "impulse_positive": true}`, so they share one eligibility
-even though A2.1 reads 12 and 75 bars of the pullback.
+A2.1, A2.2 and A2.3 all carry `{"legs_min_bars": 3, "window": 75, "impulse_positive": true}`; A2.1 adds
+`pullback_min_bars` 24 and A2.3 adds 20, so A2.1 and A2.3 no longer share an eligibility with A2.2 (the shared parts stay shared).
 
 *Confirmed against the reference* (lines 12–14): legs `len < 3` → no value, counted on the whole legs before the trim to 75;
 `np.isnan(di).any() or np.isnan(dr).any() or di.sum() <= 0` on the trimmed windows → no value for all branches.

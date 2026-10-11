@@ -23,9 +23,15 @@ new predicate class.
 - **Segment aggregates** added to `sum` and `mean_per_bar`:
   - `max`, `min`: the largest / smallest value of the series over the window (A2.2: `change_over` span 3);
   - `abs_sum`: the sum of absolute values over every bar of the window (A2.3);
-  - `top_abs_sum` with `top` n: the sum of the n largest absolute values (A2.3, n = 5); with fewer than n values it is the
-    sum of all, so A2.3 is exactly 1 on a 3–4 bar window as in research. It needs a bounded `window.last_n`.
-- **Segment eligibility** (new optional field): `{"legs_min_bars": N, "window": W, "impulse_positive": bool}`. The segment is
+  - `top_abs_sum` with `top` n: the sum of the n largest absolute values; with fewer than n values it is the sum of all. It
+    needs a bounded `window.last_n`;
+  - `top_abs_share` with `top` n (A2.3, n = 5, revision 4): `(share − n/N) ÷ (1 − n/N)` with `share = top_abs_sum ÷ abs_sum`
+    and `N` the bars of the window; 0 for an even window, 1 when `n` bars made the whole path. Missing when `abs_sum` is 0 or
+    `N ≤ n`. The raw share has the floor `n/N` (exactly 1 on a window of `n` bars or fewer), which made the vote fire on length.
+- **Segment eligibility** (new optional field): `{"legs_min_bars": N, "window": W, "impulse_positive": bool, "pullback_min_bars": M}`.
+  `pullback_min_bars` (revision 4) is a minimum on the pullback only: A2.1 needs 24 bars, A2.3 needs 20; the research export
+  and the revision 4 reference use it; below it the value is missing.
+  The first three conditions are: The segment is
   missing unless both legs of the current touch have at least N bars, every one-bar change in the last W bars of both legs is
   finite and, when asked, the sum of the impulse changes over its last W bars is greater than 0. Research uses N = 3, W = 75
   and the impulse condition for all three branches (confirmed in `a2_ideas_peek.py`), and no existing block can express a
@@ -38,8 +44,8 @@ A2.2 and A2.3 as blocks:
 ```
 A2.2 = ratio( segment(d, peak→current, change_over 3, last_n 75, min, negate, eligibility),
               segment(d, origin→peak,  change_over 3, last_n 75, max,         eligibility) )
-A2.3 = ratio( segment(d, peak→current, change, last_n 75, top_abs_sum 5, eligibility),
-              segment(d, peak→current, change, last_n 75, abs_sum,       eligibility) )
+A2.3 =        segment(d, peak→current, change, last_n 75, top_abs_share 5, eligibility + pullback_min_bars 20)
+A2.1 as before with eligibility + pullback_min_bars 24
 ```
 
 each inside a `range` with nullable bounds (`bounds exclusive`, `empty pass`) as in A1. Defaults of the grids live in the

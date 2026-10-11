@@ -29,6 +29,8 @@ LEG_WINDOW = 20
 SHORT = 5
 SPAN = 3
 TOP = 5
+ACCEL_MIN = 8
+CONC_MIN = 8
 EMA_FAST = {"kind": "ema", "params": {"period": 5}}
 
 
@@ -39,6 +41,10 @@ def _anchor(period: int) -> Spec:
 def _branch(name: str, low: float | None, high: float | None, anchor_period: int = 200) -> Spec:
     series = {"difference": {"left": EMA_FAST, "right": _anchor(anchor_period)}}
     eligibility = {"legs_min_bars": 3, "window": LEG_WINDOW, "impulse_positive": True}
+    if name == "accel":
+        eligibility = {**eligibility, "pullback_min_bars": ACCEL_MIN}
+    elif name == "conc":
+        eligibility = {**eligibility, "pullback_min_bars": CONC_MIN}
 
     def seg(start: str, end: str, window: int, **fields: Any) -> Spec:
         return {
@@ -78,15 +84,12 @@ def _branch(name: str, low: float | None, high: float | None, anchor_period: int
             ),
         }
     else:
-        operand = {
-            "left": seg(
-                "peak", "current", LEG_WINDOW, value="change", aggregate="top_abs_sum", top=TOP
-            ),
-            "right": seg("peak", "current", LEG_WINDOW, value="change", aggregate="abs_sum"),
-        }
+        operand = seg(
+            "peak", "current", LEG_WINDOW, value="change", aggregate="top_abs_share", top=TOP
+        )
     return {
         "kind": "range",
-        "operand": {"ratio": operand},
+        "operand": {"ratio": operand} if name != "conc" else operand,
         "min": low,
         "max": high,
         "bounds": "exclusive",
@@ -150,6 +153,8 @@ def test_branch_value_and_band_masks_match_the_research_loop(name: str, anchor_p
             short=SHORT,
             k=SPAN,
             top=TOP,
+            accel_min=ACCEL_MIN,
+            conc_min=CONC_MIN,
         )[name]
         values = np.array(
             [math.nan if v is None else v for v in mask.trace["child:a2:value"]], dtype=float

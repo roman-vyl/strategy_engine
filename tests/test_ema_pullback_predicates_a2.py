@@ -50,6 +50,20 @@ def test_new_fields_parse() -> None:
         {"segment": _segment(value="change", aggregate="top_abs_sum", top=5, window={"last_n": 75})}
     ).long.operand.segment
     assert top.top == 5 and top.span is None and top.eligibility is None
+    share = _parse(
+        {
+            "segment": _segment(
+                value="change",
+                aggregate="top_abs_share",
+                top=5,
+                window={"last_n": 75},
+                eligibility={"pullback_min_bars": 20},
+            )
+        }
+    ).long.operand.segment
+    assert share.aggregate == "top_abs_share" and share.eligibility == Eligibility(
+        None, None, False, 20
+    )
 
 
 @pytest.mark.parametrize(
@@ -65,6 +79,9 @@ def test_new_fields_parse() -> None:
         {"value": "change_over", "span": 3, "aggregate": "mean_per_bar"},
         {"value": "change", "aggregate": "top_abs_sum", "window": {"last_n": 75}},  # top missing
         {"value": "change", "aggregate": "top_abs_sum", "top": 5},  # last_n missing
+        {"value": "change", "aggregate": "top_abs_share", "window": {"last_n": 75}},  # top missing
+        {"value": "change", "aggregate": "top_abs_share", "top": 5},  # last_n missing
+        {"value": "change", "aggregate": "abs_sum", "eligibility": {"pullback_min_bars": 0}},
         {"value": "change", "aggregate": "top_abs_sum", "top": 0, "window": {"last_n": 5}},
         {"value": "change", "aggregate": "abs_sum", "top": 5},
         {"value": "change", "aggregate": "abs_sum", "eligibility": {"unknown": 1}},
@@ -145,9 +162,19 @@ def _legs(episode: Any, t: int) -> tuple[int, int, int] | None:
 
 
 def _research(
-    episode: Any, line: np.ndarray, *, window: int, short: int, k: int, top: int
+    episode: Any,
+    line: np.ndarray,
+    *,
+    window: int,
+    short: int,
+    k: int,
+    top: int,
+    accel_min: int = 0,
+    conc_min: int = 0,
 ) -> dict[str, np.ndarray]:
-    """a2_ideas_peek.py lines 10-20 on a side-signed `line`."""
+    """a2_ideas_peek.py lines 10-20 on a side-signed `line`, with the revision 4
+    rules: A2.1 needs a pullback of `accel_min` bars, A2.3 is the top share
+    normalized by the window length and needs `conc_min` bars."""
 
     d = np.diff(line, prepend=np.nan)
     out = {name: np.full(len(line), np.nan) for name in ("accel", "peak", "conc", "guard")}
@@ -160,13 +187,14 @@ def _research(
         pullback = np.arange(peak, t + 1)
         if len(impulse) < 3 or len(pullback) < 3:
             continue
+        pullback_bars = len(pullback)
         impulse, pullback = impulse[-window:], pullback[-window:]
         di, dr = d[impulse], d[pullback]
         if np.isnan(di).any() or np.isnan(dr).any() or di.sum() <= 0:
             continue
         out["guard"][t] = 1.0
         nr = -dr.sum() / len(dr)
-        if nr > 0:
+        if nr > 0 and pullback_bars >= accel_min:
             out["accel"][t] = (-dr[-short:].sum() / len(dr[-short:])) / nr
         pi = np.convolve(di, np.ones(k), "valid").max()
         pr = (-np.convolve(dr, np.ones(k), "valid")).max()
@@ -174,23 +202,31 @@ def _research(
             out["peak"][t] = pr / pi
         a = np.abs(dr)
         total = a.sum()
-        if total > 0:
-            out["conc"][t] = np.sort(a)[-top:].sum() / total
+        bars = len(a)
+        if total > 0 and bars > top and pullback_bars >= conc_min:
+            floor = top / bars
+            out["conc"][t] = (np.sort(a)[-top:].sum() / total - floor) / (1 - floor)
     return out
 
 
 ELIGIBILITY = lambda window: Eligibility(3, window, True)  # noqa: E731
 
 
-def _blocks(window: int, short: int, k: int, top: int) -> dict[str, tuple[Segment, Segment]]:
-    def seg(**fields: Any) -> Segment:
-        return _segment_args(eligibility=ELIGIBILITY(window), **fields)
+def _blocks(
+    window: int, short: int, k: int, top: int, accel_min: int = 0, conc_min: int = 0
+) -> dict[str, tuple[Segment, Segment | None]]:
+    """Branch -> (numerator, denominator); the normalized concentration is one
+    segment, so its denominator is None."""
+
+    def seg(minimum: int = 0, **fields: Any) -> Segment:
+        eligibility = Eligibility(3, window, True, minimum or None)
+        return _segment_args(eligibility=eligibility, **fields)
 
     pull = {"start": "peak", "end": "current", "last_n": window}
     return {
         "accel": (
-            seg(start="peak", end="current", value="change", last_n=short, negate=True),
-            seg(start="peak", end="current", value="change", last_n=window, negate=True),
+            seg(accel_min, start="peak", end="current", value="change", last_n=short, negate=True),
+            seg(accel_min, start="peak", end="current", value="change", last_n=window, negate=True),
         ),
         "peak": (
             seg(**pull, value="change_over", span=k, aggregate="min", negate=True),
@@ -204,10 +240,20 @@ def _blocks(window: int, short: int, k: int, top: int) -> dict[str, tuple[Segmen
             ),
         ),
         "conc": (
-            seg(**pull, value="change", aggregate="top_abs_sum", top=top),
-            seg(**pull, value="change", aggregate="abs_sum"),
+            seg(conc_min, **pull, value="change", aggregate="top_abs_share", top=top),
+            None,
         ),
     }
+
+
+def _branch_value(
+    episode: Any, line: np.ndarray, pair: tuple[Segment, Segment | None]
+) -> np.ndarray:
+    numerator, denominator = pair
+    value = segment_values(episode, line, numerator)
+    if denominator is None:
+        return value
+    return _ratio(value, segment_values(episode, line, denominator))
 
 
 def _ratio(left: np.ndarray, right: np.ndarray) -> np.ndarray:
@@ -225,11 +271,11 @@ def test_branches_match_the_research_loop(
     episode, size = _episode(seed)
     rng = np.random.default_rng(100 + seed)
     line = np.cumsum(rng.normal(0.2, 1.0, size))
-    expected = _research(episode, line, window=window, short=short, k=k, top=top)
-    for name, (numerator, denominator) in _blocks(window, short, k, top).items():
-        value = _ratio(
-            segment_values(episode, line, numerator), segment_values(episode, line, denominator)
-        )
+    expected = _research(
+        episode, line, window=window, short=short, k=k, top=top, accel_min=3, conc_min=3
+    )
+    for name, pair in _blocks(window, short, k, top, 3, 3).items():
+        value = _branch_value(episode, line, pair)
         np.testing.assert_allclose(
             value, expected[name], rtol=1e-9, atol=1e-12, equal_nan=True, err_msg=name
         )
@@ -261,8 +307,10 @@ def test_eligibility_is_shared_by_every_branch_and_blocks_short_legs() -> None:
     line = np.cumsum(np.random.default_rng(11).normal(0.2, 1.0, size))
     expected = _research(episode, line, window=75, short=12, k=3, top=5)
     guard = np.isfinite(expected["guard"])
-    for numerator, denominator in _blocks(75, 12, 3, 5).values():
-        for segment in (numerator, denominator):
+    for pair in _blocks(75, 12, 3, 5).values():
+        for segment in pair:
+            if segment is None:
+                continue
             got = segment_values(episode, line, segment)
             assert not np.isfinite(got[~guard]).any()
 
@@ -272,10 +320,8 @@ def test_a_non_finite_change_in_either_window_blanks_every_branch() -> None:
     line = np.cumsum(np.random.default_rng(13).normal(0.2, 1.0, size))
     line[10] = np.nan
     expected = _research(episode, line, window=75, short=12, k=3, top=5)
-    for name, (numerator, denominator) in _blocks(75, 12, 3, 5).items():
-        value = _ratio(
-            segment_values(episode, line, numerator), segment_values(episode, line, denominator)
-        )
+    for name, pair in _blocks(75, 12, 3, 5).items():
+        value = _branch_value(episode, line, pair)
         np.testing.assert_allclose(value, expected[name], equal_nan=True, atol=1e-12)
 
 
@@ -283,12 +329,13 @@ def test_branches_use_only_bars_up_to_the_evaluated_bar() -> None:
     episode, size = _episode(5)
     rng = np.random.default_rng(17)
     line = np.cumsum(rng.normal(0.2, 1.0, size))
-    for _, (numerator, denominator) in _blocks(75, 12, 3, 5).items():
-        full = [segment_values(episode, line, s) for s in (numerator, denominator)]
+    for pair in _blocks(75, 12, 3, 5).values():
+        segments = [s for s in pair if s is not None]
+        full = [segment_values(episode, line, s) for s in segments]
         for cut in (20, 40):
             changed_line = line.copy()
             changed_line[cut + 1 :] = rng.normal(0, 100, len(line) - cut - 1)
-            for before, segment in zip(full, (numerator, denominator), strict=True):
+            for before, segment in zip(full, segments, strict=True):
                 after = segment_values(episode, changed_line, segment)
                 np.testing.assert_array_equal(before[: cut + 1], after[: cut + 1])
 
@@ -329,3 +376,50 @@ def test_new_fields_enter_the_identity_only_when_set() -> None:
     )
     assert "eligibility" in dict(with_eligibility.params)
     assert len({base, with_top, with_eligibility}) == 3
+
+
+def _pullback_bars(episode: Any, t: int) -> int | None:
+    legs = _legs(episode, t)
+    return None if legs is None else t - legs[1] + 1
+
+
+def test_revision_4_minimum_pullback_bars_at_the_boundaries() -> None:
+    """A2.1 is missing below 24 pullback bars and A2.3 below 20, with the
+    window at 75; the bar counts 23/24 and 19/20 each fall on a side."""
+
+    seen: dict[str, set[int]] = {"accel": set(), "conc": set()}
+    for seed in range(40):
+        episode, size = _episode(seed, cycles=12, longest=45)
+        line = np.cumsum(np.random.default_rng(seed).normal(0.3, 1.0, size))
+        blocks = _blocks(75, 12, 3, 5, accel_min=24, conc_min=20)
+        expected = _research(
+            episode, line, window=75, short=12, k=3, top=5, accel_min=24, conc_min=20
+        )
+        for name, minimum in (("accel", 24), ("conc", 20)):
+            value = _branch_value(episode, line, blocks[name])
+            np.testing.assert_allclose(
+                value, expected[name], rtol=1e-9, atol=1e-12, equal_nan=True, err_msg=name
+            )
+            for t in range(size):
+                bars = _pullback_bars(episode, t)
+                if bars is None:
+                    continue
+                if bars < minimum:
+                    assert np.isnan(value[t])
+                elif np.isfinite(expected[name][t]):
+                    seen[name].add(bars)
+    assert min(seen["accel"]) >= 24 and min(seen["conc"]) >= 20
+
+
+def test_normalized_concentration_is_zero_for_even_and_one_for_a_single_jerk() -> None:
+    episode, size = _episode(2, cycles=6, longest=40)
+    pull = {"start": "peak", "end": "current", "value": "change", "last_n": 75}
+    even = np.linspace(0.0, 1.0, size)
+    share = _segment_args(aggregate="top_abs_share", top=5, **pull)
+    got = segment_values(episode, even, share)
+    assert np.isfinite(got).any()
+    np.testing.assert_allclose(got[np.isfinite(got)], 0.0, atol=1e-9)
+    jerk = np.zeros(size)
+    jerk[8:] = 1.0
+    got = segment_values(episode, jerk, share)
+    assert not (got[np.isfinite(got)] > 1 + 1e-9).any()

@@ -71,6 +71,7 @@ class Eligibility:
     legs_min_bars: int | None = None
     window: int | None = None
     impulse_positive: bool = False
+    pullback_min_bars: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,17 +274,26 @@ def _feature(raw: object, path: str) -> PlannedFeature:
 
 _OPERAND_KEYS = "feature, episode, segment, ratio, price or const"
 _SEGMENT_FIELDS = {
-    "episode", "of", "from", "to", "aggregate", "value", "window", "negate",
-    "span", "top", "eligibility",
+    "episode",
+    "of",
+    "from",
+    "to",
+    "aggregate",
+    "value",
+    "window",
+    "negate",
+    "span",
+    "top",
+    "eligibility",
 }
 _SEGMENT_REQUIRED = ("episode", "of", "from", "to", "aggregate")
 _SEGMENT_SPANS = frozenset({("origin", "peak"), ("peak", "current"), ("origin", "current")})
 _SEGMENT_AGGREGATES = frozenset(
-    {"sum", "mean_per_bar", "max", "min", "abs_sum", "top_abs_sum"}
+    {"sum", "mean_per_bar", "max", "min", "abs_sum", "top_abs_sum", "top_abs_share"}
 )
 _SEGMENT_VALUES = frozenset({"level", "change", "change_over"})
-_SEGMENT_CHANGE_AGGREGATES = frozenset({"max", "min", "abs_sum", "top_abs_sum"})
-_ELIGIBILITY_FIELDS = {"legs_min_bars", "window", "impulse_positive"}
+_SEGMENT_CHANGE_AGGREGATES = frozenset({"max", "min", "abs_sum", "top_abs_sum", "top_abs_share"})
+_ELIGIBILITY_FIELDS = {"legs_min_bars", "window", "impulse_positive", "pullback_min_bars"}
 
 
 def _positive_int(raw: object, path: str) -> int:
@@ -296,6 +306,7 @@ def _eligibility(raw: object, path: str) -> Eligibility:
     payload = _mapping(raw, path)
     _only_fields(payload, _ELIGIBILITY_FIELDS, path)
     legs = payload.get("legs_min_bars")
+    pullback_min = payload.get("pullback_min_bars")
     window = payload.get("window")
     positive = payload.get("impulse_positive", False)
     if not isinstance(positive, bool):
@@ -306,6 +317,7 @@ def _eligibility(raw: object, path: str) -> Eligibility:
         None if legs is None else _positive_int(legs, f"{path}.legs_min_bars"),
         None if window is None else _positive_int(window, f"{path}.window"),
         positive,
+        None if pullback_min is None else _positive_int(pullback_min, f"{path}.pullback_min_bars"),
     )
 
 
@@ -349,9 +361,7 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
         )
     value = payload.get("value", "level")
     if value not in _SEGMENT_VALUES:
-        raise InvalidRequestError(
-            f"{path}.value must be level, change or change_over", value=value
-        )
+        raise InvalidRequestError(f"{path}.value must be level, change or change_over", value=value)
     span: int | None = None
     if value == "change_over":
         if "span" not in payload:
@@ -364,15 +374,15 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
     if value == "change_over" and aggregate in ("sum", "mean_per_bar"):
         raise InvalidRequestError(f"{path}.{aggregate} is not defined for change_over")
     top: int | None = None
-    if aggregate == "top_abs_sum":
+    if aggregate in ("top_abs_sum", "top_abs_share"):
         if "top" not in payload:
-            raise InvalidRequestError(f"{path}.top is required with top_abs_sum")
+            raise InvalidRequestError(f"{path}.top is required with {aggregate}")
         top = _positive_int(payload["top"], f"{path}.top")
         window_payload = payload.get("window")
         if window_payload is None:
-            raise InvalidRequestError(f"{path}.window.last_n is required with top_abs_sum")
+            raise InvalidRequestError(f"{path}.window.last_n is required with {aggregate}")
     elif "top" in payload:
-        raise InvalidRequestError(f"{path}.top is only allowed with top_abs_sum")
+        raise InvalidRequestError(f"{path}.top is only allowed with top_abs_sum or top_abs_share")
     last_n: int | None = None
     window = payload.get("window")
     if window is not None:
@@ -414,7 +424,6 @@ def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio
     return Ratio(left, right)
 
 
-
 def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Operand:
     payload = _mapping(raw, path)
     if len(payload) != 1:
@@ -437,9 +446,7 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
     raise InvalidRequestError(f"{path} must carry exactly one of {_OPERAND_KEYS}")
 
 
-def _compare(
-    payload: Mapping[str, Any], path: str, episode_refs: frozenset[str] | None
-) -> Compare:
+def _compare(payload: Mapping[str, Any], path: str, episode_refs: frozenset[str] | None) -> Compare:
     op = payload.get("op")
     if op not in _COMPARE_OPS:
         raise InvalidRequestError(f"{path}.op must be one of >, >=, <, <=", op=op)
@@ -450,9 +457,7 @@ def _compare(
     return Compare(left, str(op), right)
 
 
-def _change(
-    payload: Mapping[str, Any], path: str, episode_refs: frozenset[str] | None
-) -> Change:
+def _change(payload: Mapping[str, Any], path: str, episode_refs: frozenset[str] | None) -> Change:
     operand = _operand(payload.get("operand"), f"{path}.operand", episode_refs)
     if operand.feature is None:
         raise InvalidRequestError(f"{path}.operand must be a feature reference")
@@ -476,9 +481,7 @@ def _optional_bound(payload: Mapping[str, Any], key: str, path: str) -> float | 
     return None if value is None else _number(value, f"{path}.{key}")
 
 
-def _range(
-    payload: Mapping[str, Any], path: str, episode_refs: frozenset[str] | None
-) -> Range:
+def _range(payload: Mapping[str, Any], path: str, episode_refs: frozenset[str] | None) -> Range:
     operand = _operand(payload.get("operand"), f"{path}.operand", episode_refs)
     if operand.const is not None:
         raise InvalidRequestError(f"{path}.operand must be a feature, an episode or a price")
@@ -606,9 +609,7 @@ def parse_predicate(
     fields, overridable = _CLASS_FIELDS[kind]
     _only_fields(payload, {"kind", "short", *fields}, path)
     refs = frozenset(episode_refs) if episode_refs is not None else None
-    parsers: dict[
-        str, Callable[[Mapping[str, Any], str, frozenset[str] | None], Condition]
-    ] = {
+    parsers: dict[str, Callable[[Mapping[str, Any], str, frozenset[str] | None], Condition]] = {
         "compare": _compare,
         "range": _range,
         "change": _change,
@@ -839,6 +840,8 @@ def _eligible(
     o = np.where(ok, origin, 0).astype(np.int64)
     p = np.where(ok, peak, 0).astype(np.int64)
     t = np.where(ok, current, 0).astype(np.int64)
+    if eligibility.pullback_min_bars is not None:
+        ok &= t - p + 1 >= eligibility.pullback_min_bars
     if eligibility.legs_min_bars is not None:
         ok &= (p - o + 1 >= eligibility.legs_min_bars) & (t - p + 1 >= eligibility.legs_min_bars)
     window = eligibility.window
@@ -886,13 +889,37 @@ def _change_aggregate(
     if segment.aggregate in ("max", "min"):
         result[rows] = _window_extreme(changes, low, high, segment.aggregate == "max")
     elif segment.aggregate == "abs_sum":
-        cumulative = np.zeros(size + 1)
-        np.cumsum(np.abs(changes), out=cumulative[1:])
-        result[rows] = cumulative[high + 1] - cumulative[low]
+        result[rows] = _abs_sum(changes, low, high)
     else:
         assert segment.top is not None and segment.last_n is not None
-        result[rows] = _window_top_sum(np.abs(changes), low, high, segment.top, segment.last_n)
+        top_sum = _window_top_sum(np.abs(changes), low, high, segment.top, segment.last_n)
+        if segment.aggregate == "top_abs_sum":
+            result[rows] = top_sum
+        else:
+            result[rows] = _normalized_share(
+                top_sum, _abs_sum(changes, low, high), high - low + 1, segment.top
+            )
     return result
+
+
+def _abs_sum(changes: np.ndarray, low: np.ndarray, high: np.ndarray) -> np.ndarray:
+    cumulative = np.zeros(len(changes) + 1)
+    np.cumsum(np.abs(changes), out=cumulative[1:])
+    return np.asarray(cumulative[high + 1] - cumulative[low])
+
+
+def _normalized_share(
+    top_sum: np.ndarray, total: np.ndarray, bars: np.ndarray, top: int
+) -> np.ndarray:
+    """`(share - top/N) / (1 - top/N)` of the top-`top` share of the absolute
+    changes over `N` window bars: 0 for an even window, 1 for one made by `top`
+    bars. Missing for a zero total or `N <= top` (`a2-shape-aggregates-v1`, D3)."""
+
+    floor = top / bars
+    with np.errstate(invalid="ignore", divide="ignore"):
+        share = top_sum / total
+        value = (share - floor) / (1.0 - floor)
+    return np.where((total > 0) & (bars > top), value, math.nan)
 
 
 def _window_extreme(
@@ -1039,8 +1066,11 @@ def _state_mask(
     from strategy_engine.strategies.ema_pullback.context_consumption import resolve_htf_regime
 
     output = next(
-        (item for item in (bundle.outputs if bundle else ()) if item.context_ref
-         == predicate.context_ref),
+        (
+            item
+            for item in (bundle.outputs if bundle else ())
+            if item.context_ref == predicate.context_ref
+        ),
         None,
     )
     if output is None:
@@ -1048,8 +1078,11 @@ def _state_mask(
             "state predicate context is not evaluated", context_ref=predicate.context_ref
         )
     mask = np.zeros(len(frame.time_ms), dtype=bool)
-    for raw_state, raw_mask in (("up", output.up), ("down", output.down),
-                                ("neutral", output.neutral)):
+    for raw_state, raw_mask in (
+        ("up", output.up),
+        ("down", output.down),
+        ("neutral", output.neutral),
+    ):
         if resolve_htf_regime(raw_state, side) in predicate.regimes:
             mask |= np.asarray(raw_mask, dtype=bool)
     mask.flags.writeable = False
@@ -1081,9 +1114,7 @@ def _evaluate(
     bundle: ContextBundle | None,
 ) -> np.ndarray:
     if isinstance(predicate, Predicate):
-        return _evaluate_condition(
-            predicate.for_side(side), frame, context, identity, side, bundle
-        )
+        return _evaluate_condition(predicate.for_side(side), frame, context, identity, side, bundle)
     if isinstance(predicate, StatePredicate):
         return _state_mask(predicate, frame, side, bundle)
     inner = evaluate_predicate(
@@ -1334,6 +1365,7 @@ def _resolve_operand(
                 eligibility.legs_min_bars,
                 eligibility.window,
                 eligibility.impulse_positive,
+                eligibility.pullback_min_bars,
             )
         node = node_spec(
             "predicate.segment",
