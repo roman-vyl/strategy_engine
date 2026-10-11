@@ -43,5 +43,5 @@
 
 ## 5. Gate
 
-- [ ] 5.1 ruff, mypy, the full suite without `tests/parity`.
-- [ ] 5.2 `openspec validate a2-shape-aggregates-v1 --strict`.
+- [x] 5.1 ruff, mypy, the full suite without `tests/parity`.
+- [x] 5.2 `openspec validate a2-shape-aggregates-v1 --strict`.
