@@ -45,11 +45,11 @@
 
 ## 5. Acceptance on the owner's data (Mac stack, separate session)
 
-- [ ] 5.1 A1 per EMA500 entry equals `a1s_engine_ref_btc.csv.gz` (2185 entries, 2016 with a value) and
+- [x] 5.1 A1 per EMA500 entry equals `a1s_engine_ref_btc.csv.gz` (2185 entries, 2016 with a value) and
       `a1s_engine_ref_eth.csv.gz` (1970, 1811) to 1e-9; `S*` and `P` match; NaN equals NaN.
-- [ ] 5.2 Block counts: BTC `(0.9, null)` 1079, `(0.9, 10)` 1179, `(null, 10)` 100; ETH `(1.2, null)` 1114;
+- [x] 5.2 Block counts: BTC `(0.9, null)` 1079, `(0.9, 10)` 1179, `(null, 10)` 100; ETH `(1.2, null)` 1114;
       `(null, null)` 0.
-- [ ] 5.3 One Engine run of BTC EMA500, W7, lookback 130, SL 7, TP 5.5, band `(0.9, 10)` equals the replay: 205 trades, win
+- [x] 5.3 One Engine run of BTC EMA500, W7, lookback 130, SL 7, TP 5.5, band `(0.9, 10)` equals the replay: 205 trades, win
       rate 23.41%, net $37,498.35.
 
 ## 6. Gate
