@@ -30,15 +30,15 @@
 
 ## 4. Parity with the research reference (owner's Mac, separate session, after the owner's word)
 
-- [ ] 4.0 Before the comparison: confirm that the revision 4 csv export `a2v2_engine_ref_{btc,eth}.csv.gz` equals what the research code computes (`a2_ideas_*.npz` is revision 3, not valid for parity) and that the research leg windows (`MT.window`) are inclusive at both ends.
-- [ ] 4.1 Coins: BTC 2185 and ETH 1970 EMA500 entries from `a2v2_engine_ref_*` (non-missing BTC 1673/2009/1865, ETH 1518/1809/1685), per branch: values to 1e-9, NaN equal, `S*` and `P` equal.
-- [ ] 4.2 Both sides checked separately; every situation label in the export (short legs, NaN and zero cases, ties, later
+- [x] 4.0 Before the comparison: confirm that the revision 4 csv export `a2v2_engine_ref_{btc,eth}.csv.gz` equals what the research code computes (`a2_ideas_*.npz` is revision 3, not valid for parity) and that the research leg windows (`MT.window`) are inclusive at both ends.
+- [x] 4.1 Coins: BTC 2185 and ETH 1970 EMA500 entries from `a2v2_engine_ref_*` (non-missing BTC 1673/2009/1865, ETH 1518/1809/1685), per branch: values to 1e-9, NaN equal, `S*` and `P` equal.
+- [x] 4.2 Both sides checked separately; every situation label in the export (short legs, NaN and zero cases, ties, later
       touches, thresholds exactly at a bound); situations without a real entry through synthetic series from the same
       reference code.
-- [ ] 4.3 Block counts per branch on the 8 thresholds per coin of `a2v2_parity_*.json`; bound mode reproduces the research counts.
-- [ ] 4.4 Full runs to the cent on a separate local Engine built from this branch (the deployed Engine has no A2; trades are simulated by research code from the Engine entries, as for A1): the 8 single-branch control cells of `a2v2_parity_{btc,eth}.json` (source of truth), and one run with all bounds null equal to the run with no filter.
-- [ ] 4.5 Backward compatibility: A1 configs and existing range and segment configs identical.
-- [ ] 4.6 Report: parity table case × branch (rows compared, max |diff|, NaN mismatches, block-count diffs, full-run diffs),
+- [x] 4.3 Block counts per branch on the 8 thresholds per coin of `a2v2_parity_*.json`; bound mode reproduces the research counts.
+- [x] 4.4 Full runs to the cent on a separate local Engine built from this branch (the deployed Engine has no A2; trades are simulated by research code from the Engine entries, as for A1): the 8 single-branch control cells of `a2v2_parity_{btc,eth}.json` (source of truth), and one run with all bounds null equal to the run with no filter.
+- [x] 4.5 Backward compatibility: A1 configs and existing range and segment configs identical.
+- [x] 4.6 Report: parity table case × branch (rows compared, max |diff|, NaN mismatches, block-count diffs, full-run diffs),
       wire format of the new fields; stop for the owner's review.
 
 ## 5. Gate
