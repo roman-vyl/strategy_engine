@@ -36,7 +36,7 @@
       touches, thresholds exactly at a bound); situations without a real entry through synthetic series from the same
       reference code.
 - [ ] 4.3 Block counts per branch on the 8 thresholds per coin of `a2v2_parity_*.json`; bound mode reproduces the research counts.
-- [ ] 4.4 Full runs by a standard research-service batch run against the deployed Engine, to the cent: the 8 single-branch control cells of `a2v2_parity_{btc,eth}.json` (source of truth), and one run with all bounds null equal to the run with no filter.
+- [ ] 4.4 Full runs to the cent on a separate local Engine built from this branch (the deployed Engine has no A2; trades are simulated by research code from the Engine entries, as for A1): the 8 single-branch control cells of `a2v2_parity_{btc,eth}.json` (source of truth), and one run with all bounds null equal to the run with no filter.
 - [ ] 4.5 Backward compatibility: A1 configs and existing range and segment configs identical.
 - [ ] 4.6 Report: parity table case × branch (rows compared, max |diff|, NaN mismatches, block-count diffs, full-run diffs),
       wire format of the new fields; stop for the owner's review.
