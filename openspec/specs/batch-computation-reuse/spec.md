@@ -3,7 +3,9 @@
 ## Purpose
 
 Defines the semantic node identity contract and batch-scoped evaluation context that let the Strategy Engine reuse a computation across candidates whenever, and only whenever, it is semantically identical, while guaranteeing one evaluation path (used by single-spec and batch alike) and bit-exact parity of Strategy Engine outputs with the current per-candidate evaluator.
+
 ## Requirements
+
 ### Requirement: Single evaluation path for single-spec and batch
 The system SHALL use exactly one evaluation context implementation and one shared range-input representation for both single-spec range evaluation and range-batch evaluation. A single-spec evaluation SHALL be modeled as an evaluation context with exactly one root; a range-batch evaluation SHALL be modeled as an evaluation context with N roots. The final architecture SHALL NOT contain a permanent, separate preparation or evaluation path for single-spec evaluation; single-spec evaluation is the same mechanism specialized to one root, not a parallel implementation. The system SHALL NOT contain logic that selects a different evaluation path, or a different code branch producing observably different intermediate computations, based on which strategy-spec field(s) vary across the candidates in a batch.
 
@@ -99,8 +101,8 @@ The system SHALL continue to stream range-batch results as NDJSON with one line 
 
 ### Requirement: Identity twins for predicates and composites
 
-Every predicate, predicate column array and composite local node SHALL have a resolve twin that yields its `NodeSpec` without
-computing it.
+Every predicate, predicate column array, derived operand and composite local node SHALL have a resolve twin that yields its
+`NodeSpec` without computing it.
 
 - Labels (`instance_id`, `child_id`, `path_id`) SHALL NOT enter any
   identity.
@@ -109,6 +111,12 @@ computing it.
   carries `op`, `value` and `lookback` and whose upstream is the
   column node of its operand. It SHALL carry a side only when it has
   a `short` override.
+- A segment operand SHALL have its own node family whose identity carries `from`, `to`, `value`, `window`, `aggregate` and `negate`, whose
+  upstream is the episode node of the evaluated side and the column node of its series, and which carries the side.
+- A ratio operand SHALL have its own node family whose identity carries its sides and whose upstream is the nodes of its
+  non-constant sides; it SHALL carry a side when any side does.
+- A `range` predicate's identity SHALL carry `bounds` and `empty` only when they differ from their defaults, so the
+  identity of every range written before this change is unchanged.
 
 A successful memoized evaluation of any spec containing
 `composite_setup` SHALL end with zero `unforeseen_consumptions`.
@@ -126,6 +134,11 @@ A successful memoized evaluation of any spec containing
 
 - **WHEN** a batch contains candidates that differ only in the `value` of one `change` predicate
 - **THEN** the operand's feature column and its column array SHALL each be computed once per batch.
+
+#### Scenario: Band candidates differing in the bounds
+
+- **WHEN** a batch contains candidates that differ only in `min` or `max` of one range over a ratio of two segments
+- **THEN** the EMA columns, both segments and the ratio SHALL each be computed once per batch per side.
 
 ### Requirement: No compute regression for existing specs
 
@@ -332,3 +345,12 @@ For specs without `ema_stack_episode`, evaluation outputs, memoized compute coun
 - **WHEN** the existing memo compute-count, identity and plan-hash tests run after this change
 - **THEN** outputs, compute counts, identities and plan hashes SHALL match their pre-change values exactly.
 
+### Requirement: No compute regression without segment or ratio operands
+
+For specs that use no segment, no ratio and no new range field, evaluation outputs, node identities and
+memoized compute counts per node family SHALL be identical to the evaluation before this change.
+
+#### Scenario: Existing parity corpus
+
+- **WHEN** the existing memo compute-count and node-identity tests run after this change
+- **THEN** they SHALL pass unchanged.

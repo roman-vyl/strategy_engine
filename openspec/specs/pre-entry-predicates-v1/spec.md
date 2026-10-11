@@ -4,7 +4,9 @@
 An internal boolean layer turns canonical Strategy Engine features and
 context into pre-entry conditions on the base timeline. The layer
 computes no indicator and performs no alignment of its own.
+
 ## Requirements
+
 ### Requirement: Predicate is an internal layer, not a strategy role
 
 `PreEntryPredicate` SHALL be an internal evaluation contract. It SHALL
@@ -77,12 +79,13 @@ The layer SHALL support exactly the following classes:
 
 - `compare {left, op, right}` with `op` in `>`, `>=`, `<`, `<=`.
   - Each operand SHALL be a feature reference, an episode reference,
-    a base-bar price (`open`, `high`, `low`, `close`), or a numeric
-    constant.
+    a segment reference, a ratio, a base-bar price (`open`, `high`,
+    `low`, `close`), or a numeric constant.
   - At least one operand SHALL be non-constant.
-- `range {operand, min, max}` with inclusive bounds and `min <= max`.
-  The operand SHALL be a feature reference, an episode reference or a
-  base-bar price.
+- `range {operand, min, max, bounds?, empty?}` as defined in the
+  requirements "Range bounds" and "Range empty policy". The operand SHALL be a
+  feature reference, an episode reference, a segment reference, a
+  ratio or a base-bar price.
 - `change {operand, lookback, op, value}` with `op` in `>`, `>=`, `<`,
   `<=`, a positive integer `lookback`, and a finite numeric `value`.
   The operand SHALL be a feature reference.
@@ -122,12 +125,15 @@ The value SHALL be read from the episode projection of the evaluated
 side. A missing value (no active episode, a censored episode, an entity
 not reached yet, or an index out of range) SHALL be non-finite.
 
+A segment reference and a ratio SHALL be defined by the requirements
+"Segment source fields", "Segment aggregation fields", "Segment points", "Segment window", "Segment value" and "Ratio operand".
+
 Any other class, operator or operand SHALL be rejected. In particular
 the layer SHALL reject:
 
 - negation;
 - equality on numeric values;
-- arithmetic expressions.
+- arithmetic expressions other than the single `ratio` operand.
 
 #### Scenario: Feature versus constant
 
@@ -148,6 +154,13 @@ the layer SHALL reject:
   and `max` 65
 - **THEN** it SHALL be True exactly where the value is finite and
   40 ≤ value ≤ 65.
+
+#### Scenario: Range with a no-control side
+
+- **WHEN** the predicate is `range` over a ratio with `min` 0.32, `max`
+  null, `bounds` exclusive and `empty` pass
+- **THEN** it SHALL be False exactly where the ratio is finite and at
+  most 0.32, and True everywhere else.
 
 #### Scenario: Context state
 
@@ -204,7 +217,8 @@ Temporal windows SHALL count base bars.
 A predicate SHALL evaluate identically for long and short unless it
 declares an explicit `short` override. The override is allowed on
 `compare`, `range` and `change` only, and replaces the listed fields
-for the short side. On `change` the override MAY replace `op` and
+for the short side. On `range` the override MAY replace `min`, `max`,
+`bounds` and `empty`; it SHALL NOT replace `operand`. On `change` the override MAY replace `op` and
 `value` only; it SHALL NOT replace `operand` or `lookback`.
 
 The layer SHALL NOT invert any predicate automatically for the short
@@ -216,10 +230,14 @@ and `neutral` are the semantics of the existing HTF regime
 resolution.
 
 An episode reference SHALL be read from the episode of the evaluated
-side, because an EMA stack episode exists per side. This SHALL NOT be
-treated as automatic inversion. A `short` override SHALL NOT replace an
-operand with an episode reference, and an override of an episode
-predicate SHALL replace only `op`, `right` constants, `min` or `max` as
+side, because an EMA stack episode exists per side. A segment reference
+SHALL read the points of the evaluated side's episode and SHALL negate
+its series on the short side, so that "with the trade" and "against the
+trade" keep their meaning; a ratio inherits the side behaviour of its
+operands. This SHALL NOT be treated as automatic inversion: no operand
+is swapped and no operator is changed. A `short` override SHALL NOT replace an
+operand with an episode reference, a segment reference or a ratio, and
+an override of a predicate with such an operand SHALL replace only `op`, `right` constants, `min` or `max` as
 for any other predicate.
 
 #### Scenario: Short override
@@ -273,10 +291,18 @@ for any other predicate.
 - **WHEN** the operand of a `change` predicate is an episode reference
 - **THEN** static validation SHALL reject the spec.
 
+#### Scenario: Segment on the short side
+
+- **WHEN** a segment over the series `x` with `value` level and `aggregate` sum is evaluated for the short side
+- **THEN** it SHALL aggregate `−x` over the segment of the short side's episode.
+
 ### Requirement: Non-finite values are not satisfied
 
 On any bar where an operand of `compare`, `range` or `change` is
-missing or non-finite, the predicate SHALL be False.
+missing or non-finite, the predicate SHALL be False. The only exception
+is a `range` that declares `empty: pass`, which SHALL be True on such a
+bar. There is no negation, so no other predicate can become True on a
+missing operand.
 
 #### Scenario: Indicator warm-up
 
@@ -289,6 +315,13 @@ missing or non-finite, the predicate SHALL be False.
 - **WHEN** the operand of a `change` predicate is missing or non-finite at the second point, including the first
   `lookback` bars of the operand's timeframe in the frame
 - **THEN** the predicate SHALL be False on that bar.
+
+#### Scenario: Empty pass
+
+- **WHEN** a `range` with `empty: pass` reads a segment that is missing
+  on a bar because the episode has no current touch
+- **THEN** the predicate SHALL be True on that bar
+- **AND** the same range with the default `empty` SHALL be False.
 
 ### Requirement: Determinism
 
@@ -418,3 +451,140 @@ bar and `lookback` counts bars of that timeframe. For a base-timeframe operand t
 - **WHEN** `held_for 4` wraps a `change` predicate
 - **THEN** it SHALL be True at bar i iff the change predicate is True on bars i−3 to i.
 
+### Requirement: Segment operand shape
+
+A segment reference SHALL be `{"segment": {"episode", "of", "from", "to", "aggregate", "value"?, "window"?, "negate"?}}`;
+`episode`, `of`, `from`, `to` and `aggregate` are required and no other field is allowed. Their values are defined by the
+requirements "Segment source fields" and "Segment aggregation fields".
+
+#### Scenario: Malformed segment
+
+- **WHEN** a segment names an undeclared episode, an unknown kind, a pair such as `current → peak`, an unknown `aggregate`,
+  `value` or `window`, a non-positive `last_n`, a missing required field, or an unknown field such as `select`
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Segment source fields
+
+`episode` SHALL name an episode declared in `raw_spec.ema_stack_episode`. `of` SHALL be a feature reference resolved by the
+canonical feature-kind contract, or `{"difference": {"left", "right"}}` of two such references (the series `left − right`),
+every feature on the base timeframe. `from` → `to` SHALL be `origin → peak`, `peak → current` or `origin → current`.
+
+#### Scenario: Higher-timeframe series
+
+- **WHEN** a feature of `of` is on a timeframe other than the base timeframe
+- **THEN** evaluation SHALL fail closed.
+
+#### Scenario: Difference of two EMAs
+
+- **WHEN** `of` is the difference of `ema` (period 5) and `ema` (period 500)
+- **THEN** the series SHALL equal EMA5 − EMA500 on every bar where both are finite, and be non-finite elsewhere.
+
+### Requirement: Segment aggregation fields
+
+`aggregate` SHALL be `sum` or `mean_per_bar`. `value` SHALL be `level` (default) or `change`. `window` SHALL be `null`
+(default, the whole leg) or `{"last_n": N}` with `N` a positive integer. `negate` SHALL be a boolean, default `false`.
+
+#### Scenario: Invalid aggregation field
+
+- **WHEN** `aggregate`, `value` or `window` has another value, or `last_n` is not a positive integer
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Segment points
+
+On base bar `t`, for the evaluated side, the points SHALL come from the current touch `m = touch_number[t]` of the episode:
+`origin` is the origin bar `S*` of wave `m`, `peak` its peak bar `P`, `current` is `t`. The leg SHALL be the bars `a..e`
+of the chosen pair, both ends inclusive. Only bars `≤ t` SHALL be read and the operand SHALL have no lookback window other
+than its declared `window`.
+
+#### Scenario: Peak bar belongs to both legs
+
+- **WHEN** one segment is `origin → peak` and another `peak → current` on the same bar
+- **THEN** bar `P` SHALL be counted in both.
+
+#### Scenario: Before the first touch
+
+- **WHEN** the episode is active and `touch_number` is 0, or the episode is inactive or censored
+- **THEN** the segment SHALL be missing.
+
+### Requirement: Segment window
+
+With `x` the series of `of`, negated on the short side before everything else, the window SHALL be the bars `s..e` of the
+leg, with `s = a` for `window = null` and `s = max(a, e − N + 1)` for `{"last_n": N}`, so a leg shorter than `N` is used
+whole; `bars = e − s + 1`.
+
+#### Scenario: Window longer than the leg
+
+- **WHEN** `last_n` is larger than the number of bars of the leg
+- **THEN** the whole leg SHALL be used
+- **AND** the result SHALL equal the one with `window` null.
+
+### Requirement: Segment value
+
+With `x` and the window `s..e` as above, `value = level` SHALL aggregate `x[u]` and `value = change` SHALL aggregate
+`Δ[u] = x[u] − x[u−1]` (reading `x[s−1]`), for `u = s..e`. `sum` SHALL be the sum and `mean_per_bar` the sum divided by
+`bars`. `negate = true` SHALL multiply the result by −1. Every bar SHALL count with its sign. The value SHALL be missing
+when any `x` it reads is non-finite, and its cost SHALL NOT depend on leg lengths.
+
+#### Scenario: Pullback speed toward the anchor
+
+- **WHEN** a segment is the difference EMA5 − EMA500, `peak → current`, `change`, `last_n` 75, `mean_per_bar`, `negate`, long
+  side, bar `t`, current touch `m ≥ 1`
+- **THEN** its value SHALL be `−(x[t] − x[s−1]) / bars` with `s = max(P_m, t − 74)` and `bars = t − s + 1`.
+
+#### Scenario: Non-finite value inside the window
+
+- **WHEN** a value the window reads is non-finite
+- **THEN** the segment SHALL be missing on that bar.
+
+### Requirement: Ratio operand
+
+A ratio SHALL have the shape `{"ratio": {"left", "right"}}`, each side an operand of the layer other than a ratio, and not
+both constants. Its value SHALL be `left / right`, and SHALL be missing when either side is missing or non-finite or when
+`right ≤ 0`.
+
+#### Scenario: Zero denominator
+
+- **WHEN** the right side is 0 on a bar
+- **THEN** the ratio SHALL be missing on that bar.
+
+#### Scenario: Nested ratio is rejected
+
+- **WHEN** a side of a ratio is itself a ratio
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Range bounds
+
+In `range {operand, min, max, bounds?, empty?}`, `min` and `max` SHALL be present and each SHALL be a finite number or
+`null`, where `null` means no control on that side. `bounds` SHALL be `inclusive` (default: `min ≤ value ≤ max`) or
+`exclusive` (`min < value < max`); a `null` side imposes nothing. With both set, `min ≤ max` (`inclusive`) or `min < max`
+(`exclusive`) SHALL hold.
+
+#### Scenario: Band with two sliders
+
+- **WHEN** a range has `min` 0.44, `max` 3.5, `bounds` exclusive, `empty` pass
+- **THEN** it SHALL be False exactly where the operand is finite and `≤ 0.44` or `≥ 3.5`.
+
+#### Scenario: Invalid band
+
+- **WHEN** a range has `bounds` exclusive and `min` equal to `max`, an unknown `bounds` value, or a non-finite bound
+- **THEN** static validation SHALL reject the spec.
+
+#### Scenario: Existing range unchanged
+
+- **WHEN** a spec contains `range` over `rsi` with `min` 40 and `max` 65 and nothing else
+- **THEN** its mask and its node identity SHALL equal those before this change.
+
+### Requirement: Range empty policy
+
+`empty` SHALL be `block` (default) or `pass`: the result of a `range` on a bar where its operand is missing or non-finite.
+A range with both bounds `null` SHALL be True on every bar with a finite operand and follow `empty` elsewhere.
+
+#### Scenario: Both sliders on no control
+
+- **WHEN** a range has `min` null, `max` null and `empty` pass
+- **THEN** it SHALL be True on every bar.
+
+#### Scenario: Unknown empty policy
+
+- **WHEN** `empty` is neither `block` nor `pass`
+- **THEN** static validation SHALL reject the spec.
