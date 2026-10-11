@@ -22,12 +22,14 @@ new predicate class.
   1-bar change.
 - **Segment aggregates** added to `sum` and `mean_per_bar`:
   - `max`, `min`: the largest / smallest value of the series over the window (A2.2: `change_over` span 3);
-  - `abs_sum`: the sum of absolute values (A2.3);
-  - `top_abs_sum` with `top` n: the sum of the n largest absolute values (A2.3, n = 5). It needs a bounded
-    `window.last_n`.
-- **Segment eligibility** (new optional field): `{"legs_min_bars": N, "impulse_positive": bool}`. The segment is missing unless
-  both legs of the current touch have at least N bars and, when asked, the impulse moved away from the anchor. Research uses
-  N = 3 and the impulse condition for all three branches, and no existing block can express a condition on the other leg.
+  - `abs_sum`: the sum of absolute values over every bar of the window (A2.3);
+  - `top_abs_sum` with `top` n: the sum of the n largest absolute values (A2.3, n = 5); with fewer than n values it is the
+    sum of all, so A2.3 is exactly 1 on a 3–4 bar window as in research. It needs a bounded `window.last_n`.
+- **Segment eligibility** (new optional field): `{"legs_min_bars": N, "window": W, "impulse_positive": bool}`. The segment is
+  missing unless both legs of the current touch have at least N bars, every one-bar change in the last W bars of both legs is
+  finite and, when asked, the sum of the impulse changes over its last W bars is greater than 0. Research uses N = 3, W = 75
+  and the impulse condition for all three branches (confirmed in `a2_ideas_peek.py`), and no existing block can express a
+  condition on the other leg or a window independent of the segment's own.
 - **Costs**: `max`/`min` and `top_abs_sum` are not prefix sums. Their cost is stated and benchmarked (design D4) so the batch
   speed of A1 is not degraded.
 
@@ -48,10 +50,10 @@ Nothing changes for specs that use none of the new fields.
 ## Impact
 
 - `pre-entry-predicates-v1`: MODIFIED `Segment operand shape`, `Segment aggregation fields`, `Segment value`; ADDED
-  `Segment k-bar change`, `Segment extremum aggregates`, `Segment absolute-change aggregates`, `Segment eligibility shape`, `Segment eligibility leg length`, `Segment eligibility impulse direction`.
+  `Segment k-bar change`, `Segment extremum aggregates`, `Segment absolute-change aggregates`, `Segment eligibility shape`, `Segment eligibility leg length`, `Segment eligibility window`, `Segment eligibility impulse direction`.
 - `batch-computation-reuse`: MODIFIED `Identity twins for predicates and composites`; ADDED
   `Segment aggregate cost`.
-- `live-calculation-window-planning`: ADDED `History policy for k-bar segment values`.
+- `live-calculation-window-planning`: not modified (the new fields read at most one bar before the window, like A1).
 - Not modified: `ema-stack-episode-v1`, `ema-pullback-composite-setup-v1` (the existing operand value trace already covers a
   range over a segment or ratio), the feature-kind contract, the composer catalog.
 - Code: `strategies/ema_pullback/predicates.py` (parse, evaluation, identity); the same files as A1 for nothing else.
