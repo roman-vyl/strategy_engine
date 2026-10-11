@@ -35,7 +35,7 @@ changes inside the trimmed 75-bar window (`np.convolve(..., "valid")`); bars bef
 
 | aggregate | allowed `value` | result |
 |---|---|---|
-| `sum`, `mean_per_bar` | level, change, change_over | as in A1 |
+| `sum`, `mean_per_bar` | level, change | as in A1 (rejected with change_over: no research use) |
 | `max`, `min` | change, change_over | largest / smallest value over the window |
 | `abs_sum` | change, change_over | sum of absolute values of all bars of the window |
 | `top_abs_sum` (+ `top`) | change, change_over | sum of the `top` largest absolute values; `top` a positive integer; `window.last_n` required |

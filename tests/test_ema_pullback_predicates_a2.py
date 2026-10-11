@@ -291,3 +291,41 @@ def test_branches_use_only_bars_up_to_the_evaluated_bar() -> None:
             for before, segment in zip(full, (numerator, denominator), strict=True):
                 after = segment_values(episode, changed_line, segment)
                 np.testing.assert_array_equal(before[: cut + 1], after[: cut + 1])
+
+
+# -- identity -----------------------------------------------------------------------
+
+
+def _segment_identity(**fields: Any) -> Any:
+    from strategy_engine.indicators.contracts import IndicatorPlan
+    from strategy_engine.indicators.implementations.range_evaluator import resolve_indicator_plan
+    from strategy_engine.strategies.ema_pullback.predicates import resolve_predicate
+
+    predicate = _parse({"segment": _segment(**fields)})
+    features = predicate.features()
+    ids = resolve_indicator_plan(IndicatorPlan("1", features), base_timeframe="5m")
+    return predicate, ids, resolve_predicate
+
+
+def test_new_fields_enter_the_identity_only_when_set() -> None:
+    from strategy_engine.domain.node_identity import node_spec
+    from strategy_engine.strategies.ema_pullback.stack_episode import episode_identity_key
+
+    def local(**fields: Any) -> Any:
+        predicate, ids, resolve = _segment_identity(**fields)
+        episode = node_spec("episode.ema_stack", version=1, params={"ref": "trend"}, side="long")
+        identity = resolve(
+            predicate, ids, "long", contexts={episode_identity_key("trend", "long"): episode}
+        )
+        return identity.nested[0] if identity.nested else identity.local
+
+    base = local(value="change")
+    params = dict(base.params)
+    assert set(params) == {"from", "to", "value", "window", "aggregate", "negate"}
+    with_top = local(value="change", aggregate="top_abs_sum", top=5, window={"last_n": 75})
+    assert "top" in dict(with_top.params)
+    with_eligibility = local(
+        value="change", eligibility={"legs_min_bars": 3, "window": 75, "impulse_positive": True}
+    )
+    assert "eligibility" in dict(with_eligibility.params)
+    assert len({base, with_top, with_eligibility}) == 3

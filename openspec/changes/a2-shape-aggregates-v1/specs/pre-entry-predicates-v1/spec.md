@@ -16,13 +16,14 @@ requirements "Segment source fields", "Segment aggregation fields", "Segment k-b
 
 `aggregate` SHALL be `sum`, `mean_per_bar`, `max`, `min`, `abs_sum` or `top_abs_sum`. `value` SHALL be `level` (default),
 `change` or `change_over`. `window` SHALL be `null` (default, the whole leg) or `{"last_n": N}` with `N` a positive integer.
-`negate` SHALL be a boolean, default `false`. `max` and `min` SHALL be allowed only with `value` `change` or `change_over`, and
-so SHALL `abs_sum` and `top_abs_sum`. `top_abs_sum` SHALL require `top` (a positive integer) and a non-null `window`; `top`
+`negate` SHALL be a boolean, default `false`. `max`, `min`, `abs_sum` and `top_abs_sum` SHALL be allowed only with `value`
+`change` or `change_over`, and `sum` and `mean_per_bar` SHALL be rejected with `change_over`. `top_abs_sum` SHALL require `top` (a positive integer) and a non-null `window`; `top`
 SHALL be rejected with any other aggregate.
 
 #### Scenario: Invalid aggregation field
 
 - **WHEN** `aggregate`, `value` or `window` has another value, `last_n` is not a positive integer, `max` is used with `level`,
+  `sum` is used with `change_over`,
   `top_abs_sum` has no `top` or a null `window`, or `top` is given with another aggregate
 - **THEN** static validation SHALL reject the spec.
 

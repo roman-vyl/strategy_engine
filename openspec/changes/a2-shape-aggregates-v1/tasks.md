@@ -1,30 +1,30 @@
 ## 0. Baseline
 
-- [ ] 0.1 Branch from main bb9f0bc. Existing A1 segment, ratio and range suites pass unchanged after every group. Verify: suite run.
+- [x] 0.1 Branch from main bb9f0bc. Existing A1 segment, ratio and range suites pass unchanged after every group. Verify: suite run.
 
 ## 1. Parse and validate
 
-- [ ] 1.1 `value: change_over` with `span`; `max`, `min`, `abs_sum`, `top_abs_sum` (`top`, `last_n` required); allowed
+- [x] 1.1 `value: change_over` with `span`; `max`, `min`, `abs_sum`, `top_abs_sum` (`top`, `last_n` required); allowed
       (value, aggregate) pairs; unknown fields rejected. Verify: acceptance and rejection tests.
-- [ ] 1.2 `eligibility` object (`legs_min_bars`, `window`, `impulse_positive`; `impulse_positive` requires `window`), unknown keys rejected. Verify: tests.
+- [x] 1.2 `eligibility` object (`legs_min_bars`, `window`, `impulse_positive`; `impulse_positive` requires `window`), unknown keys rejected. Verify: tests.
 
 ## 2. Evaluation
 
-- [ ] 2.1 `change_over`, `max`, `min` on the episode legs, long and short, windows shorter and longer than leg and span.
+- [x] 2.1 `change_over`, `max`, `min` on the episode legs, long and short, windows shorter and longer than leg and span.
       Verify: brute-force loop.
-- [ ] 2.2 `abs_sum`, `top_abs_sum`: ties, fewer than `top` bars (sum of all, A2.3 = 1), NaN inside the window. Verify: brute-force loop.
-- [ ] 2.3 Eligibility: legs of 1–3 bars counted on the whole leg before the window, a non-finite change in either 75-bar window making all branches missing, impulse sum 0 or negative, later touches, inactive and censored episodes. Verify: tests.
-- [ ] 2.3a Division: a numerator ≤ 0 gives a value ≤ 0, not missing (A2.1, A2.2); a denominator ≤ 0 gives missing. Verify: tests.
-- [ ] 2.4 A2.1, A2.2, A2.3 as `range(ratio(...))` end to end on the BTC fixture against a research-style reference loop,
+- [x] 2.2 `abs_sum`, `top_abs_sum`: ties, fewer than `top` bars (sum of all, A2.3 = 1), NaN inside the window. Verify: brute-force loop.
+- [x] 2.3 Eligibility: legs of 1–3 bars counted on the whole leg before the window, a non-finite change in either 75-bar window making all branches missing, impulse sum 0 or negative, later touches, inactive and censored episodes. Verify: tests.
+- [x] 2.3a Division: a numerator ≤ 0 gives a value ≤ 0, not missing (A2.1, A2.2); a denominator ≤ 0 gives missing. Verify: tests.
+- [x] 2.4 A2.1, A2.2, A2.3 as `range(ratio(...))` end to end on the BTC fixture against a research-style reference loop,
       including band masks for `(low, null)`, `(null, high)`, `(low, high)`, `(null, null)`. Verify: test.
-- [ ] 2.5 Anchor as a parameter: the same checks with a different anchor period. Verify: unit test.
+- [x] 2.5 Anchor as a parameter: the same checks with a different anchor period. Verify: unit test.
 
 ## 3. Identity, memo, cost
 
-- [ ] 3.1 Identity includes `span`, `top`, `eligibility` only when set; A1 identities unchanged; zero `unforeseen_consumptions`;
+- [x] 3.1 Identity includes `span`, `top`, `eligibility` only when set; A1 identities unchanged; zero `unforeseen_consumptions`;
       memo on = memo off; band candidates share segments and ratio. Verify: tests.
-- [ ] 3.2 Live history: a predicate over a `change_over` or eligibility segment still contributes the zero-additional entry. Verify: planner test.
-- [ ] 3.3 Cost: benchmark on the A1 band fixture for each new aggregate; specs without new fields show no slowdown.
+- [x] 3.2 Live history: a predicate over a `change_over` or eligibility segment still contributes the zero-additional entry. Verify: planner test.
+- [x] 3.3 Cost: benchmark on the A1 band fixture for each new aggregate; specs without new fields show no slowdown.
       Verify: benchmark table in the report.
 
 ## 4. Parity with the research reference (owner's Mac, separate session, after the owner's word)
