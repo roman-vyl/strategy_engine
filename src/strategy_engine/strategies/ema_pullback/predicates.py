@@ -64,9 +64,20 @@ class SegmentSeries:
 
 
 @dataclass(frozen=True, slots=True)
+class Eligibility:
+    """Conditions on both legs of the current touch under which a segment has
+    a value (`a2-shape-aggregates-v1`, design D5)."""
+
+    legs_min_bars: int | None = None
+    window: int | None = None
+    impulse_positive: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class Segment:
     """An aggregate of a series over a leg of the current touch of an EMA
-    stack episode (`a1-band-filter-v1`, design D2)."""
+    stack episode (`a1-band-filter-v1`, design D2; `span`, `top` and
+    `eligibility` from `a2-shape-aggregates-v1`)."""
 
     episode: str
     series: SegmentSeries
@@ -76,6 +87,9 @@ class Segment:
     value: str = "level"
     last_n: int | None = None
     negate: bool = False
+    span: int | None = None
+    top: int | None = None
+    eligibility: Eligibility | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,12 +273,40 @@ def _feature(raw: object, path: str) -> PlannedFeature:
 
 _OPERAND_KEYS = "feature, episode, segment, ratio, price or const"
 _SEGMENT_FIELDS = {
-    "episode", "of", "from", "to", "aggregate", "value", "window", "negate"
+    "episode", "of", "from", "to", "aggregate", "value", "window", "negate",
+    "span", "top", "eligibility",
 }
 _SEGMENT_REQUIRED = ("episode", "of", "from", "to", "aggregate")
 _SEGMENT_SPANS = frozenset({("origin", "peak"), ("peak", "current"), ("origin", "current")})
-_SEGMENT_AGGREGATES = frozenset({"sum", "mean_per_bar"})
-_SEGMENT_VALUES = frozenset({"level", "change"})
+_SEGMENT_AGGREGATES = frozenset(
+    {"sum", "mean_per_bar", "max", "min", "abs_sum", "top_abs_sum"}
+)
+_SEGMENT_VALUES = frozenset({"level", "change", "change_over"})
+_SEGMENT_CHANGE_AGGREGATES = frozenset({"max", "min", "abs_sum", "top_abs_sum"})
+_ELIGIBILITY_FIELDS = {"legs_min_bars", "window", "impulse_positive"}
+
+
+def _positive_int(raw: object, path: str) -> int:
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+        raise InvalidRequestError(f"{path} must be a positive integer", value=raw)
+    return raw
+
+
+def _eligibility(raw: object, path: str) -> Eligibility:
+    payload = _mapping(raw, path)
+    _only_fields(payload, _ELIGIBILITY_FIELDS, path)
+    legs = payload.get("legs_min_bars")
+    window = payload.get("window")
+    positive = payload.get("impulse_positive", False)
+    if not isinstance(positive, bool):
+        raise InvalidRequestError(f"{path}.impulse_positive must be a boolean")
+    if positive and window is None:
+        raise InvalidRequestError(f"{path}.impulse_positive requires window")
+    return Eligibility(
+        None if legs is None else _positive_int(legs, f"{path}.legs_min_bars"),
+        None if window is None else _positive_int(window, f"{path}.window"),
+        positive,
+    )
 
 
 def _segment_series(raw: object, path: str) -> SegmentSeries:
@@ -302,11 +344,35 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
     aggregate = payload["aggregate"]
     if aggregate not in _SEGMENT_AGGREGATES:
         raise InvalidRequestError(
-            f"{path}.aggregate must be sum or mean_per_bar", aggregate=aggregate
+            f"{path}.aggregate must be one of {sorted(_SEGMENT_AGGREGATES)}",
+            aggregate=aggregate,
         )
     value = payload.get("value", "level")
     if value not in _SEGMENT_VALUES:
-        raise InvalidRequestError(f"{path}.value must be level or change", value=value)
+        raise InvalidRequestError(
+            f"{path}.value must be level, change or change_over", value=value
+        )
+    span: int | None = None
+    if value == "change_over":
+        if "span" not in payload:
+            raise InvalidRequestError(f"{path}.span is required with change_over")
+        span = _positive_int(payload["span"], f"{path}.span")
+    elif "span" in payload:
+        raise InvalidRequestError(f"{path}.span is only allowed with change_over")
+    if aggregate in _SEGMENT_CHANGE_AGGREGATES and value == "level":
+        raise InvalidRequestError(f"{path}.{aggregate} needs value change or change_over")
+    if value == "change_over" and aggregate in ("sum", "mean_per_bar"):
+        raise InvalidRequestError(f"{path}.{aggregate} is not defined for change_over")
+    top: int | None = None
+    if aggregate == "top_abs_sum":
+        if "top" not in payload:
+            raise InvalidRequestError(f"{path}.top is required with top_abs_sum")
+        top = _positive_int(payload["top"], f"{path}.top")
+        window_payload = payload.get("window")
+        if window_payload is None:
+            raise InvalidRequestError(f"{path}.window.last_n is required with top_abs_sum")
+    elif "top" in payload:
+        raise InvalidRequestError(f"{path}.top is only allowed with top_abs_sum")
     last_n: int | None = None
     window = payload.get("window")
     if window is not None:
@@ -320,6 +386,7 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
     negate = payload.get("negate", False)
     if not isinstance(negate, bool):
         raise InvalidRequestError(f"{path}.negate must be a boolean")
+    eligibility = payload.get("eligibility")
     return Segment(
         ref,
         _segment_series(payload["of"], f"{path}.of"),
@@ -329,6 +396,9 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
         str(value),
         last_n,
         negate,
+        span,
+        top,
+        None if eligibility is None else _eligibility(eligibility, f"{path}.eligibility"),
     )
 
 
@@ -728,22 +798,142 @@ def segment_values(episode: SideEpisode, series: np.ndarray, segment: Segment) -
     bad = np.zeros(size + 1, dtype=np.int64)
     np.cumsum(~finite, out=bad[1:])
     clean = np.where(finite, series, 0.0)
-    if segment.value == "level":
-        cumulative = np.zeros(size + 1)
-        np.cumsum(clean, out=cumulative[1:])
-        total = cumulative[e + 1] - cumulative[s]
-        ok &= (bad[e + 1] - bad[s]) == 0
+    if segment.eligibility is not None:
+        ok &= _eligible(segment.eligibility, points, valid, clean, bad)
+    if segment.aggregate in _SEGMENT_CHANGE_AGGREGATES:
+        result = _change_aggregate(segment, clean, bad, s, e, ok)
     else:
-        before = s - 1
-        ok &= before >= 0
-        before = np.maximum(before, 0)
-        total = clean[e] - clean[before]
-        ok &= (bad[e + 1] - bad[before]) == 0
-    result = total if segment.aggregate == "sum" else total / (e - s + 1)
+        if segment.value == "level":
+            cumulative = np.zeros(size + 1)
+            np.cumsum(clean, out=cumulative[1:])
+            total = cumulative[e + 1] - cumulative[s]
+            ok &= (bad[e + 1] - bad[s]) == 0
+        else:
+            before = s - 1
+            ok &= before >= 0
+            before = np.maximum(before, 0)
+            total = clean[e] - clean[before]
+            ok &= (bad[e + 1] - bad[before]) == 0
+        result = total if segment.aggregate == "sum" else total / (e - s + 1)
+        result = np.where(ok, result, math.nan)
     if segment.negate:
         result = -result
-    out = np.where(ok, result, math.nan)
+    out = np.where(ok & np.isfinite(result), result, math.nan)
     out.flags.writeable = False
+    return out
+
+
+def _eligible(
+    eligibility: Eligibility,
+    points: dict[str, np.ndarray],
+    valid: np.ndarray,
+    clean: np.ndarray,
+    bad: np.ndarray,
+) -> np.ndarray:
+    """Per bar: whether both legs of the current touch satisfy the eligibility
+    (`a2-shape-aggregates-v1`, design D5), whatever leg the segment reads."""
+
+    origin, peak, current = points["origin"], points["peak"], points["current"]
+    with np.errstate(invalid="ignore"):
+        ok = valid & np.isfinite(origin) & np.isfinite(peak) & (origin <= peak) & (peak <= current)
+    o = np.where(ok, origin, 0).astype(np.int64)
+    p = np.where(ok, peak, 0).astype(np.int64)
+    t = np.where(ok, current, 0).astype(np.int64)
+    if eligibility.legs_min_bars is not None:
+        ok &= (p - o + 1 >= eligibility.legs_min_bars) & (t - p + 1 >= eligibility.legs_min_bars)
+    window = eligibility.window
+    if window is not None:
+        impulse_start = np.maximum(o, p - window + 1) - 1
+        pullback_start = np.maximum(p, t - window + 1) - 1
+        ok &= (impulse_start >= 0) & (pullback_start >= 0)
+        impulse_start = np.maximum(impulse_start, 0)
+        pullback_start = np.maximum(pullback_start, 0)
+        ok &= (bad[p + 1] - bad[impulse_start]) == 0
+        ok &= (bad[t + 1] - bad[pullback_start]) == 0
+        if eligibility.impulse_positive:
+            ok &= (clean[p] - clean[impulse_start]) > 0
+    return ok
+
+
+def _change_aggregate(
+    segment: Segment,
+    clean: np.ndarray,
+    bad: np.ndarray,
+    s: np.ndarray,
+    e: np.ndarray,
+    ok: np.ndarray,
+) -> np.ndarray:
+    """`max`, `min`, `abs_sum` and `top_abs_sum` of the one-bar or `span`-bar
+    changes of the series over the window `s..e` (`a2-shape-aggregates-v1`,
+    design D2 and D3). `ok` is narrowed in place."""
+
+    span = segment.span or 1
+    size = len(clean)
+    before = s - 1
+    ok &= before >= 0
+    before = np.maximum(before, 0)
+    ok &= (bad[e + 1] - bad[before]) == 0
+    first = s + span - 1
+    ok &= first <= e
+    changes = np.zeros(size)
+    if span < size:
+        changes[span:] = clean[span:] - clean[:-span]
+    result = np.full(size, math.nan)
+    rows = np.flatnonzero(ok)
+    if not len(rows):
+        return result
+    low, high = first[rows], e[rows]
+    if segment.aggregate in ("max", "min"):
+        result[rows] = _window_extreme(changes, low, high, segment.aggregate == "max")
+    elif segment.aggregate == "abs_sum":
+        cumulative = np.zeros(size + 1)
+        np.cumsum(np.abs(changes), out=cumulative[1:])
+        result[rows] = cumulative[high + 1] - cumulative[low]
+    else:
+        assert segment.top is not None and segment.last_n is not None
+        result[rows] = _window_top_sum(np.abs(changes), low, high, segment.top, segment.last_n)
+    return result
+
+
+def _window_extreme(
+    values: np.ndarray, low: np.ndarray, high: np.ndarray, largest: bool
+) -> np.ndarray:
+    """max / min of `values[low..high]` per query by a sparse table whose
+    depth is bounded by the longest window: O(n log n) build, O(1) per query."""
+
+    reduce = np.maximum if largest else np.minimum
+    length = high - low + 1
+    depth = int(np.log2(length.max())) if len(length) else 0
+    levels = [values]
+    for j in range(1, depth + 1):
+        previous = levels[-1]
+        half = 1 << (j - 1)
+        levels.append(reduce(previous[:-half], previous[half:]))
+    level = np.floor(np.log2(length)).astype(np.int64)
+    out = np.empty(len(low))
+    for j in np.unique(level):
+        pick = level == j
+        table = levels[int(j)]
+        out[pick] = reduce(table[low[pick]], table[high[pick] - (1 << int(j)) + 1])
+    return out
+
+
+def _window_top_sum(
+    absolute: np.ndarray, low: np.ndarray, high: np.ndarray, top: int, last_n: int
+) -> np.ndarray:
+    """Sum of the `top` largest `absolute[low..high]` per query (all of them when
+    fewer), in chunks so memory stays bounded; cost O(queries * last_n)."""
+
+    out = np.empty(len(low))
+    offsets = np.arange(last_n)
+    for start in range(0, len(low), 8192):
+        lo = low[start : start + 8192]
+        hi = high[start : start + 8192]
+        index = hi[:, None] - offsets[None, :]
+        inside = index >= lo[:, None]
+        gathered = np.where(inside, absolute[np.maximum(index, 0)], 0.0)
+        gathered.sort(axis=1)
+        out[start : start + 8192] = gathered[:, -top:].sum(axis=1)
     return out
 
 
@@ -1126,17 +1316,29 @@ def _resolve_operand(
             column = _column_identity(feature, feature_ids, column_ids)
             upstream[role] = column
             consumed.append(column)
+        segment_params: dict[str, Any] = {
+            "from": segment.start,
+            "to": segment.end,
+            "value": segment.value,
+            "window": segment.last_n,
+            "aggregate": segment.aggregate,
+            "negate": segment.negate,
+        }
+        if segment.span is not None:
+            segment_params["span"] = segment.span
+        if segment.top is not None:
+            segment_params["top"] = segment.top
+        if segment.eligibility is not None:
+            eligibility = segment.eligibility
+            segment_params["eligibility"] = (
+                eligibility.legs_min_bars,
+                eligibility.window,
+                eligibility.impulse_positive,
+            )
         node = node_spec(
             "predicate.segment",
             version=PREDICATE_NODE_VERSION,
-            params={
-                "from": segment.start,
-                "to": segment.end,
-                "value": segment.value,
-                "window": segment.last_n,
-                "aggregate": segment.aggregate,
-                "negate": segment.negate,
-            },
+            params=segment_params,
             upstream=upstream,
             side=side,
         )
