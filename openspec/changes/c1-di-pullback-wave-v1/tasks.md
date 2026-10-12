@@ -1,7 +1,9 @@
 ## 0. Baseline and reference
 
-- [ ] 0.1 Branch after B1/B2 (PR #33) is merged. A1/A2/B1/B2 suites pass unchanged after every group. Verify: suite run.
-- [ ] 0.2 D6 answered by the research thread (`c1/c1_values.py`): previous pullback end, floor, `C[P]`, inclusive `t`. The reference rows carry the intermediate values (counter DI at `P`, max and mean of each wave, rise and area of both waves); a bar offset found at parity is reported.
+- [x] 0.1 Branch after B1/B2 (PR #33) is merged. A1/A2/B1/B2 suites pass unchanged after every group. Verify: suite run.
+      Mac 2026-10-12 at 532eade: suite without `tests/parity` passes except `test_live_entry_responses_unchanged`, which fails the same way on main a96f37e on this Mac (byte hash, not C1).
+- [x] 0.2 D6 answered by the research thread (`c1/c1_values.py`): previous pullback end, floor, `C[P]`, inclusive `t`. The reference rows carry the intermediate values (counter DI at `P`, max and mean of each wave, rise and area of both waves); a bar offset found at parity is reported.
+      Reference `c1/c1_values.py` (default PREV=s), `c1s_values_*`, `c1_engine_ref_*`, `c1_parity_*`: wave n = `P … T_n`, wave n−1 = `P_{n−1} … S*_n`, floor 1e-6, `C[P]` on the peak bar. No bar offset.
 
 ## 1. Parse and validate
 
@@ -22,7 +24,8 @@
 
 - [x] 3.1 Candidates that differ only in a bound share both segments and the ratio; C1.1 and C1.2 share the `di` columns; `unforeseen_consumptions` stays 0; memo and plain evaluation agree. Verify: batch tests.
 - [x] 3.2 A spec without the next-origin end point has an identical node set and results. Verify: A1/A2/B1/B2 suites and parity corpus unchanged.
-- [ ] 3.3 Cost: benchmark on the A1 band fixture and a long synthetic series. Verify: table in the report.
+- [x] 3.3 Cost: benchmark on the A1 band fixture and a long synthetic series. Verify: table in the report.
+      End to end on the full BTC/ETH history (local Engine, two coins in parallel): no filter 12–20 s, one C1 range 16–20 s, all-null C1 16–22 s, within run-to-run noise. No synthetic micro-benchmark was run.
 
 ## 4. Parity with the research reference (owner's Mac, separate session, after the owner's word)
 
