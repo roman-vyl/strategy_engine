@@ -5,22 +5,22 @@
 
 ## 1. Parse and validate
 
-- [ ] 1.1 `to: touch` only with `touch: previous` and `from: peak`; rejected with `touch: current`, `from: origin` or `peak → current` previous. Verify: acceptance and rejection tests.
-- [ ] 1.2 `by_side` with `di_minus` for long and `di_plus` for short accepted (B2 parser). Verify: test.
-- [ ] 1.3 Identity: `to: touch` enters the segment identity; B2, A1 and A2 identities unchanged. Verify: identity test.
+- [x] 1.1 `to: touch` only with `touch: previous` and `from: peak`; rejected with `touch: current`, `from: origin` or `peak → current` previous. Verify: acceptance and rejection tests.
+- [x] 1.2 `by_side` with `di_minus` for long and `di_plus` for short accepted (B2 parser). Verify: test.
+- [x] 1.3 Identity: `to: touch` enters the segment identity; B2, A1 and A2 identities unchanged. Verify: identity test.
 
 ## 2. Evaluation
 
-- [ ] 2.1 `peak → touch` previous: first touch (missing), second and later touches, a new episode (the previous touch of another episode is never read). Verify: brute-force loop.
-- [ ] 2.2 C1.1 and C1.2 as `range(ratio(segment, segment, right_floor 1e-6))` against a research-style loop: previous value ≤ 1e-6 passes, numerator ≤ 0 is a value, `(null, null)` passes everything, both tails cut. Verify: tests.
-- [ ] 2.3 End to end on the BTC fixture for both variants and for period 14 and another period (values to 1e-9, band masks). Verify: test.
-- [ ] 2.4 Only bars ≤ t are read (changing later bars leaves earlier values unchanged). Verify: truncation test.
-- [ ] 2.5 Short side reads `di_plus`. Verify: test.
+- [x] 2.1 `peak → touch` previous: first touch (missing), second and later touches, a new episode (the previous touch of another episode is never read). Verify: brute-force loop.
+- [x] 2.2 C1.1 and C1.2 as `range(ratio(segment, segment, right_floor 1e-6))` against a research-style loop: previous value ≤ 1e-6 passes, numerator ≤ 0 is a value, `(null, null)` passes everything, both tails cut. Verify: tests.
+- [x] 2.3 End to end on the BTC fixture for both variants and for period 14 and another period (values to 1e-9, band masks). Verify: test.
+- [x] 2.4 Only bars ≤ t are read (changing later bars leaves earlier values unchanged). Verify: truncation test.
+- [x] 2.5 Short side reads `di_plus`. Verify: test.
 
 ## 3. Identity, sharing, cost
 
-- [ ] 3.1 Candidates that differ only in a bound share both segments and the ratio; C1.1 and C1.2 share the `di` columns; `unforeseen_consumptions` stays 0; memo and plain evaluation agree. Verify: batch tests.
-- [ ] 3.2 A spec without the touch end point has an identical node set and results. Verify: A1/A2/B1/B2 suites and parity corpus unchanged.
+- [x] 3.1 Candidates that differ only in a bound share both segments and the ratio; C1.1 and C1.2 share the `di` columns; `unforeseen_consumptions` stays 0; memo and plain evaluation agree. Verify: batch tests.
+- [x] 3.2 A spec without the touch end point has an identical node set and results. Verify: A1/A2/B1/B2 suites and parity corpus unchanged.
 - [ ] 3.3 Cost: benchmark on the A1 band fixture and a long synthetic series. Verify: table in the report.
 
 ## 4. Parity with the research reference (owner's Mac, separate session, after the owner's word)
@@ -35,5 +35,5 @@
 
 ## 5. Gate
 
-- [ ] 5.1 ruff, mypy, the suite without `tests/parity`.
-- [ ] 5.2 `openspec validate c1-di-pullback-wave-v1 --strict`.
+- [x] 5.1 ruff, mypy, the suite without `tests/parity`.
+- [x] 5.2 `openspec validate c1-di-pullback-wave-v1 --strict`.

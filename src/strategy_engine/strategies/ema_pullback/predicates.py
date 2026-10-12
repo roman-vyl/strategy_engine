@@ -320,7 +320,11 @@ _SEGMENT_FIELDS = {
     "touch",
 }
 _SEGMENT_REQUIRED = ("episode", "of", "from", "to", "aggregate")
-_SEGMENT_SPANS = frozenset({("origin", "peak"), ("peak", "current"), ("origin", "current")})
+_SEGMENT_SPANS = frozenset(
+    {("origin", "peak"), ("peak", "current"), ("origin", "current"), ("peak", "touch")}
+)
+_PREVIOUS_SPANS = frozenset({("origin", "peak"), ("peak", "touch")})
+_TOUCH_COLUMNS = {"origin": "origin_bar", "peak": "peak_bar", "touch": "touch_bar"}
 _SEGMENT_AGGREGATES = frozenset(
     {"sum", "mean_per_bar", "max", "min", "abs_sum", "top_abs_sum", "top_abs_share"}
 )
@@ -395,7 +399,7 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
     start, end = payload["from"], payload["to"]
     if (start, end) not in _SEGMENT_SPANS:
         raise InvalidRequestError(
-            f"{path}.from/to must be origin-peak, peak-current or origin-current",
+            f"{path}.from/to must be origin-peak, peak-current, origin-current or peak-touch",
             start=start,
             end=end,
         )
@@ -417,8 +421,10 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
     touch = payload.get("touch", "current")
     if touch not in _SEGMENT_TOUCHES:
         raise InvalidRequestError(f"{path}.touch must be current or previous", touch=touch)
-    if touch == "previous" and (start, end) != ("origin", "peak"):
-        raise InvalidRequestError(f"{path}.touch previous needs from origin to peak")
+    if touch == "previous" and (start, end) not in _PREVIOUS_SPANS:
+        raise InvalidRequestError(f"{path}.touch previous needs origin to peak or peak to touch")
+    if end == "touch" and touch != "previous":
+        raise InvalidRequestError(f"{path}.to touch needs touch previous")
     span: int | None = None
     if value == "change_over":
         if "span" not in payload:
@@ -944,8 +950,8 @@ def segment_values(episode: SideEpisode, series: np.ndarray, segment: Segment) -
         # Same episode only: the first touch has no previous one.
         has_previous = valid & (count >= 2)
         earlier = np.where(has_previous, rows - 1, 0)
-        begin = _take_rows(episode.touches["origin_bar"], earlier, has_previous)
-        end = _take_rows(episode.touches["peak_bar"], earlier, has_previous)
+        begin = _take_rows(episode.touches[_TOUCH_COLUMNS[segment.start]], earlier, has_previous)
+        end = _take_rows(episode.touches[_TOUCH_COLUMNS[segment.end]], earlier, has_previous)
     else:
         begin, end = points[segment.start], points[segment.end]
     with np.errstate(invalid="ignore"):
