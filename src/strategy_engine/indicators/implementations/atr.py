@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from strategy_engine.domain.errors import InvalidRequestError
@@ -41,6 +42,31 @@ def true_range(high: pd.Series, low: pd.Series, close: pd.Series) -> pd.Series:
     high_prev_close = (high - prev_close).abs()
     low_prev_close = (low - prev_close).abs()
     return pd.concat([high_low, high_prev_close, low_prev_close], axis=1).max(axis=1)
+
+
+def atr_wilder(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    *,
+    period: int,
+) -> pd.Series:
+    """Wilder ATR as the research reference computes it: the first true range
+    is `high - low`, the seed (at position `period - 1`) is the mean of the
+    first `period` true ranges, then `(atr * (period - 1) + tr) / period`;
+    values before the seed are missing (OpenSpec `b1-candle-ratio-v1`, D5)."""
+
+    tr = true_range(high, low, close).to_numpy(dtype=float).copy()
+    if len(tr):
+        tr[0] = float(high.iloc[0]) - float(low.iloc[0])
+    out = np.full(len(tr), np.nan)
+    if len(tr) >= period:
+        value = float(tr[:period].mean())
+        out[period - 1] = value
+        for index in range(period, len(tr)):
+            value = (value * (period - 1) + tr[index]) / period
+            out[index] = value
+    return pd.Series(out, index=high.index)
 
 
 def atr_rolling_mean(

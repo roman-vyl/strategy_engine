@@ -67,6 +67,7 @@ def test_registry_exposes_atr_distance() -> None:
         "adx",
         "di_plus",
         "di_minus",
+        "atr_wilder",
     ]
     schema = registry.get_schema("atr_distance")
     assert schema is not None

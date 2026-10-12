@@ -33,6 +33,7 @@ def test_existing_kinds_in_public_order() -> None:
         "adx",
         "di_plus",
         "di_minus",
+        "atr_wilder",
     ]
     assert [c.kind for c in feature_kinds() if c.requestable] == [
         "ema",
@@ -41,6 +42,7 @@ def test_existing_kinds_in_public_order() -> None:
         "adx",
         "di_plus",
         "di_minus",
+        "atr_wilder",
     ]
 
 

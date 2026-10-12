@@ -104,6 +104,13 @@ def test_invalid_fields_are_rejected(fields: dict[str, Any]) -> None:
 
 
 def _episode(seed: int, cycles: int = 9, longest: int = 30) -> tuple[Any, int]:
+    episode, size, _ = _episode_bars(seed, cycles, longest)
+    return episode, size
+
+
+def _episode_bars(
+    seed: int, cycles: int = 9, longest: int = 30
+) -> tuple[Any, int, tuple[np.ndarray, np.ndarray, np.ndarray]]:
     """An episode on bars with real legs: a rising impulse to a peak, a falling
     pullback, then a contact bar (`C`), repeated; flat anchor at 100."""
 
@@ -143,7 +150,7 @@ def _episode(seed: int, cycles: int = 9, longest: int = 30) -> tuple[Any, int]:
         _params_for(3),
         "long",
     )
-    return episode, size
+    return episode, size, (np.array(high), np.array(low), np.array(close))
 
 
 def _params_for(window: int) -> Any:

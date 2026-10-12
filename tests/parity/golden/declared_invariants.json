@@ -6290,6 +6290,34 @@
     "supports_incremental": false,
     "supports_managed_replay": true,
     "title": "Negative Directional Index"
+   },
+   {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "atr_wilder",
+    "inputs": [
+     "high",
+     "low",
+     "close"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "const": "close"
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Wilder Average True Range"
    }
   ],
   "feature_identities": {
@@ -6384,6 +6412,34 @@
     "supports_incremental": false,
     "supports_managed_replay": true,
     "title": "ATR Distance"
+   },
+   "atr_wilder": {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "atr_wilder",
+    "inputs": [
+     "high",
+     "low",
+     "close"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "const": "close"
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Wilder Average True Range"
    },
    "di_minus": {
     "calculation_group": "adx_dmi",
