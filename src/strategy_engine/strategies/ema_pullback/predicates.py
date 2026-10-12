@@ -321,10 +321,10 @@ _SEGMENT_FIELDS = {
 }
 _SEGMENT_REQUIRED = ("episode", "of", "from", "to", "aggregate")
 _SEGMENT_SPANS = frozenset(
-    {("origin", "peak"), ("peak", "current"), ("origin", "current"), ("peak", "touch")}
+    {("origin", "peak"), ("peak", "current"), ("origin", "current"), ("peak", "next_origin")}
 )
-_PREVIOUS_SPANS = frozenset({("origin", "peak"), ("peak", "touch")})
-_TOUCH_COLUMNS = {"origin": "origin_bar", "peak": "peak_bar", "touch": "touch_bar"}
+_PREVIOUS_SPANS = frozenset({("origin", "peak"), ("peak", "next_origin")})
+_TOUCH_COLUMNS = {"origin": "origin_bar", "peak": "peak_bar"}
 _SEGMENT_AGGREGATES = frozenset(
     {"sum", "mean_per_bar", "max", "min", "abs_sum", "top_abs_sum", "top_abs_share"}
 )
@@ -399,7 +399,7 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
     start, end = payload["from"], payload["to"]
     if (start, end) not in _SEGMENT_SPANS:
         raise InvalidRequestError(
-            f"{path}.from/to must be origin-peak, peak-current, origin-current or peak-touch",
+            f"{path}.from/to must be origin-peak, peak-current, origin-current or peak-next_origin",
             start=start,
             end=end,
         )
@@ -422,9 +422,11 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
     if touch not in _SEGMENT_TOUCHES:
         raise InvalidRequestError(f"{path}.touch must be current or previous", touch=touch)
     if touch == "previous" and (start, end) not in _PREVIOUS_SPANS:
-        raise InvalidRequestError(f"{path}.touch previous needs origin to peak or peak to touch")
-    if end == "touch" and touch != "previous":
-        raise InvalidRequestError(f"{path}.to touch needs touch previous")
+        raise InvalidRequestError(
+            f"{path}.touch previous needs origin to peak or peak to next_origin"
+        )
+    if end == "next_origin" and touch != "previous":
+        raise InvalidRequestError(f"{path}.to next_origin needs touch previous")
     span: int | None = None
     if value == "change_over":
         if "span" not in payload:
@@ -950,12 +952,21 @@ def segment_values(episode: SideEpisode, series: np.ndarray, segment: Segment) -
         # Same episode only: the first touch has no previous one.
         has_previous = valid & (count >= 2)
         earlier = np.where(has_previous, rows - 1, 0)
+        strict = False
         begin = _take_rows(episode.touches[_TOUCH_COLUMNS[segment.start]], earlier, has_previous)
-        end = _take_rows(episode.touches[_TOUCH_COLUMNS[segment.end]], earlier, has_previous)
+        if segment.end == "next_origin":
+            # The previous pullback runs to the true low that starts the
+            # current wave: the origin of the current touch (known at t).
+            end = _take_rows(episode.touches["origin_bar"], rows, has_previous)
+            strict = True
+        else:
+            end = _take_rows(episode.touches[_TOUCH_COLUMNS[segment.end]], earlier, has_previous)
     else:
         begin, end = points[segment.start], points[segment.end]
+        strict = False
     with np.errstate(invalid="ignore"):
-        ok = valid & np.isfinite(begin) & np.isfinite(end) & (begin <= end)
+        ok = valid & np.isfinite(begin) & np.isfinite(end)
+        ok &= (begin < end) if strict else (begin <= end)
     a = np.where(ok, begin, 0).astype(np.int64)
     e = np.where(ok, end, 0).astype(np.int64)
     s = a if segment.last_n is None else np.maximum(a, e - segment.last_n + 1)

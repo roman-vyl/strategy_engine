@@ -185,9 +185,7 @@ def test_both_sliders_off_default_empty_blocks_only_missing() -> None:
 def test_exclusive_bound_excludes_the_equal_value() -> None:
     frame, column = _rsi_column(_market_frame())
     pivot = float(column[np.isfinite(column)][10])
-    inclusive = evaluate_predicate(
-        parse_predicate(_range(min=pivot, max=None), "p"), frame, "long"
-    )
+    inclusive = evaluate_predicate(parse_predicate(_range(min=pivot, max=None), "p"), frame, "long")
     exclusive = evaluate_predicate(
         parse_predicate(_range(min=pivot, max=None, bounds="exclusive"), "p"), frame, "long"
     )
@@ -284,7 +282,7 @@ def test_segment_defaults() -> None:
         {"episode": "other"},
         {"from": "current", "to": "peak"},
         {"from": "peak", "to": "peak"},
-        {"from": "origin", "to": "touch"},
+        {"from": "origin", "to": "next_origin"},
         {"aggregate": "max"},
         {"aggregate": "mean"},
         {"value": "delta"},
@@ -439,8 +437,12 @@ def test_segment_matches_the_reference(
     rng = np.random.default_rng(3)
     x = np.cumsum(rng.normal(0, 1, len(_SHAPE)))
     segment = _segment_args(
-        start=start_end[0], end=start_end[1], value=value, last_n=last_n,
-        aggregate=aggregate, negate=negate,
+        start=start_end[0],
+        end=start_end[1],
+        value=value,
+        last_n=last_n,
+        aggregate=aggregate,
+        negate=negate,
     )
     got = segment_values(episode, x, segment)
     expected = _reference(episode, x, segment)
@@ -456,9 +458,7 @@ def test_segment_is_missing_when_a_value_it_reads_is_not_finite() -> None:
     for value in ("level", "change"):
         segment = _segment_args(start="origin", end="current", value=value)
         got = segment_values(episode, x, segment)
-        np.testing.assert_allclose(
-            got, _reference(episode, x, segment), equal_nan=True, rtol=1e-12
-        )
+        np.testing.assert_allclose(got, _reference(episode, x, segment), equal_nan=True, rtol=1e-12)
         assert np.isnan(got[10])
     # the value read by `change` at bar 10 also covers bar 11 (x[11] - x[10])
     change_segment = _segment_args(start="origin", end="current", value="change")

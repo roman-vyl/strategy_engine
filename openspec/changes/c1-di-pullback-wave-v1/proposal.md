@@ -10,7 +10,7 @@ stop-losses.
 - **C1.2 "average counter-DI area"**: `AreaMean_n ÷ AreaMean_{n−1}`, `AreaMean_w = mean over P_w … T_w of (C[u] − C[P_w])`.
 
 `C` is the counter-trade DI, `P_w` the peak of the wave's impulse, `T_w` the end of the wave's pullback: the evaluated bar `t` for
-the current touch and the touch bar of the previous touch row for the previous touch. Both ends inclusive.
+the current touch and the origin bar of the current touch row (the true low of the finished pullback) for the previous touch. Both ends inclusive.
 
 Research reference (owner's Mac, `c1/`, curves https://claude.ai/artifact/QSJpcqjVexbxdFxQzDJ2jy): C1.1 cuts from below
 (≤ 0.53) and C1.2 from above (≥ 2.9) on BTC EMA500; the cut pools reach 100 % stops, so C1 is a veto voter, not a stand-alone
@@ -24,10 +24,10 @@ separate change.
 Everything builds on B2 (`b2-di-wave-v1`: `touch: previous`, `by_side`, `from_start`, `right_floor`) and on the existing
 `di_plus` / `di_minus` features. No new indicator kind and no new predicate class.
 
-- **Segment end point `touch`**: the touch bar of the selected touch row, the bar on which the pullback of that touch ended.
-  Allowed only as the end of a `previous` segment, `peak → touch`.
+- **Segment end point `next_origin`**: the origin bar of the current touch row, where the previous pullback really ended.
+  Allowed only as the end of a `previous` segment, `peak → next_origin`.
 - **Counter-trade series** is `by_side` with the features swapped: `long = di_minus`, `short = di_plus`. No sign change.
-- **C1.1** `= ratio(segment(C, peak→current, touch current, from_start, max), segment(C, peak→touch, touch previous, from_start, max))`,
+- **C1.1** `= ratio(segment(C, peak→current, touch current, from_start, max), segment(C, peak→next_origin, touch previous, from_start, max))`,
   **C1.2** the same with `mean_per_bar`; each inside a `range` with nullable bounds, `bounds exclusive`, `empty: pass`, and
   `right_floor` 1e-6 on the ratio.
 - Thresholds, grids and the veto role live in the Research manifest, not in the Engine.

@@ -2,13 +2,13 @@
 
 ### Requirement: Touch end identity
 
-`to: touch` SHALL enter the identity of a segment as its end point, so a `peak → touch` segment never shares a node with a
-`peak → current` segment. A spec without the touch end point SHALL keep every segment identity and result it had before this
+`to: next_origin` SHALL enter the identity of a segment as its end point, so a `peak → next_origin` segment never shares a node with a
+`peak → current` segment. A spec without the next-origin end point SHALL keep every segment identity and result it had before this
 change.
 
 #### Scenario: Unchanged identities
 
-- **WHEN** a spec has no `to: touch`
+- **WHEN** a spec has no `to: next_origin`
 - **THEN** its segment identities and results SHALL equal those before this change.
 
 ### Requirement: Counter-trade waves share nodes

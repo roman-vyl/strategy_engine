@@ -23,7 +23,7 @@ def _c1_fields(**fields: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
         "of": {"by_side": {"long": _DI_MINUS, "short": _DI_PLUS}},
         "from": "peak",
-        "to": "touch",
+        "to": "next_origin",
         "value": "from_start",
         "aggregate": "max",
         "touch": "previous",
@@ -33,7 +33,7 @@ def _c1_fields(**fields: Any) -> dict[str, Any]:
 
 def test_touch_end_parses_on_the_previous_touch() -> None:
     segment = _parse({"segment": _segment(**_c1_fields())}).long.operand.segment
-    assert (segment.start, segment.end, segment.touch) == ("peak", "touch", "previous")
+    assert (segment.start, segment.end, segment.touch) == ("peak", "next_origin", "previous")
     assert segment.series.for_side("long").kind == "di_minus"
     assert segment.series.for_side("short").kind == "di_plus"
 
@@ -43,9 +43,9 @@ def test_touch_end_parses_on_the_previous_touch() -> None:
     [
         {"touch": "current"},  # the touch end belongs to the previous touch
         {"from": "origin"},
-        {"from": "origin", "to": "touch", "touch": "previous"},
-        {"to": "current"},  # previous pullback must end at its touch bar
-        {"from": "peak", "to": "touch", "window": {"last_n": 5}},
+        {"from": "origin", "to": "next_origin", "touch": "previous"},
+        {"to": "current"},  # previous pullback ends at the next origin
+        {"from": "peak", "to": "next_origin", "window": {"last_n": 5}},
     ],
 )
 def test_invalid_touch_end_is_rejected(fields: dict[str, Any]) -> None:
@@ -69,15 +69,17 @@ def _reference(episode: Any, line: np.ndarray) -> dict[str, np.ndarray]:
         if number < 2:
             continue
         row = int(episode.first_row[int(episode.state["episode_id"][t])]) + number - 2
-        previous = _wave(line, int(touches["peak_bar"][row]), int(touches["touch_bar"][row]))
-        out["prev_rise"][t], out["prev_area"][t] = previous
+        begin, end = int(touches["peak_bar"][row]), int(touches["origin_bar"][row + 1])
+        if end <= begin:
+            continue
+        out["prev_rise"][t], out["prev_area"][t] = _wave(line, begin, end)
     return out
 
 
 def _pair(aggregate: str) -> tuple[Any, Any]:
     now = _segment_args(start="peak", end="current", value="from_start", aggregate=aggregate)
     before = _segment_args(
-        start="peak", end="touch", value="from_start", aggregate=aggregate, touch="previous"
+        start="peak", end="next_origin", value="from_start", aggregate=aggregate, touch="previous"
     )
     return now, before
 
@@ -96,7 +98,7 @@ def test_pullback_waves_match_the_loop(seed: int, aggregate: str, key: str) -> N
     assert np.isfinite(before).any() and np.isnan(before).any() and np.isfinite(now).any()
 
 
-def test_previous_pullback_reads_only_bars_up_to_its_touch() -> None:
+def test_previous_pullback_reads_only_bars_up_to_the_current_origin() -> None:
     episode, size = _episode(4)
     line = np.cumsum(np.random.default_rng(9).normal(0, 1, size))
     _, before_segment = _pair("max")

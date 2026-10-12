@@ -9,14 +9,16 @@
 
 ## Decisions
 
-### D1. End point `touch`
+### D1. End point `next_origin`
 
-`segment.to` MAY be `touch`: the `touch_bar` of the selected touch row. It is allowed only with `touch: previous` and
-`from: peak`, so the wave is `P_{n−1} … T_{n−1}` inclusive. A current-touch segment keeps `peak → current`, whose end is the
-evaluated bar. Any other use of `touch` as an end point is rejected at parse time. On the first touch of an episode the previous
-segment is missing, as in B2.
+`segment.to` MAY be `next_origin`: the `origin_bar` (S*, the true low or high that starts the wave) of the CURRENT touch row. It is
+allowed only with `touch: previous` and `from: peak`, so the previous pullback is `P_{n−1} … S*_n` inclusive: it runs to the real
+extreme of the finished pullback, not to the bar where it first touched the EMA (owner 2026-10-12: after the touch the low went
+further on 69 % of BTC EMA500 cases, median 4 bars). A current-touch segment keeps `peak → current`, whose end is the evaluated
+bar (the touch is assumed to happen now). Any other use of `next_origin` is rejected at parse time. The segment is missing on the
+first touch of an episode and when `S*_n` is not after `P_{n−1}` (degenerate), and the segment is empty then, as in B2.
 
-No look-ahead: the previous touch bar is at or before the current touch's origin, so no bar after `t` is read.
+No look-ahead: `S*_n` is at or before the current touch bar and so at or before `t`; no bar after `t` is read.
 
 ### D2. Counter-trade series
 
@@ -43,14 +45,14 @@ sliders per the research result.
 
 ### D5. Cost
 
-No new pass: the same prefix sums and sparse table as B2, the previous segment reads one more row. A spec without the `touch`
+No new pass: the same prefix sums and sparse table as B2, the previous segment reads one more row. A spec without the `next_origin`
 end point has the same node set and results as before.
 
 ### D6. Questions for the reference (before code)
 
 Answered by the research thread's `c1_values.py` and its exports when the owner allows them:
 
-1. The previous pullback ends on the touch bar of the previous row, inclusive.
+1. The previous pullback ends on the origin bar (S*) of the current touch row, inclusive (owner 2026-10-12; the earlier touch-bar end is dropped).
 2. The denominator floor 1e-6 holds for C1.1 and C1.2.
 3. `C[P]` is the counter DI on the peak bar itself, the first bar of `P … t`.
 4. The current pullback includes the evaluated bar `t`.

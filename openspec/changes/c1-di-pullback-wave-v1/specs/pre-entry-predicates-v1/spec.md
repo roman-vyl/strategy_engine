@@ -1,24 +1,25 @@
 ## ADDED Requirements
 
-### Requirement: Segment end at the touch bar
+### Requirement: Segment end at the next origin
 
-A segment MAY end at `touch`, the touch bar of the selected touch row. `to: touch` SHALL be allowed only with `touch: previous`
-and `from: peak`; any other combination SHALL be rejected. The segment SHALL span the peak bar and the touch bar of the touch row
-before the current one in the same episode, both ends inclusive, and SHALL be missing on the first touch of an episode.
+A segment MAY end at `next_origin`, the origin bar of the CURRENT touch row. `to: next_origin` SHALL be allowed only with
+`touch: previous` and `from: peak`; any other combination SHALL be rejected. The segment SHALL span the peak bar of the touch row
+before the current one in the same episode and the origin bar of the current touch row, both ends inclusive, and SHALL be missing
+on the first touch of an episode and when the origin bar is not after that peak bar.
 
 #### Scenario: Previous pullback
 
-- **WHEN** the current touch is the second of its episode and a segment is `peak → touch`, `touch: previous`
-- **THEN** it SHALL span the peak bar and the touch bar of the first touch.
+- **WHEN** the current touch is the second of its episode and a segment is `peak → next_origin`, `touch: previous`
+- **THEN** it SHALL span the peak bar of the first touch and the origin bar of the second touch.
 
-#### Scenario: Touch end rejected
+#### Scenario: Next origin end rejected
 
-- **WHEN** `to: touch` is used with `touch: current` or with `from: origin`
+- **WHEN** `to: next_origin` is used with `touch: current` or with `from: origin`
 - **THEN** static validation SHALL reject the spec.
 
 ### Requirement: Counter-trade directional index wave ratio
 
-A ratio of a `from_start` segment `peak → current` of `touch` `current` over a `from_start` segment `peak → touch` of `touch`
+A ratio of a `from_start` segment `peak → current` of `touch` `current` over a `from_start` segment `peak → next_origin` of `touch`
 `previous`, both over a `by_side` series with `long = di_minus` and `short = di_plus`, and `right_floor` 1e-6, SHALL be missing
 when the previous pullback's value is not greater than 1e-6 or when either side is missing. A current value not greater than 0
 SHALL stay a value.
