@@ -33,6 +33,7 @@ from strategy_engine.strategies.ema_pullback.candles import (
     CANDLE_ATR_KIND,
     candle_values,
 )
+from strategy_engine.strategies.ema_pullback.leg_means import LEG_MEAN_FIELDS, leg_mean_values
 from strategy_engine.strategies.ema_pullback.stack_episode import (
     EpisodeRef,
     SideEpisode,
@@ -122,6 +123,16 @@ class Candle:
 
 
 @dataclass(frozen=True, slots=True)
+class LegMean:
+    """The mean of a base-bar market field over the impulse `[S*, P]` or the
+    pullback `[P+1, t]` of the current touch (`v1-volume-ratio-v1`, D1)."""
+
+    episode: str
+    leg: str
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
 class Ratio:
     left: Operand
     right: Operand
@@ -141,6 +152,7 @@ class Operand:
     segment: Segment | None = None
     ratio: Ratio | None = None
     candle: Candle | None = None
+    leg_mean: LegMean | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,7 +258,12 @@ def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
 def operand_needs_episode(operand: Operand) -> bool:
     """True iff the operand reads the EMA stack episode bundle."""
 
-    if operand.episode is not None or operand.segment is not None or operand.candle is not None:
+    if (
+        operand.episode is not None
+        or operand.segment is not None
+        or operand.candle is not None
+        or operand.leg_mean is not None
+    ):
         return True
     return operand.ratio is not None and (
         operand_needs_episode(operand.ratio.left) or operand_needs_episode(operand.ratio.right)
@@ -304,7 +321,7 @@ def _feature(raw: object, path: str) -> PlannedFeature:
     return plan_feature_request(kind, timeframe, source, params)
 
 
-_OPERAND_KEYS = "feature, episode, segment, candle, ratio, price or const"
+_OPERAND_KEYS = "feature, episode, segment, candle, leg_mean, ratio, price or const"
 _SEGMENT_FIELDS = {
     "episode",
     "of",
@@ -522,6 +539,25 @@ def _candle(raw: object, path: str, episode_refs: frozenset[str] | None) -> Cand
     return Candle(ref, str(leg), timeframe, str(direction), atr)
 
 
+def _leg_mean(raw: object, path: str, episode_refs: frozenset[str] | None) -> LegMean:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "leg", "field"}, path)
+    for key in ("episode", "leg", "field"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    leg, field = payload["leg"], payload["field"]
+    if leg not in ("impulse", "pullback"):
+        raise InvalidRequestError(f"{path}.leg must be impulse or pullback", leg=leg)
+    if field not in LEG_MEAN_FIELDS:
+        raise InvalidRequestError(f"{path}.field must be one of {LEG_MEAN_FIELDS}", field=field)
+    return LegMean(ref, str(leg), str(field))
+
+
 def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio:
     payload = _mapping(raw, path)
     _only_fields(payload, {"left", "right", "right_floor"}, path)
@@ -550,6 +586,8 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         return Operand(segment=_segment(value, f"{path}.segment", episode_refs))
     if key == "candle":
         return Operand(candle=_candle(value, f"{path}.candle", episode_refs))
+    if key == "leg_mean":
+        return Operand(leg_mean=_leg_mean(value, f"{path}.leg_mean", episode_refs))
     if key == "ratio":
         return Operand(ratio=_ratio(value, f"{path}.ratio", episode_refs))
     if key == "price":
@@ -821,6 +859,12 @@ def _values(
                 _candle_operand, operand.candle, frame, context, identity, side, bundle
             ),
         )
+    if operand.leg_mean is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(_leg_mean_operand, operand.leg_mean, frame, side, bundle),
+        )
     if operand.ratio is not None:
         return compute_through(
             context,
@@ -903,6 +947,21 @@ def _candle_operand(
         atr=atr,
         atr_period=None if candle.atr is None else int(candle.atr.parameters["period"]),
     )
+
+
+def _leg_mean_operand(
+    leg_mean: LegMean,
+    frame: FeatureFrameLike,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "leg_mean operand has no evaluated episode", episode_ref=leg_mean.episode
+        )
+    series = frame_market_arrays(frame).array(leg_mean.field)
+    return leg_mean_values(episodes.side(leg_mean.episode, side), series, leg_mean.leg)
 
 
 def _ratio_operand(
@@ -1183,7 +1242,12 @@ def predicate_value(
 
 
 def _has_value(operand: Operand) -> bool:
-    return operand.segment is not None or operand.ratio is not None or operand.candle is not None
+    return (
+        operand.segment is not None
+        or operand.ratio is not None
+        or operand.candle is not None
+        or operand.leg_mean is not None
+    )
 
 
 def _finite(values: np.ndarray | float) -> np.ndarray | bool:
@@ -1398,6 +1462,8 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("segment",)
     if operand.candle is not None:
         return ("candle",)
+    if operand.leg_mean is not None:
+        return ("leg_mean",)
     if operand.ratio is not None:
         return ("ratio",)
     return ("feature",)
@@ -1607,6 +1673,22 @@ def _resolve_operand(
         )
         operand_ids[path] = node
         return node, [node, *consumed]
+    if operand.leg_mean is not None:
+        leg_mean = operand.leg_mean
+        episode = (contexts or {}).get(episode_identity_key(leg_mean.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "leg_mean episode is not declared", episode_ref=leg_mean.episode
+            )
+        node = node_spec(
+            "predicate.leg_mean",
+            version=PREDICATE_NODE_VERSION,
+            params={"leg": leg_mean.leg, "field": leg_mean.field},
+            upstream={"episode": episode},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node]
     if operand.ratio is not None:
         ratio = operand.ratio
         upstream = {}
