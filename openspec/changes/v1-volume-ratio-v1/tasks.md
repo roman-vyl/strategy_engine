@@ -23,11 +23,18 @@
 
 ## 4. Parity with the research reference (owner's Mac, after the owner's word)
 
-- [ ] 4.1 Values against `v1_engine_ref_{btc,eth}` on all entries (1e-9 relative, NaN equal); volume source difference reported.
-- [ ] 4.2 Block counts at the five thresholds per coin from `v1_parity_*.json`.
-- [ ] 4.3 Engine runs: BTC and ETH cells to the cent (BTC W7 LB20 SL7 TP5.5 none 427 / $25,760.99, ≤0.23 405 / $28,135.05, ≤0.12 422 / $27,342.82; ETH W11 LB20 SL8 none 176 / $11,200.96, ≤0.26 168 / $15,042.65, ≤0.48 138 / $16,604.07).
-- [ ] 4.4 Backward compatibility: A1, A2, B1, B2 responses unchanged.
-- [ ] 4.5 Report: parity table and wire format; stop for the owner's review.
+- [x] 4.1 Values against `v1_engine_ref_{btc,eth}` on all entries (1e-9 relative, NaN equal); volume source difference reported.
+- [x] 4.2 Block counts at the five thresholds per coin from `v1_parity_*.json`.
+- [x] 4.3 Engine runs: BTC and ETH cells to the cent (BTC W7 LB20 SL7 TP5.5 none 427 / $25,760.99, ≤0.23 405 / $28,135.05, ≤0.12 422 / $27,342.82; ETH W11 LB20 SL8 none 176 / $11,200.96, ≤0.26 168 / $15,042.65, ≤0.48 138 / $16,604.07).
+- [x] 4.4 Backward compatibility: A1, A2, B1, B2 responses unchanged.
+- [x] 4.5 Report: parity table and wire format; stop for the owner's review.
+
+Parity result (Mac, local Engine from 7f6bb77, owner 2026-10-12):
+
+- S* and P: 0 mismatches. V1.3 values: BTC 2168, ETH 1953, empties equal, max relative difference 7e-11. The Engine `volume` and research `volume_value` are the same series (values agree to 1e-10).
+- Blocked-entry counts equal at all 5 thresholds per coin.
+- Cells to the cent. BTC W7 / LB 20 / SL 7 / TP 5.5: none 427 / $25,760.99; ≤ 0.12 422 / $27,342.82; ≤ 0.19 417 / $26,392.25; ≤ 0.23 405 / $28,135.05; ≥ 2.4 423 / $23,553.56; ≥ 4.9 426 / $27,318.67. ETH W11 / LB 20 / SL 8: none 176 / $11,200.96; ≤ 0.26 168 / $15,042.65; ≤ 0.33 157 / $13,931.56; ≤ 0.48 138 / $16,604.07; ≥ 2.4 175 / $12,061.12; ≥ 4.6 176 / $11,200.96. All bounds null equals no filter.
+- The three A2 control cells match to the cent; no threshold is hardcoded in the Engine.
 
 ## 5. Gate
 
