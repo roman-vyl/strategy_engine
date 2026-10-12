@@ -58,9 +58,17 @@ class SegmentSeries:
 
     left: PlannedFeature
     right: PlannedFeature | None = None
+    by_side: bool = False
 
     def features(self) -> tuple[PlannedFeature, ...]:
         return (self.left,) if self.right is None else (self.left, self.right)
+
+    def for_side(self, side: str) -> PlannedFeature:
+        """The feature a `by_side` series reads on `side` (`left` is the long
+        side, `right` the short side; `b2-di-wave-v1`, design D2)."""
+
+        assert self.by_side and self.right is not None
+        return self.left if side == "long" else self.right
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,12 +99,14 @@ class Segment:
     span: int | None = None
     top: int | None = None
     eligibility: Eligibility | None = None
+    touch: str = "current"
 
 
 @dataclass(frozen=True, slots=True)
 class Ratio:
     left: Operand
     right: Operand
+    right_floor: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -285,13 +295,15 @@ _SEGMENT_FIELDS = {
     "span",
     "top",
     "eligibility",
+    "touch",
 }
 _SEGMENT_REQUIRED = ("episode", "of", "from", "to", "aggregate")
 _SEGMENT_SPANS = frozenset({("origin", "peak"), ("peak", "current"), ("origin", "current")})
 _SEGMENT_AGGREGATES = frozenset(
     {"sum", "mean_per_bar", "max", "min", "abs_sum", "top_abs_sum", "top_abs_share"}
 )
-_SEGMENT_VALUES = frozenset({"level", "change", "change_over"})
+_SEGMENT_VALUES = frozenset({"level", "change", "change_over", "from_start"})
+_SEGMENT_TOUCHES = frozenset({"current", "previous"})
 _SEGMENT_CHANGE_AGGREGATES = frozenset({"max", "min", "abs_sum", "top_abs_sum", "top_abs_share"})
 _ELIGIBILITY_FIELDS = {"legs_min_bars", "window", "impulse_positive", "pullback_min_bars"}
 
@@ -323,6 +335,18 @@ def _eligibility(raw: object, path: str) -> Eligibility:
 
 def _segment_series(raw: object, path: str) -> SegmentSeries:
     payload = _mapping(raw, path)
+    if "by_side" in payload:
+        if len(payload) != 1:
+            raise InvalidRequestError(f"{path} must carry only by_side")
+        sides = _mapping(payload["by_side"], f"{path}.by_side")
+        _only_fields(sides, {"long", "short"}, f"{path}.by_side")
+        if set(sides) != {"long", "short"}:
+            raise InvalidRequestError(f"{path}.by_side needs exactly long and short")
+        return SegmentSeries(
+            _feature(sides["long"], f"{path}.by_side.long"),
+            _feature(sides["short"], f"{path}.by_side.short"),
+            by_side=True,
+        )
     if "difference" not in payload:
         return SegmentSeries(_feature(payload, path))
     if len(payload) != 1:
@@ -361,7 +385,18 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
         )
     value = payload.get("value", "level")
     if value not in _SEGMENT_VALUES:
-        raise InvalidRequestError(f"{path}.value must be level, change or change_over", value=value)
+        raise InvalidRequestError(
+            f"{path}.value must be level, change, change_over or from_start", value=value
+        )
+    if value == "from_start" and aggregate not in ("sum", "mean_per_bar", "max", "min"):
+        raise InvalidRequestError(f"{path}.{aggregate} is not defined for from_start")
+    if value == "from_start" and "window" in payload:
+        raise InvalidRequestError(f"{path}.window is not allowed with from_start")
+    touch = payload.get("touch", "current")
+    if touch not in _SEGMENT_TOUCHES:
+        raise InvalidRequestError(f"{path}.touch must be current or previous", touch=touch)
+    if touch == "previous" and (start, end) != ("origin", "peak"):
+        raise InvalidRequestError(f"{path}.touch previous needs from origin to peak")
     span: int | None = None
     if value == "change_over":
         if "span" not in payload:
@@ -409,19 +444,23 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
         span,
         top,
         None if eligibility is None else _eligibility(eligibility, f"{path}.eligibility"),
+        str(touch),
     )
 
 
 def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio:
     payload = _mapping(raw, path)
-    _only_fields(payload, {"left", "right"}, path)
+    _only_fields(payload, {"left", "right", "right_floor"}, path)
+    floor = 0.0
+    if "right_floor" in payload:
+        floor = _number(payload["right_floor"], f"{path}.right_floor")
     left = _operand(payload.get("left"), f"{path}.left", episode_refs)
     right = _operand(payload.get("right"), f"{path}.right", episode_refs)
     if left.ratio is not None or right.ratio is not None:
         raise InvalidRequestError(f"{path} must not nest a ratio")
     if left.const is not None and right.const is not None:
         raise InvalidRequestError(f"{path} must have at least one non-constant side")
-    return Ratio(left, right)
+    return Ratio(left, right, floor)
 
 
 def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Operand:
@@ -731,10 +770,13 @@ def _segment_operand(
                 output_id=feature.output_id,
                 timeframe=feature.timeframe,
             )
-    arrays = [_feature_array(f, frame, context, identity) for f in segment.series.features()]
-    series = arrays[0] if len(arrays) == 1 else arrays[0] - arrays[1]
-    if side == "short":
-        series = -series
+    if segment.series.by_side:
+        series = _feature_array(segment.series.for_side(side), frame, context, identity)
+    else:
+        arrays = [_feature_array(f, frame, context, identity) for f in segment.series.features()]
+        series = arrays[0] if len(arrays) == 1 else arrays[0] - arrays[1]
+        if side == "short":
+            series = -series
     return segment_values(episodes.side(segment.episode, side), series, segment)
 
 
@@ -754,7 +796,7 @@ def _ratio_operand(
     right = np.broadcast_to(
         _values(ratio.right, frame, context, identity, side, bundle, f"{path}.right"), (length,)
     )
-    valid = np.isfinite(left) & np.isfinite(right) & (right > 0)
+    valid = np.isfinite(left) & np.isfinite(right) & (right > ratio.right_floor)
     out = np.full(length, math.nan)
     np.divide(left, right, out=out, where=valid)
     out.flags.writeable = False
@@ -788,7 +830,14 @@ def segment_values(episode: SideEpisode, series: np.ndarray, segment: Segment) -
         "peak": _take_rows(episode.touches["peak_bar"], rows, valid),
         "current": np.arange(size, dtype=np.float64),
     }
-    begin, end = points[segment.start], points[segment.end]
+    if segment.touch == "previous":
+        # Same episode only: the first touch has no previous one.
+        has_previous = valid & (count >= 2)
+        earlier = np.where(has_previous, rows - 1, 0)
+        begin = _take_rows(episode.touches["origin_bar"], earlier, has_previous)
+        end = _take_rows(episode.touches["peak_bar"], earlier, has_previous)
+    else:
+        begin, end = points[segment.start], points[segment.end]
     with np.errstate(invalid="ignore"):
         ok = valid & np.isfinite(begin) & np.isfinite(end) & (begin <= end)
     a = np.where(ok, begin, 0).astype(np.int64)
@@ -801,7 +850,9 @@ def segment_values(episode: SideEpisode, series: np.ndarray, segment: Segment) -
     clean = np.where(finite, series, 0.0)
     if segment.eligibility is not None:
         ok &= _eligible(segment.eligibility, points, valid, clean, bad)
-    if segment.aggregate in _SEGMENT_CHANGE_AGGREGATES:
+    if segment.value == "from_start":
+        result = _from_start_aggregate(segment, clean, bad, s, e, ok)
+    elif segment.aggregate in _SEGMENT_CHANGE_AGGREGATES:
         result = _change_aggregate(segment, clean, bad, s, e, ok)
     else:
         if segment.value == "level":
@@ -822,6 +873,38 @@ def segment_values(episode: SideEpisode, series: np.ndarray, segment: Segment) -
     out = np.where(ok & np.isfinite(result), result, math.nan)
     out.flags.writeable = False
     return out
+
+
+def _from_start_aggregate(
+    segment: Segment,
+    clean: np.ndarray,
+    bad: np.ndarray,
+    s: np.ndarray,
+    e: np.ndarray,
+    ok: np.ndarray,
+) -> np.ndarray:
+    """`max`, `min`, `sum` or `mean_per_bar` of `x[u] - x[s]` over the window
+    `s..e` (`b2-di-wave-v1`, design D3). A non-finite `x` in the window makes
+    the value missing. `ok` is narrowed in place."""
+
+    ok &= (bad[e + 1] - bad[s]) == 0
+    result = np.full(len(clean), math.nan)
+    rows = np.flatnonzero(ok)
+    if not len(rows):
+        return result
+    low, high = s[rows], e[rows]
+    start_level = clean[low]
+    if segment.aggregate in ("max", "min"):
+        level = _window_extreme(clean, low, high, segment.aggregate == "max")
+    else:
+        cumulative = np.zeros(len(clean) + 1)
+        np.cumsum(clean, out=cumulative[1:])
+        total = cumulative[high + 1] - cumulative[low]
+        level = total if segment.aggregate == "sum" else total / (high - low + 1)
+        if segment.aggregate == "sum":
+            start_level = start_level * (high - low + 1)
+    result[rows] = level - start_level
+    return result
 
 
 def _eligible(
@@ -1343,7 +1426,12 @@ def _resolve_operand(
             )
         upstream: dict[str, NodeSpec] = {"episode": episode}
         consumed: list[NodeSpec] = []
-        for role, feature in zip(("left", "right"), segment.series.features(), strict=False):
+        read = (
+            (segment.series.for_side(side),)
+            if segment.series.by_side
+            else segment.series.features()
+        )
+        for role, feature in zip(("left", "right"), read, strict=False):
             column = _column_identity(feature, feature_ids, column_ids)
             upstream[role] = column
             consumed.append(column)
@@ -1357,6 +1445,10 @@ def _resolve_operand(
         }
         if segment.span is not None:
             segment_params["span"] = segment.span
+        if segment.touch != "current":
+            segment_params["touch"] = segment.touch
+        if segment.series.by_side:
+            segment_params["by_side"] = True
         if segment.top is not None:
             segment_params["top"] = segment.top
         if segment.eligibility is not None:
@@ -1394,10 +1486,16 @@ def _resolve_operand(
             if child_node is not None:
                 upstream[role] = child_node
                 consumed.extend(child_consumed)
+        ratio_params: dict[str, object] = {
+            "left": _operand_param(ratio.left),
+            "right": _operand_param(ratio.right),
+        }
+        if ratio.right_floor:
+            ratio_params["right_floor"] = ratio.right_floor
         node = node_spec(
             "predicate.ratio",
             version=PREDICATE_NODE_VERSION,
-            params={"left": _operand_param(ratio.left), "right": _operand_param(ratio.right)},
+            params=ratio_params,
             upstream=upstream,
             side=side if operand_needs_episode(operand) else None,
         )
