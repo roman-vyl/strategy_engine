@@ -28,6 +28,11 @@ from strategy_engine.indicators.contracts import FeatureFrameLike, PlannedFeatur
 from strategy_engine.indicators.evaluation_context import EvaluationContext, compute_through
 from strategy_engine.indicators.feature_kinds import plan_feature_request
 from strategy_engine.indicators.market_arrays import frame_market_arrays
+from strategy_engine.strategies.ema_pullback.candles import (
+    CANDLE_ATR_FIELD,
+    CANDLE_ATR_KIND,
+    candle_values,
+)
 from strategy_engine.strategies.ema_pullback.stack_episode import (
     EpisodeRef,
     SideEpisode,
@@ -35,6 +40,7 @@ from strategy_engine.strategies.ema_pullback.stack_episode import (
     episode_operand_values,
     parse_episode_ref,
 )
+from strategy_engine.strategies.ema_pullback.window_extreme import window_extreme
 
 if TYPE_CHECKING:
     from strategy_engine.strategies.ema_pullback.contexts import ContextBundle
@@ -103,6 +109,19 @@ class Segment:
 
 
 @dataclass(frozen=True, slots=True)
+class Candle:
+    """The largest body, with or against the trade, over the `timeframe`
+    candles that the bars of a leg of the current touch build, each divided by
+    the ATR of its own candle (`b1-candle-ratio-v1`, design D1)."""
+
+    episode: str
+    leg: str
+    timeframe: str
+    direction: str
+    atr: PlannedFeature | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Ratio:
     left: Operand
     right: Operand
@@ -121,6 +140,7 @@ class Operand:
     episode: EpisodeRef | None = None
     segment: Segment | None = None
     ratio: Ratio | None = None
+    candle: Candle | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +236,8 @@ def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
         return (operand.feature,)
     if operand.segment is not None:
         return operand.segment.series.features()
+    if operand.candle is not None:
+        return () if operand.candle.atr is None else (operand.candle.atr,)
     if operand.ratio is not None:
         return (*operand_features(operand.ratio.left), *operand_features(operand.ratio.right))
     return ()
@@ -224,7 +246,7 @@ def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
 def operand_needs_episode(operand: Operand) -> bool:
     """True iff the operand reads the EMA stack episode bundle."""
 
-    if operand.episode is not None or operand.segment is not None:
+    if operand.episode is not None or operand.segment is not None or operand.candle is not None:
         return True
     return operand.ratio is not None and (
         operand_needs_episode(operand.ratio.left) or operand_needs_episode(operand.ratio.right)
@@ -282,7 +304,7 @@ def _feature(raw: object, path: str) -> PlannedFeature:
     return plan_feature_request(kind, timeframe, source, params)
 
 
-_OPERAND_KEYS = "feature, episode, segment, ratio, price or const"
+_OPERAND_KEYS = "feature, episode, segment, candle, ratio, price or const"
 _SEGMENT_FIELDS = {
     "episode",
     "of",
@@ -448,6 +470,43 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
     )
 
 
+_CANDLE_FIELDS = {"episode", "leg", "timeframe", "direction", CANDLE_ATR_FIELD}
+
+
+def _candle(raw: object, path: str, episode_refs: frozenset[str] | None) -> Candle:
+    payload = _mapping(raw, path)
+    _only_fields(payload, _CANDLE_FIELDS, path)
+    for key in ("episode", "leg", "timeframe", "direction"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    leg, direction = payload["leg"], payload["direction"]
+    if leg not in ("impulse", "pullback"):
+        raise InvalidRequestError(f"{path}.leg must be impulse or pullback", leg=leg)
+    if direction not in ("with", "against"):
+        raise InvalidRequestError(f"{path}.direction must be with or against", direction=direction)
+    timeframe = payload["timeframe"]
+    if not isinstance(timeframe, str) or not timeframe or timeframe == "base":
+        raise InvalidRequestError(f"{path}.timeframe must be a timeframe such as 15m")
+    timeframe_duration_ms(timeframe)
+    atr: PlannedFeature | None = None
+    if payload.get(CANDLE_ATR_FIELD) is not None:
+        atr = _feature(payload[CANDLE_ATR_FIELD], f"{path}.{CANDLE_ATR_FIELD}")
+        if atr.kind != CANDLE_ATR_KIND:
+            raise InvalidRequestError(f"{path}.atr must be the candle ATR feature", kind=atr.kind)
+        if atr.timeframe != timeframe:
+            raise InvalidRequestError(
+                f"{path}.atr.timeframe must equal the candle timeframe",
+                atr_timeframe=atr.timeframe,
+                timeframe=timeframe,
+            )
+    return Candle(ref, str(leg), timeframe, str(direction), atr)
+
+
 def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio:
     payload = _mapping(raw, path)
     _only_fields(payload, {"left", "right", "right_floor"}, path)
@@ -474,6 +533,8 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         return Operand(episode=parse_episode_ref(value, f"{path}.episode", episode_refs))
     if key == "segment":
         return Operand(segment=_segment(value, f"{path}.segment", episode_refs))
+    if key == "candle":
+        return Operand(candle=_candle(value, f"{path}.candle", episode_refs))
     if key == "ratio":
         return Operand(ratio=_ratio(value, f"{path}.ratio", episode_refs))
     if key == "price":
@@ -737,6 +798,14 @@ def _values(
                 _segment_operand, operand.segment, frame, context, identity, side, bundle
             ),
         )
+    if operand.candle is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _candle_operand, operand.candle, frame, context, identity, side, bundle
+            ),
+        )
     if operand.ratio is not None:
         return compute_through(
             context,
@@ -778,6 +847,47 @@ def _segment_operand(
         if side == "short":
             series = -series
     return segment_values(episodes.side(segment.episode, side), series, segment)
+
+
+def _candle_operand(
+    candle: Candle,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "candle operand has no evaluated episode", episode_ref=candle.episode
+        )
+    base = frame.market.base_timeframe
+    base_ms = timeframe_duration_ms(base)
+    timeframe_ms = timeframe_duration_ms(candle.timeframe)
+    if timeframe_ms < base_ms or timeframe_ms % base_ms or 86_400_000 % timeframe_ms:
+        raise InvalidRequestError(
+            "candle timeframe must be a multiple of the base timeframe that divides a day",
+            timeframe=candle.timeframe,
+            base_timeframe=base,
+        )
+    atr = None if candle.atr is None else _feature_array(candle.atr, frame, context, identity)
+    market = frame_market_arrays(frame)
+    return candle_values(
+        episodes.side(candle.episode, side),
+        time_ms=np.asarray(frame.time_ms, dtype=np.int64),
+        open_=market.array("open"),
+        high=market.array("high"),
+        low=market.array("low"),
+        close=market.array("close"),
+        timeframe_ms=timeframe_ms,
+        base_ms=base_ms,
+        leg=candle.leg,
+        direction=candle.direction,
+        side=side,
+        atr=atr,
+        atr_period=None if candle.atr is None else int(candle.atr.parameters["period"]),
+    )
 
 
 def _ratio_operand(
@@ -895,7 +1005,7 @@ def _from_start_aggregate(
     low, high = s[rows], e[rows]
     start_level = clean[low]
     if segment.aggregate in ("max", "min"):
-        level = _window_extreme(clean, low, high, segment.aggregate == "max")
+        level = window_extreme(clean, low, high, segment.aggregate == "max")
     else:
         cumulative = np.zeros(len(clean) + 1)
         np.cumsum(clean, out=cumulative[1:])
@@ -970,7 +1080,7 @@ def _change_aggregate(
         return result
     low, high = first[rows], e[rows]
     if segment.aggregate in ("max", "min"):
-        result[rows] = _window_extreme(changes, low, high, segment.aggregate == "max")
+        result[rows] = window_extreme(changes, low, high, segment.aggregate == "max")
     elif segment.aggregate == "abs_sum":
         result[rows] = _abs_sum(changes, low, high)
     else:
@@ -1003,29 +1113,6 @@ def _normalized_share(
         share = top_sum / total
         value = (share - floor) / (1.0 - floor)
     return np.where((total > 0) & (bars > top), value, math.nan)
-
-
-def _window_extreme(
-    values: np.ndarray, low: np.ndarray, high: np.ndarray, largest: bool
-) -> np.ndarray:
-    """max / min of `values[low..high]` per query by a sparse table whose
-    depth is bounded by the longest window: O(n log n) build, O(1) per query."""
-
-    reduce = np.maximum if largest else np.minimum
-    length = high - low + 1
-    depth = int(np.log2(length.max())) if len(length) else 0
-    levels = [values]
-    for j in range(1, depth + 1):
-        previous = levels[-1]
-        half = 1 << (j - 1)
-        levels.append(reduce(previous[:-half], previous[half:]))
-    level = np.floor(np.log2(length)).astype(np.int64)
-    out = np.empty(len(low))
-    for j in np.unique(level):
-        pick = level == j
-        table = levels[int(j)]
-        out[pick] = reduce(table[low[pick]], table[high[pick] - (1 << int(j)) + 1])
-    return out
 
 
 def _window_top_sum(
@@ -1062,14 +1149,15 @@ def predicate_value(
     if not isinstance(predicate, Predicate):
         return None
     condition = predicate.for_side(side)
-    if not (
-        isinstance(condition, Range)
-        and (condition.operand.segment is not None or condition.operand.ratio is not None)
-    ):
+    if not (isinstance(condition, Range) and _has_value(condition.operand)):
         return None
     value = _values(condition.operand, frame, context, identity, side, bundle, "operand")
     assert isinstance(value, np.ndarray)
     return value
+
+
+def _has_value(operand: Operand) -> bool:
+    return operand.segment is not None or operand.ratio is not None or operand.candle is not None
 
 
 def _finite(values: np.ndarray | float) -> np.ndarray | bool:
@@ -1282,6 +1370,8 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("episode",)
     if operand.segment is not None:
         return ("segment",)
+    if operand.candle is not None:
+        return ("candle",)
     if operand.ratio is not None:
         return ("ratio",)
     return ("feature",)
@@ -1377,8 +1467,7 @@ def resolve_predicate(
     )
     value_node = (
         operand_ids.get("operand")
-        if isinstance(condition, Range)
-        and (condition.operand.segment is not None or condition.operand.ratio is not None)
+        if isinstance(condition, Range) and _has_value(condition.operand)
         else None
     )
     return PredicateIdentity(
@@ -1463,6 +1552,30 @@ def _resolve_operand(
             "predicate.segment",
             version=PREDICATE_NODE_VERSION,
             params=segment_params,
+            upstream=upstream,
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node, *consumed]
+    if operand.candle is not None:
+        candle = operand.candle
+        episode = (contexts or {}).get(episode_identity_key(candle.episode, side))
+        if episode is None:
+            raise InvalidRequestError("candle episode is not declared", episode_ref=candle.episode)
+        upstream = {"episode": episode}
+        consumed = []
+        if candle.atr is not None:
+            column = _column_identity(candle.atr, feature_ids, column_ids)
+            upstream[CANDLE_ATR_FIELD] = column
+            consumed.append(column)
+        node = node_spec(
+            "predicate.candle",
+            version=PREDICATE_NODE_VERSION,
+            params={
+                "leg": candle.leg,
+                "timeframe": candle.timeframe,
+                "direction": candle.direction,
+            },
             upstream=upstream,
             side=side,
         )

@@ -26,6 +26,7 @@ from strategy_engine.indicators.implementations.adx_dmi import (
 )
 from strategy_engine.indicators.implementations.atr import (
     atr_rolling_mean,
+    atr_wilder,
     validate_atr_feature,
 )
 from strategy_engine.indicators.implementations.atr_distance import (
@@ -112,6 +113,16 @@ def _atr_values(frame: pd.DataFrame, feature: PlannedFeature) -> pd.Series:
     )
 
 
+def _atr_wilder_values(frame: pd.DataFrame, feature: PlannedFeature) -> pd.Series:
+    validate_atr_feature(feature)
+    return atr_wilder(
+        frame["high"].astype(float),
+        frame["low"].astype(float),
+        frame["close"].astype(float),
+        period=_feature_period(feature),
+    )
+
+
 def _atr_distance_values(
     dependency_values: tuple[float | None, ...], multiplier: float
 ) -> tuple[float | None, ...]:
@@ -142,6 +153,8 @@ def _compute_feature(
         values = _ema_values(feature_frame, feature)
     elif feature.kind == "atr":
         values = _atr_values(feature_frame, feature)
+    elif feature.kind == "atr_wilder":
+        values = _atr_wilder_values(feature_frame, feature)
     elif feature.kind == "atr_distance":
         validate_atr_distance_feature(feature)
         dependency_id = feature.dependencies[0]

@@ -54,6 +54,7 @@ def test_registry_exposes_adx_and_directional_indices() -> None:
         "adx",
         "di_plus",
         "di_minus",
+        "atr_wilder",
     ]
     assert registry.get_schema("adx")["calculation_group"] == "adx_dmi"
 

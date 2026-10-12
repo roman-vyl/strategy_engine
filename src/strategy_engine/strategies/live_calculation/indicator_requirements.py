@@ -27,6 +27,7 @@ _FINITE_KINDS = {"rsi", "atr"}
 _EMA_KINDS = {"ema"}
 _WILDER_KINDS = {"adx", "di_plus", "di_minus"}
 _ZERO_WARMUP_KINDS = {"atr_distance"}
+_WILDER_ATR_KINDS = {"atr_wilder"}
 
 
 def _ema_convergence_bars(period: int, tolerance: float) -> int:
@@ -150,6 +151,17 @@ class ResolveIndicatorHistoryRequirements:
                 bars=bars,
                 reason=(
                     f"{feature.output_id}: {kind}(period={period}) Wilder RMA cascade "
+                    f"convergence warm-up at tolerance={self._adx_dmi_tolerance}"
+                ),
+            )
+        if kind in _WILDER_ATR_KINDS:
+            period = int(feature.parameters["period"])
+            bars = period + _wilder_convergence_bars(period, self._adx_dmi_tolerance)
+            return HistoryRequirement(
+                timeframe=feature.timeframe,
+                bars=bars,
+                reason=(
+                    f"{feature.output_id}: atr_wilder(period={period}) seed plus Wilder RMA "
                     f"convergence warm-up at tolerance={self._adx_dmi_tolerance}"
                 ),
             )

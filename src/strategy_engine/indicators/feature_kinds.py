@@ -61,6 +61,13 @@ _ATR_SCHEMA: dict[str, Any] = {
 }
 
 
+_ATR_WILDER_SCHEMA: dict[str, Any] = {
+    **_ATR_SCHEMA,
+    "indicator_id": "atr_wilder",
+    "title": "Wilder Average True Range",
+}
+
+
 _ATR_DISTANCE_SCHEMA: dict[str, Any] = {
     "indicator_id": "atr_distance",
     "title": "ATR Distance",
@@ -207,6 +214,7 @@ _CONTRACTS: dict[str, FeatureKindContract] = {
         _period_kind("adx", _ADX_SCHEMA, validate_adx_dmi_feature),
         _period_kind("di_plus", _DI_PLUS_SCHEMA, validate_adx_dmi_feature),
         _period_kind("di_minus", _DI_MINUS_SCHEMA, validate_adx_dmi_feature),
+        _period_kind("atr_wilder", _ATR_WILDER_SCHEMA, validate_atr_feature),
     )
 }
 
