@@ -3,7 +3,7 @@
 ### Requirement: Touch end identity
 
 `to: next_origin` SHALL enter the identity of a segment as its end point, so a `peak → next_origin` segment never shares a node with a
-`peak → current` segment. A spec without the next-origin end point SHALL keep every segment identity and result it had before this
+`peak → current` or `peak → touch` segment. A spec without the next-origin end point SHALL keep every segment identity and result it had before this
 change.
 
 #### Scenario: Unchanged identities

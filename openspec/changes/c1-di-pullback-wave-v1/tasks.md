@@ -5,6 +5,7 @@
 
 ## 1. Parse and validate
 
+- [x] 1.0 `to: touch` (the touch bar of the current touch row) only with `touch: current`; rejected with `touch: previous`. The current wave is `P … T`, frozen after the touch. Verify: acceptance, rejection and freeze tests.
 - [x] 1.1 `to: next_origin` only with `touch: previous` and `from: peak`; rejected with `touch: current`, `from: origin` or `peak → current` previous. Verify: acceptance and rejection tests.
 - [x] 1.2 `by_side` with `di_minus` for long and `di_plus` for short accepted (B2 parser). Verify: test.
 - [x] 1.3 Identity: `to: next_origin` enters the segment identity; B2, A1 and A2 identities unchanged. Verify: identity test.

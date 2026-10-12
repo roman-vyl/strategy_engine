@@ -9,7 +9,7 @@ stop-losses.
 - **C1.1 "counter-DI rise to the extreme"**: `ΔC_n ÷ ΔC_{n−1}`, `ΔC_w = max(C over P_w … T_w) − C[P_w]`.
 - **C1.2 "average counter-DI area"**: `AreaMean_n ÷ AreaMean_{n−1}`, `AreaMean_w = mean over P_w … T_w of (C[u] − C[P_w])`.
 
-`C` is the counter-trade DI, `P_w` the peak of the wave's impulse, `T_w` the end of the wave's pullback: the evaluated bar `t` for
+`C` is the counter-trade DI, `P_w` the peak of the wave's impulse, `T_w` the end of the wave's pullback: the touch bar of the current touch for
 the current touch and the origin bar of the current touch row (the true low of the finished pullback) for the previous touch. Both ends inclusive.
 
 Research reference (owner's Mac, `c1/`, curves https://claude.ai/artifact/QSJpcqjVexbxdFxQzDJ2jy): C1.1 cuts from below
@@ -24,10 +24,11 @@ separate change.
 Everything builds on B2 (`b2-di-wave-v1`: `touch: previous`, `by_side`, `from_start`, `right_floor`) and on the existing
 `di_plus` / `di_minus` features. No new indicator kind and no new predicate class.
 
+- **Segment end point `touch`**: the touch bar of the current touch row; allowed only with `touch: current`.
 - **Segment end point `next_origin`**: the origin bar of the current touch row, where the previous pullback really ended.
   Allowed only as the end of a `previous` segment, `peak → next_origin`.
 - **Counter-trade series** is `by_side` with the features swapped: `long = di_minus`, `short = di_plus`. No sign change.
-- **C1.1** `= ratio(segment(C, peak→current, touch current, from_start, max), segment(C, peak→next_origin, touch previous, from_start, max))`,
+- **C1.1** `= ratio(segment(C, peak→touch, touch current, from_start, max), segment(C, peak→next_origin, touch previous, from_start, max))`,
   **C1.2** the same with `mean_per_bar`; each inside a `range` with nullable bounds, `bounds exclusive`, `empty: pass`, and
   `right_floor` 1e-6 on the ratio.
 - Thresholds, grids and the veto role live in the Research manifest, not in the Engine.

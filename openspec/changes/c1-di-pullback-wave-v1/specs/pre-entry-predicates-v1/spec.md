@@ -1,5 +1,17 @@
 ## ADDED Requirements
 
+### Requirement: Segment end at the touch bar
+
+A segment MAY end at `touch`, the touch bar of the CURRENT touch row. `to: touch` SHALL be allowed only with `touch: current` and
+`from: peak`; any other combination SHALL be rejected. The segment SHALL span the peak bar and the touch bar of the current touch,
+both ends inclusive, and SHALL NOT change on the bars after the touch bar. The touch bar of the current touch is never after the
+evaluated bar, so no bar after the evaluated bar is read.
+
+#### Scenario: Current pullback
+
+- **WHEN** the current touch has its touch bar at bar 30 and the evaluated bar is 32
+- **THEN** a `peak → touch` segment SHALL span the peak bar and bar 30 on both bars 30 and 32.
+
 ### Requirement: Segment end at the next origin
 
 A segment MAY end at `next_origin`, the origin bar of the CURRENT touch row. `to: next_origin` SHALL be allowed only with
@@ -19,7 +31,7 @@ on the first touch of an episode and when the origin bar is not after that peak 
 
 ### Requirement: Counter-trade directional index wave ratio
 
-A ratio of a `from_start` segment `peak → current` of `touch` `current` over a `from_start` segment `peak → next_origin` of `touch`
+A ratio of a `from_start` segment `peak → touch` of `touch` `current` over a `from_start` segment `peak → next_origin` of `touch`
 `previous`, both over a `by_side` series with `long = di_minus` and `short = di_plus`, and `right_floor` 1e-6, SHALL be missing
 when the previous pullback's value is not greater than 1e-6 or when either side is missing. A current value not greater than 0
 SHALL stay a value.

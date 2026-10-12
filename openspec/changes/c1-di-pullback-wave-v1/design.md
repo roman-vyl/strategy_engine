@@ -14,8 +14,7 @@
 `segment.to` MAY be `next_origin`: the `origin_bar` (S*, the true low or high that starts the wave) of the CURRENT touch row. It is
 allowed only with `touch: previous` and `from: peak`, so the previous pullback is `P_{n−1} … S*_n` inclusive: it runs to the real
 extreme of the finished pullback, not to the bar where it first touched the EMA (owner 2026-10-12: after the touch the low went
-further on 69 % of BTC EMA500 cases, median 4 bars). A current-touch segment keeps `peak → current`, whose end is the evaluated
-bar (the touch is assumed to happen now). Any other use of `next_origin` is rejected at parse time. The segment is missing on the
+further on 69 % of BTC EMA500 cases, median 4 bars). The CURRENT wave ends at `touch`: the `touch_bar` of the current touch row (`peak → touch`, `touch: current`, owner 2026-10-12: "до касания", the entry is decided on the touch/trigger bar). The current touch row exists only from its touch bar on, so `touch_bar ≤ t` always and the value stays fixed on the bars after the touch. Any other use of `next_origin` is rejected at parse time. The segment is missing on the
 first touch of an episode and when `S*_n` is not after `P_{n−1}` (degenerate), and the segment is empty then, as in B2.
 
 No look-ahead: `S*_n` is at or before the current touch bar and so at or before `t`; no bar after `t` is read.
@@ -32,10 +31,10 @@ about 400 bars before the earliest `P` it needs).
 
 | metric | numerator (current) | denominator (previous) |
 |---|---|---|
-| C1.1 | `max(C[P_n … t]) − C[P_n]` | `max(C[P_{n−1} … T_{n−1}]) − C[P_{n−1}]` |
-| C1.2 | `mean(C[P_n … t]) − C[P_n]` | `mean(C[P_{n−1} … T_{n−1}]) − C[P_{n−1}]` |
+| C1.1 | `max(C[P_n … T_n]) − C[P_n]` | `max(C[P_{n−1} … T_{n−1}]) − C[P_{n−1}]` |
+| C1.2 | `mean(C[P_n … T_n]) − C[P_n]` | `mean(C[P_{n−1} … T_{n−1}]) − C[P_{n−1}]` |
 
-The current wave grows with `t`; at `t = P` it is 0 (one bar). The denominator is empty when the value is `≤ 1e-6` (zero,
+The current wave `P_n … T_n` ends at the touch bar of the current touch (T_n); it can be 0 (one bar). The denominator is empty when the value is `≤ 1e-6` (zero,
 negative or tiny, as in B2); a numerator `≤ 0` is a value.
 
 ### D4. Direction of the cut
@@ -54,5 +53,5 @@ Answered by the research thread's `c1_values.py` and its exports when the owner 
 
 1. The previous pullback ends on the origin bar (S*) of the current touch row, inclusive (owner 2026-10-12; the earlier touch-bar end is dropped).
 2. The denominator floor 1e-6 holds for C1.1 and C1.2.
-3. `C[P]` is the counter DI on the peak bar itself, the first bar of `P … t`.
-4. The current pullback includes the evaluated bar `t`.
+3. `C[P]` is the counter DI on the peak bar itself, the first bar of `P … T`.
+4. The current pullback ends at the touch bar of the current touch, inclusive (owner 2026-10-12: "до касания"; the earlier `P … t` is dropped).

@@ -321,7 +321,13 @@ _SEGMENT_FIELDS = {
 }
 _SEGMENT_REQUIRED = ("episode", "of", "from", "to", "aggregate")
 _SEGMENT_SPANS = frozenset(
-    {("origin", "peak"), ("peak", "current"), ("origin", "current"), ("peak", "next_origin")}
+    {
+        ("origin", "peak"),
+        ("peak", "current"),
+        ("origin", "current"),
+        ("peak", "touch"),
+        ("peak", "next_origin"),
+    }
 )
 _PREVIOUS_SPANS = frozenset({("origin", "peak"), ("peak", "next_origin")})
 _TOUCH_COLUMNS = {"origin": "origin_bar", "peak": "peak_bar"}
@@ -399,7 +405,8 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
     start, end = payload["from"], payload["to"]
     if (start, end) not in _SEGMENT_SPANS:
         raise InvalidRequestError(
-            f"{path}.from/to must be origin-peak, peak-current, origin-current or peak-next_origin",
+            f"{path}.from/to must be origin-peak, peak-current, origin-current, "
+            "peak-touch or peak-next_origin",
             start=start,
             end=end,
         )
@@ -946,6 +953,7 @@ def segment_values(episode: SideEpisode, series: np.ndarray, segment: Segment) -
     points = {
         "origin": _take_rows(episode.touches["origin_bar"], rows, valid),
         "peak": _take_rows(episode.touches["peak_bar"], rows, valid),
+        "touch": _take_rows(episode.touches["touch_bar"], rows, valid),
         "current": np.arange(size, dtype=np.float64),
     }
     if segment.touch == "previous":
@@ -967,6 +975,7 @@ def segment_values(episode: SideEpisode, series: np.ndarray, segment: Segment) -
     with np.errstate(invalid="ignore"):
         ok = valid & np.isfinite(begin) & np.isfinite(end)
         ok &= (begin < end) if strict else (begin <= end)
+        ok &= end <= np.arange(size)  # nothing after the evaluated bar is read
     a = np.where(ok, begin, 0).astype(np.int64)
     e = np.where(ok, end, 0).astype(np.int64)
     s = a if segment.last_n is None else np.maximum(a, e - segment.last_n + 1)

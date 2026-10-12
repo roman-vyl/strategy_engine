@@ -43,7 +43,7 @@ def _branch(name: str, low: float | None, high: float | None, period: int = 14) 
                 "episode": "trend",
                 "of": series,
                 "from": "peak",
-                "to": "current" if touch == "current" else "next_origin",
+                "to": "touch" if touch == "current" else "next_origin",
                 "value": "from_start",
                 "aggregate": AGGREGATE[name],
                 "touch": touch,

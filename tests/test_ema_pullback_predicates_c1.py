@@ -41,7 +41,8 @@ def test_touch_end_parses_on_the_previous_touch() -> None:
 @pytest.mark.parametrize(
     "fields",
     [
-        {"touch": "current"},  # the touch end belongs to the previous touch
+        {"touch": "current"},  # next_origin belongs to the previous touch
+        {"to": "touch", "touch": "previous"},  # the previous pullback ends at the next origin
         {"from": "origin"},
         {"from": "origin", "to": "next_origin", "touch": "previous"},
         {"to": "current"},  # previous pullback ends at the next origin
@@ -51,6 +52,11 @@ def test_touch_end_parses_on_the_previous_touch() -> None:
 def test_invalid_touch_end_is_rejected(fields: dict[str, Any]) -> None:
     with pytest.raises(InvalidRequestError):
         _parse({"segment": _segment(**_c1_fields(**fields))})
+
+
+def _row(episode: Any, t: int) -> int:
+    number = int(episode.state["touch_number"][t])
+    return int(episode.first_row[int(episode.state["episode_id"][t])]) + number - 1
 
 
 def _reference(episode: Any, line: np.ndarray) -> dict[str, np.ndarray]:
@@ -64,11 +70,12 @@ def _reference(episode: Any, line: np.ndarray) -> dict[str, np.ndarray]:
         _, peak, _ = legs
         if peak > t:
             continue
-        out["rise"][t], out["area"][t] = _wave(line, peak, t)
+        touch = int(touches["touch_bar"][int(_row(episode, t))])
+        out["rise"][t], out["area"][t] = _wave(line, peak, touch)
         number = int(episode.state["touch_number"][t])
         if number < 2:
             continue
-        row = int(episode.first_row[int(episode.state["episode_id"][t])]) + number - 2
+        row = int(_row(episode, t)) - 1
         begin, end = int(touches["peak_bar"][row]), int(touches["origin_bar"][row + 1])
         if end <= begin:
             continue
@@ -77,7 +84,7 @@ def _reference(episode: Any, line: np.ndarray) -> dict[str, np.ndarray]:
 
 
 def _pair(aggregate: str) -> tuple[Any, Any]:
-    now = _segment_args(start="peak", end="current", value="from_start", aggregate=aggregate)
+    now = _segment_args(start="peak", end="touch", value="from_start", aggregate=aggregate)
     before = _segment_args(
         start="peak", end="next_origin", value="from_start", aggregate=aggregate, touch="previous"
     )
@@ -108,3 +115,21 @@ def test_previous_pullback_reads_only_bars_up_to_the_current_origin() -> None:
         altered[cut + 1 :] += 50.0
         got = segment_values(episode, altered, before_segment)
         np.testing.assert_array_equal(got[: cut + 1], full[: cut + 1])
+
+
+def test_current_pullback_ends_at_the_touch_bar_and_stays_there() -> None:
+    episode, size = _episode(5)
+    line = 20.0 + np.cumsum(np.random.default_rng(11).normal(0, 1, size))
+    now, _ = _pair("max")
+    got = segment_values(episode, line, now)
+    checked = 0
+    for t in range(size):
+        legs = _legs(episode, t)
+        if legs is None or legs[1] > t:
+            continue
+        touch = int(episode.touches["touch_bar"][_row(episode, t)])
+        assert touch <= t  # the touch bar of the current touch is never in the future
+        if t > touch and np.isfinite(got[touch]):
+            assert got[t] == got[touch]
+            checked += 1
+    assert checked
