@@ -32,5 +32,5 @@
 
 ## 5. Gate
 
-- [ ] 5.1 ruff, mypy, affected tests without `tests/parity` memo.
-- [ ] 5.2 `openspec validate v2-force-ratio-v1 --strict`.
+- [x] 5.1 ruff, mypy, affected tests without `tests/parity` memo.
+- [x] 5.2 `openspec validate v2-force-ratio-v1 --strict`.
