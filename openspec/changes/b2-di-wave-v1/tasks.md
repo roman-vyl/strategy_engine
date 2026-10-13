@@ -1,6 +1,6 @@
 ## 0. Baseline and reference
 
-- [ ] 0.1 Branch from main (e00defc or a newer main). A1/A2 segment, ratio and range suites pass unchanged after every group. Verify: suite run.
+- [x] 0.1 Branch from main (e00defc or a newer main). A1/A2 segment, ratio and range suites pass unchanged after every group. Verify: suite run.
 - [x] 0.2 D7 and the DI smoothing question answered (13:58, 14:3x): wave n−1 from the same episode, denominator floor 1e-6, `D[S*]` on bar `S*`, DI over the whole history, existing `di_*` features reused (D4a). The reference rows carry the intermediate values (DI at `S*`, max and mean of each wave, ΔDI and area of both waves); a bar offset found at parity is reported.
 
 ## 1. Parse and validate
@@ -29,14 +29,23 @@
 
 ## 4. Parity with the research reference (owner's Mac, separate session, after the owner's word)
 
-- [ ] 4.0 DI check first: Engine `di_plus`/`di_minus` (period 14, base timeframe) against the reference DI on the bars `S*` and `P` of every entry; differences are expected to be below 1e-9 after about 320 bars; report any bar offset.
-- [ ] 4.1 Values: `b2/b2_engine_ref_btc.csv.gz` and `b2/b2_engine_ref_eth.csv.gz`, every entry, B2.1 and B2.2, to 1e-9, NaN equal; S*/P of both waves equal and the intermediate values (DI at `S*`, max, mean, ΔDI, area) equal.
-- [ ] 4.2 Blocked-entry counts of `b2/b2_parity_btc.json` and `b2/b2_parity_eth.json` at several thresholds per variant.
-- [ ] 4.3 Replay cells of the two parity files to the cent on a local Engine from the branch. BTC W7 / LB 20 / SL 7 / TP 5.5: no filter 427 trades / $25,760.99;
+- [x] 4.0 DI check first: Engine `di_plus`/`di_minus` (period 14, base timeframe) against the reference DI on the bars `S*` and `P` of every entry; differences are expected to be below 1e-9 after about 320 bars; report any bar offset.
+- [x] 4.1 Values: `b2/b2_engine_ref_btc.csv.gz` and `b2/b2_engine_ref_eth.csv.gz`, every entry, B2.1 and B2.2, to 1e-9, NaN equal; S*/P of both waves equal and the intermediate values (DI at `S*`, max, mean, ΔDI, area) equal.
+- [x] 4.2 Blocked-entry counts of `b2/b2_parity_btc.json` and `b2/b2_parity_eth.json` at several thresholds per variant.
+- [x] 4.3 Replay cells of the two parity files to the cent on a local Engine from the branch. BTC W7 / LB 20 / SL 7 / TP 5.5: no filter 427 trades / $25,760.99;
       B2.1 ≤ 0.7 408 / $36,532.39; B2.2 ≤ 0.8 398 / $38,525.90. ETH W11 / LB 20 / SL 8 / TP 5.5 cells from `b2_parity_eth.json`. One run with all bounds null equals no filter. At most 200 Engine runs in total.
-- [ ] 4.4 Situations: first touch (missing, passes), ΔDI_{n−1} ≤ 0, DI warm-up, one-bar impulse, short mirror (−DI), no look-ahead.
-- [ ] 4.5 Backward compatibility: A1 and A2 responses unchanged.
-- [ ] 4.6 Report: parity table, wire format; stop for the owner's review.
+- [x] 4.4 Situations: first touch (missing, passes), ΔDI_{n−1} ≤ 0, DI warm-up, one-bar impulse, short mirror (−DI), no look-ahead.
+- [x] 4.5 Backward compatibility: A1 and A2 responses unchanged.
+- [x] 4.6 Report: parity table, wire format; stop for the owner's review.
+
+Parity result (Mac, local Engine from main 878a589, owner 2026-10-13):
+
+- Points S*, P, S*(n−1), P(n−1): 0 mismatches. Counter DI at S* of both waves within 5e-11.
+- B2.1: BTC 1401 / ETH 1228 values, empties equal, max relative difference 5e-12. B2.2: BTC 1158 / ETH 1060 values, empties equal, max absolute difference 5e-7 (reference exactly 0 against Engine ±1e-11 from prefix sums, and one ETH value 324.13); float noise, no threshold affected.
+- Blocked-entry counts equal at all 8 thresholds on both coins (BTC B2.1 ≤ 0.7 286, B2.2 ≤ 0.8 375).
+- All cells to the cent, 9 per coin. BTC W7 / LB 20 / SL 7 / TP 5.5: none 427 / $25,760.99, B2.1 ≤ 0.7 408 / $36,532.39, B2.2 ≤ 0.8 398 / $38,525.90. ETH W11 / LB 20 / SL 8: none 176 / $11,200.96, B2.1 ≤ 0.7 166 / $16,043.23, B2.2 ≤ 0.8 158 / $12,847.02. All bounds null equals no filter.
+- Situations: first touch 736 / 701 empty and passes; previous rise ≤ 1e-6 31 / 24 and previous area 274 / 192 empty; shorts 612 / 551; one-bar impulse 12 / 5 entries, all match.
+- The three A2 control cells match to the cent.
 
 ## 5. Gate
 
