@@ -27,7 +27,7 @@ component keeps every existing identity and result unchanged. Both can appear in
   "component_id": "composite_vote",
   "instance_id": "<id>",
   "params": {
-    "block_at": 0.75,
+    "block_at": "<number>",
     "members": [
       {
         "member_id": "m1",
@@ -36,8 +36,8 @@ component keeps every existing identity and result unchanged. Both can appear in
             "operand": { "<any operand>": {} },
             "side": "high",
             "levels": [
-              { "at": 1.1, "weight": 0.27 },
-              { "at": 1.6, "veto": true }
+              { "at": "<number>", "weight": "<number>" },
+              { "at": "<number>", "veto": true }
             ]
           }
         ]
@@ -46,8 +46,8 @@ component keeps every existing identity and result unchanged. Both can appear in
         "member_id": "m2",
         "inputs": [
           {
-            "group": { "at_least": 2, "of": [ { "<predicate>": {} }, { "<predicate>": {} }, { "<predicate>": {} } ] },
-            "weight": 0.33
+            "group": { "at_least": "<k>", "of": [ { "<predicate>": {} }, { "<predicate>": {} }, { "<predicate>": {} } ] },
+            "weight": "<number>"
           }
         ]
       }
@@ -56,7 +56,7 @@ component keeps every existing identity and result unchanged. Both can appear in
 }
 ```
 
-Numbers above are placeholders; the Engine defines none.
+All values come from the spec; the Engine defines none.
 
 - `block_at`: finite number > 0, or `null` (only vetoes block).
 - `member_id`: unique within the vote, no `/`.
