@@ -33,7 +33,12 @@ from strategy_engine.strategies.ema_pullback.candles import (
     CANDLE_ATR_KIND,
     candle_values,
 )
-from strategy_engine.strategies.ema_pullback.leg_means import LEG_MEAN_FIELDS, leg_mean_values
+from strategy_engine.strategies.ema_pullback.leg_means import (
+    FORCE_FIELDS,
+    LEG_MEAN_FIELDS,
+    force_series,
+    leg_mean_values,
+)
 from strategy_engine.strategies.ema_pullback.stack_episode import (
     EpisodeRef,
     SideEpisode,
@@ -960,7 +965,11 @@ def _leg_mean_operand(
         raise InvalidRequestError(
             "leg_mean operand has no evaluated episode", episode_ref=leg_mean.episode
         )
-    series = frame_market_arrays(frame).array(leg_mean.field)
+    arrays = frame_market_arrays(frame)
+    if leg_mean.field in FORCE_FIELDS:
+        series = force_series(arrays.array("close"), arrays.array("volume"), leg_mean.field, side)
+    else:
+        series = arrays.array(leg_mean.field)
     return leg_mean_values(episodes.side(leg_mean.episode, side), series, leg_mean.leg)
 
 
