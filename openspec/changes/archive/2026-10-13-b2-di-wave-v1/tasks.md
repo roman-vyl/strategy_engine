@@ -1,6 +1,7 @@
 ## 0. Baseline and reference
 
-- [ ] 0.1 Branch from main (e00defc or a newer main). A1/A2 segment, ratio and range suites pass unchanged after every group. Verify: suite run.
+- [x] 0.1 Branch from main (e00defc or a newer main). A1/A2 segment, ratio and range suites pass unchanged after every group. Verify: suite run.
+      Mac 2026-10-13 at main 878a589: suite without `tests/parity` passes except `test_live_entry_responses_unchanged`, which fails the same way on a96f37e on this Mac (byte hash).
 - [x] 0.2 D7 and the DI smoothing question answered (13:58, 14:3x): wave n−1 from the same episode, denominator floor 1e-6, `D[S*]` on bar `S*`, DI over the whole history, existing `di_*` features reused (D4a). The reference rows carry the intermediate values (DI at `S*`, max and mean of each wave, ΔDI and area of both waves); a bar offset found at parity is reported.
 
 ## 1. Parse and validate
@@ -29,14 +30,21 @@
 
 ## 4. Parity with the research reference (owner's Mac, separate session, after the owner's word)
 
-- [ ] 4.0 DI check first: Engine `di_plus`/`di_minus` (period 14, base timeframe) against the reference DI on the bars `S*` and `P` of every entry; differences are expected to be below 1e-9 after about 320 bars; report any bar offset.
-- [ ] 4.1 Values: `b2/b2_engine_ref_btc.csv.gz` and `b2/b2_engine_ref_eth.csv.gz`, every entry, B2.1 and B2.2, to 1e-9, NaN equal; S*/P of both waves equal and the intermediate values (DI at `S*`, max, mean, ΔDI, area) equal.
-- [ ] 4.2 Blocked-entry counts of `b2/b2_parity_btc.json` and `b2/b2_parity_eth.json` at several thresholds per variant.
-- [ ] 4.3 Replay cells of the two parity files to the cent on a local Engine from the branch. BTC W7 / LB 20 / SL 7 / TP 5.5: no filter 427 trades / $25,760.99;
+- [x] 4.0 DI check first: Engine `di_plus`/`di_minus` (period 14, base timeframe) against the reference DI on the bars `S*` and `P` of every entry; differences are expected to be below 1e-9 after about 320 bars; report any bar offset.
+      Engine `di_plus/di_minus_close_base_14` at S* of both waves: max 5e-11 on 1432 BTC / 1252 ETH entries.
+- [x] 4.1 Values: `b2/b2_engine_ref_btc.csv.gz` and `b2/b2_engine_ref_eth.csv.gz`, every entry, B2.1 and B2.2, to 1e-9, NaN equal; S*/P of both waves equal and the intermediate values (DI at `S*`, max, mean, ΔDI, area) equal.
+      Local Engine from main 878a589: S*, P, S*(n−1), P(n−1) 0 mismatches. B2.1 BTC 1401 / ETH 1228 values, empties equal, max relative 5e-12. B2.2 BTC 1158 / ETH 1060, empties equal, max absolute 5e-7 (reference exactly 0 against Engine ±1e-11 from prefix sums, one ETH value 324.13 off by 5e-7).
+- [x] 4.2 Blocked-entry counts of `b2/b2_parity_btc.json` and `b2/b2_parity_eth.json` at several thresholds per variant.
+      All 8 per coin equal (BTC B2.1 ≤ 0.4/0.5/0.65/0.7 66/109/252/286, B2.2 ≤ 0.55/0.65/0.8/0.9 186/243/375/473).
+- [x] 4.3 Replay cells of the two parity files to the cent on a local Engine from the branch. BTC W7 / LB 20 / SL 7 / TP 5.5: no filter 427 trades / $25,760.99;
+      All 9 cells per coin to the cent. BTC W7/LB20/SL7/TP5.5: none 427 / $25,760.99, B2.1 ≤ 0.7 408 / $36,532.39, B2.2 ≤ 0.8 398 / $38,525.90. ETH W11/LB20/SL8: none 176 / $11,200.96, B2.1 ≤ 0.7 166 / $16,043.23, B2.2 ≤ 0.8 158 / $12,847.02. All-null equals no filter on both.
       B2.1 ≤ 0.7 408 / $36,532.39; B2.2 ≤ 0.8 398 / $38,525.90. ETH W11 / LB 20 / SL 8 / TP 5.5 cells from `b2_parity_eth.json`. One run with all bounds null equals no filter. At most 200 Engine runs in total.
-- [ ] 4.4 Situations: first touch (missing, passes), ΔDI_{n−1} ≤ 0, DI warm-up, one-bar impulse, short mirror (−DI), no look-ahead.
-- [ ] 4.5 Backward compatibility: A1 and A2 responses unchanged.
-- [ ] 4.6 Report: parity table, wire format; stop for the owner's review.
+- [x] 4.4 Situations: first touch (missing, passes), ΔDI_{n−1} ≤ 0, DI warm-up, one-bar impulse, short mirror (−DI), no look-ahead.
+      First touch 736/701 missing and pass; previous rise ≤ 1e-6 31/24 and area 274/192 missing; shorts 612/551; one-bar impulse 12/5 entries equal.
+- [x] 4.5 Backward compatibility: A1 and A2 responses unchanged.
+      A2 control cells on main to the cent (see B1 4.5).
+- [x] 4.6 Report: parity table, wire format; stop for the owner's review.
+      Wire format: `range(ratio(segment(by_side di_plus/di_minus, origin→peak, from_start, max | mean_per_bar, touch current), the same with touch previous, right_floor 1e-6))`, `min` = threshold, `bounds exclusive`, `empty pass`.
 
 ## 5. Gate
 
