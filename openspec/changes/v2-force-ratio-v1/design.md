@@ -43,5 +43,5 @@ ratio. O(n) per series per side. No lookahead: the value on `t` reads bars `≤ 
 
 ### D7. Trace
 
-The leg mean operand also yields, for parity and the trace, the signed force sum and the bar count of each leg (sum = mean × count);
-`mean_imp`, `mean_pb` and V2.2 are the operand values.
+The trace of a child carries the ratio value `V2.2` like every other ratio. The signed force sum and the bar count of each leg for parity
+are `mean × count`, the count from `leg_bar_counts` (bars of `[S*, P]` and `[P+1, t]`); `mean_imp` and `mean_pb` are the operand values.
