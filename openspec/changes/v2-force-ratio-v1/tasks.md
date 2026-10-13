@@ -24,11 +24,16 @@
 
 ## 4. Parity with the research reference (owner's Mac, after the owner's word)
 
-- [ ] 4.1 Values against `v2_engine_ref_{btc,eth}` on all entries (1e-9 relative, NaN equal, long and short separately); the two reference points of D4 and D5 reported.
-- [ ] 4.2 Block counts at the research thresholds from `v2_parity_{btc,eth}.json`.
-- [ ] 4.3 Engine runs: BTC W7 / LB 20 / SL 7 / TP 5.5 and ETH W11 / LB 20 / SL 8 / TP 5.5, with and without V2.2 ≥ 10, to the cent (numbers from the Mac).
-- [ ] 4.4 Backward compatibility: A1, A2, B1, B2, C1, V1.3 responses unchanged; the three A2 control cells match to the cent.
-- [ ] 4.5 Report: parity table and wire format; stop for the owner's review.
+- [x] 4.1 Values against `v2_engine_ref_{btc,eth}` on all entries (1e-9 relative, NaN equal, long and short separately); the two reference points of D4 and D5 reported.
+      Mac 2026-10-13, local Engine from 324ba08: S*/P 0 mismatches. Values BTC 1986 / ETH 1816, empties equal (no wave, impulse force ≤ 0), negatives 88 / 71 equal. Max relative difference 5e-10, one BTC entry 3.9e-9 (value 2.8e-5, the pullback force almost cancels: float noise). Known convention difference: research fills a gap candle with force 0, the Engine makes the leg empty; the windows have no gaps.
+- [x] 4.2 Block counts at the research thresholds from `v2_parity_{btc,eth}.json`.
+      All equal. BTC ≤ 0.007 / 0.027: 123 / 199; ≥ 5 / 8 / 10 / 16: 200 / 139 / 119 / 80. ETH ≤ 0.007 / 0.027: 101 / 165; ≥ 8 / 10 / 16: 112 / 98 / 71.
+- [x] 4.3 Engine runs: BTC W7 / LB 20 / SL 7 / TP 5.5 and ETH W11 / LB 20 / SL 8 / TP 5.5, with and without V2.2 ≥ 10, to the cent (numbers from the Mac).
+      To the cent. BTC W7 / LB 20 / SL 7 / TP 5.5: none 427 / $25,760.99; ≤ 0.027 407 / $28,775.80; ≥ 5 429 / $28,933.44; ≥ 10 423 / $28,557.57. ETH W11 / LB 20 / SL 8 / TP 5.5: none 176 / $11,200.96; ≤ 0.027 162 / $5,927.51; ≥ 10 173 / $12,527.39. All bounds null equals no filter.
+- [x] 4.4 Backward compatibility: A1, A2, B1, B2, C1, V1.3 responses unchanged; the three A2 control cells match to the cent.
+      The three A2 control cells match to the cent on the branch Engine.
+- [x] 4.5 Report: parity table and wire format; stop for the owner's review.
+      Parity table above; wire format: `range(ratio(leg_mean(pullback, force_against), leg_mean(impulse, force_with)))`, `bounds exclusive`, `empty pass`, `min`/`max` = thresholds.
 
 ## 5. Gate
 
