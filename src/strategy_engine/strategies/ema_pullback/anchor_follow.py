@@ -38,8 +38,9 @@ def anchor_follow_parts(
     if anchor is None:
         raise InvalidRequestError("episode carries no anchor series", side=episode.side)
     valid, _, peak = touch_points(episode, size)
-    if len(episode.touches["peak_bar"]) == 0:
-        valid = np.zeros(size, dtype=bool)
+    if len(episode.touches["peak_price"]) == 0:  # no touch table to read a price from
+        nothing = np.full(size, math.nan)
+        return nothing, nothing.copy(), nothing.copy()
     rows = _touch_rows(episode, size)
     g = 1.0 if episode.side == "long" else -1.0
     peak_price = np.where(valid, episode.touches["peak_price"][rows], math.nan)

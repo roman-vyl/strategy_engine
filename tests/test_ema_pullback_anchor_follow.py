@@ -183,3 +183,49 @@ def test_thresholds_are_blocked_inclusively_and_missing_passes() -> None:
         True,
         True,
     ]
+
+
+def _episode_without_touches() -> tuple[Any, int]:
+    from strategy_engine.strategies.ema_pullback.stack_episode import (
+        EpisodeParams,
+        project_side,
+    )
+
+    size = 60
+    close = np.linspace(100.0, 101.0, size)  # a flat, rising line: the stack never touches
+    params = EpisodeParams(3, 5, 8, 4, 4, 100)
+    episode = project_side(close + 0.1, close - 0.1, close, close, close, close, params, "long")
+    assert len(episode.touches["origin_bar"]) == 0
+    return episode, size
+
+
+def test_an_episode_without_touches_gives_no_value_instead_of_failing() -> None:
+    from strategy_engine.strategies.ema_pullback.candles import candle_values, touch_points
+    from strategy_engine.strategies.ema_pullback.leg_means import leg_mean_values
+
+    episode, size = _episode_without_touches()
+    valid, origin, peak = touch_points(episode, size)
+    assert not valid.any() and (origin == 0).all() and (peak == 0).all()
+    assert np.isnan(anchor_follow_values(episode)).all()
+    volume = np.arange(1.0, size + 1.0)
+    for leg in ("impulse", "pullback"):
+        assert np.isnan(leg_mean_values(episode, volume, leg)).all()
+    close = np.linspace(100.0, 101.0, size)
+    time_ms = np.arange(size, dtype=np.int64) * 300_000
+    for leg in ("impulse", "pullback"):
+        got = candle_values(
+            episode,
+            time_ms=time_ms,
+            open_=close,
+            high=close + 0.1,
+            low=close - 0.1,
+            close=close,
+            timeframe_ms=900_000,
+            base_ms=300_000,
+            leg=leg,
+            direction="against",
+            side="long",
+            atr=None,
+            atr_period=None,
+        )
+        assert np.isnan(got).all()
