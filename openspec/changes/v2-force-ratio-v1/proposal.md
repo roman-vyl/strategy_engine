@@ -17,7 +17,7 @@ Builds on the V1.3 `leg_mean` operand, `ratio` and `range` with nullable bounds.
 - **Two new `leg_mean` fields, `force_with` and `force_against`**: the mean over a leg of the side-signed candle force.
   - Candle force `F[u] = (close[u] − close[u−1]) × volume[u]` on the base bars.
   - `force_with` is `F[u]` on the long side and `−F[u]` on the short side (positive = with the trade); `force_against` is its negation.
-  - The legs are those of V1.3: impulse `[S*, P]`, pullback `[P+1, t]`, both ends inclusive. The first impulse bar reads `close[S*−1]`.
+  - The legs are those of V1.3: impulse `[S*, P]`, pullback `[P+1, t]`, both ends inclusive. The first bar of the data window has force 0; the first impulse bar reads `close[S*−1]`.
 - **V2.2 as a block**: `ratio(leg_mean(pullback, force_against), leg_mean(impulse, force_with))` in a `range` with nullable bounds,
   `bounds exclusive`, `empty: pass`; blocked when `V2.2 ≤ low` or `V2.2 ≥ high`, both inclusive. A non-positive impulse force makes
   the ratio missing (the ratio already requires `right > right_floor`, floor 0) and the entry passes. A negative pullback force is a

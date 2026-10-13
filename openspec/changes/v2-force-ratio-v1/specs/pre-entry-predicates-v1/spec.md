@@ -18,7 +18,7 @@ A leg mean reference SHALL be `{"leg_mean": {"episode", "leg", "field"}}`; all t
 
 For the field `force_with` or `force_against` the series averaged by a leg mean SHALL be the candle force on the base bars,
 `F[u] = (close[u] − close[u−1]) × volume[u]`, multiplied by `+1` for `force_with` on the long side and `force_against` on the short side
-and by `−1` for `force_against` on the long side and `force_with` on the short side. The series SHALL be missing on bar 0 and wherever
+and by `−1` for `force_against` on the long side and `force_with` on the short side. The series SHALL be 0 on bar 0, the first bar of the data window, and missing on any other bar where
 `close[u]`, `close[u−1]` or `volume[u]` is not finite. The leg mean of it SHALL be the arithmetic mean over all bars of the leg, with the legs
 and the missing rules of the leg mean operand. The impulse leg `[S*, P]` SHALL read `close[S*−1]` for its first bar.
 
@@ -35,7 +35,7 @@ and the missing rules of the leg mean operand. The impulse leg `[S*, P]` SHALL r
 #### Scenario: First bar of the series
 
 - **WHEN** the impulse leg starts at bar 0
-- **THEN** its mean SHALL be missing.
+- **THEN** the force of bar 0 SHALL be 0 and the mean SHALL average it like any other bar.
 
 ### Requirement: Force ratio filter
 

@@ -10,7 +10,7 @@
 
 ## 2. Evaluation
 
-- [ ] 2.1 Derived series against a brute-force loop on synthetic data: long and short sign, bar 0 missing, first impulse bar reads `close[S*−1]`, non-finite close or volume makes the leg missing. Verify: tests.
+- [ ] 2.1 Derived series against a brute-force loop on synthetic data: long and short sign, bar 0 force 0, first impulse bar reads `close[S*−1]`, non-finite close or volume makes the leg missing. Verify: tests.
 - [ ] 2.2 Legs: pullback starts at `P+1`, `t = P` missing, one-bar legs, several touches, a new episode. Verify: tests.
 - [ ] 2.3 V2.2 in `range`: `(null, null)` passes; missing passes; `imp ≤ 0` passes; negative `pb` is a value; values exactly on `low` and `high` block (inclusive); both bounds at once. Verify: tests.
 - [ ] 2.4 Only bars ≤ t are read (changing later bars leaves earlier values). Verify: truncation test.
@@ -20,6 +20,7 @@
 
 - [ ] 3.1 Candidates differing only in a bound share both operands and the ratio; `unforeseen_consumptions` stays 0. Verify: batch tests.
 - [ ] 3.2 A spec without a force field has an identical node set and results. Verify: existing suites and parity corpus.
+- [ ] 3.3 Trace: signed force sum and bar count of both legs, `mean_imp`, `mean_pb` and V2.2. Verify: trace test.
 
 ## 4. Parity with the research reference (owner's Mac, after the owner's word)
 

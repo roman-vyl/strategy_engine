@@ -16,8 +16,9 @@ operand, because it would duplicate the leg and prefix-sum logic for one differi
 ### D2. The derived series
 
 For the evaluated side the series is `sign × (close[u] − close[u−1]) × volume[u]` for `u ≥ 1`, with `sign = +1` for `force_with` on
-long and `force_against` on short, and `−1` otherwise. Bar 0 has no previous close and is missing. A non-finite close or volume
-makes the bar non-finite and the leg missing. The series is built from the shared market arrays (`close`, `volume`) per side and
+long and `force_against` on short, and `−1` otherwise. Bar 0, the first bar of the data window, has force 0 (the reference convention). A non-finite close or
+volume makes the bar non-finite and the leg missing. If the Engine's first bar differs from the research window the parity report
+states how. The series is built from the shared market arrays (`close`, `volume`) per side and
 cached with the node, not per candidate.
 
 ### D3. V2.2
@@ -29,15 +30,18 @@ and the entry passes. `pb ≤ 0` stays a value. Defaults are all off; the preset
 ### D4. Mean over all candles
 
 Both means average the signed force over every candle of the leg (net force per candle), not only over candles whose force points in the
-named direction. This is the task text; the Mac confirms it when exporting the reference, and a difference found at parity is
-reported before any change.
+named direction. Confirmed by the Mac task (mean of the signed force over all bars: `g × Σ force ÷ bars` for the impulse, `−g × Σ force ÷ bars` for the pullback); a difference found at parity is reported before any change.
 
 ### D5. First impulse bar
 
-For `u = S*` the force reads `close[S*−1]`, the bar before the origin. When `S* = 0` the bar is missing and so is the impulse mean.
-Confirmed against the reference at parity.
+For `u = S*` the force reads `close[S*−1]`, the bar before the origin. Confirmed by the Mac task (`force[t] = (close[t] − close[t−1]) × volume[t]` for every bar). When `S* = 0` the force of that bar is 0.
 
 ### D6. Identity and cost
 
 Same node family and params as V1.3, with the new field names. Candidates that differ only in a bound share both operands and the
 ratio. O(n) per series per side. No lookahead: the value on `t` reads bars `≤ t` only.
+
+### D7. Trace
+
+The leg mean operand also yields, for parity and the trace, the signed force sum and the bar count of each leg (sum = mean × count);
+`mean_imp`, `mean_pb` and V2.2 are the operand values.
