@@ -225,6 +225,7 @@ class SideEpisode:
     first_row: np.ndarray
     episodes: list[dict[str, Any]] = field(default_factory=list)
     forming_rows: list[dict[str, Any]] = field(default_factory=list)
+    anchor: np.ndarray | None = None
 
 
 _STATE_KEYS = (*STATE_FIELDS, *EVENT_FIELDS)
@@ -661,6 +662,7 @@ def project_side(
         first_row=first_row,
         episodes=episodes,
         forming_rows=forming_rows,
+        anchor=anchor,
     )
 
 

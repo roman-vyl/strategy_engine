@@ -27,6 +27,12 @@ def touch_points(episode: SideEpisode, size: int) -> tuple[np.ndarray, np.ndarra
     are indices, only meaningful where `valid`."""
 
     state = episode.state
+    if len(episode.touches["origin_bar"]) == 0:  # no touch at all: nothing to index
+        return (
+            np.zeros(size, dtype=bool),
+            np.zeros(size, dtype=np.int64),
+            np.zeros(size, dtype=np.int64),
+        )
     number = state["touch_number"]
     live = np.isfinite(number)
     count = np.where(live, number, 0.0)
