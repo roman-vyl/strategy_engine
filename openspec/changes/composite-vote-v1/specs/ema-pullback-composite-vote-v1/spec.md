@@ -66,13 +66,14 @@ SHALL be a non-empty list of predicates accepted by the predicate layer and `at_
 For an operand input on a bar with operand value `v`:
 
 - a level SHALL fire iff `v` is finite and `v ≤ at` for side `low`, or `v ≥ at` for side `high`;
-- the taken level SHALL be the fired level with the smallest `at` for side `low` and the largest `at` for side `high`;
-- the input result SHALL be the `weight` or veto mark of the taken level, and weight 0 without veto when no level fired.
+- the input weight SHALL be the maximum `weight` over fired levels, and 0 when no weighted level fired;
+- the input SHALL veto iff any fired level carries the veto mark;
+- the result SHALL NOT depend on the order of the levels.
 
-#### Scenario: Deepest fired level is taken
+#### Scenario: Largest fired weight is taken
 
 - **WHEN** side is `low`, the levels are `{at: 0.8, weight: 0.2}` and `{at: 0.3, weight: 0.1}`, and `v` is 0.25
-- **THEN** both levels SHALL fire and the input weight SHALL be 0.1
+- **THEN** both levels SHALL fire and the input weight SHALL be 0.2
 
 #### Scenario: Missing value is silent
 
@@ -130,10 +131,10 @@ The vote `SetupMask.trace` SHALL contain per bar `member:<member_id>:weight` and
 inputs `member:<member_id>/<input_index>:value` (null where missing) and `member:<member_id>/<input_index>:level` (the taken
 `at`, null when none); for group inputs `member:<member_id>/<input_index>:count` (number of True predicates).
 
-#### Scenario: Taken level on the chart
+#### Scenario: Weighting level on the chart
 
 - **WHEN** an operand input fires two levels on a bar
-- **THEN** its `level` trace on that bar SHALL be the `at` of the taken level
+- **THEN** its `level` trace on that bar SHALL be the `at` of the fired level that gave the weight
 
 ### Requirement: Vote evidence
 

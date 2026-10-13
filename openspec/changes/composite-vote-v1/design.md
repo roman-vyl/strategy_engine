@@ -72,22 +72,22 @@ All values come from the spec; the Engine defines none.
 1. Operand input with value `v`:
    - missing (non-finite) `v` → fires nothing;
    - level fired iff `v ≤ at` (`low`) or `v ≥ at` (`high`), inclusive;
-   - taken level = the fired level with the most extreme `at` (smallest for `low`, largest for `high`), so the result does not
-     depend on the order of the list.
+   - input weight = the maximum weight over fired levels; input veto = any fired level is a veto mark. The result does not
+     depend on the order of the list, and for an ordinary ladder (deeper level, larger weight) it equals the deepest fired level.
 2. Group input: fired iff the number of True predicates ≥ `at_least`; a predicate on a missing value is False, as in the
    predicate layer.
-3. Input result: `(weight, veto)` of the taken level or of the fired group; `(0, False)` when nothing fired.
+3. Input result: `(weight, veto)` of the fired levels as above or of the fired group; `(0, False)` when nothing fired.
 4. Member: `weight = max` over inputs, `veto = any` over inputs.
 5. Vote: `sum = Σ member weights`; `blocked = any(member veto) or (block_at is not null and sum ≥ block_at)`.
 6. Local setup mask = `not blocked`.
 
-The deepest-level rule means one member gives one vote whatever its ladder length; levels are never summed.
+The maximum rule means one member gives one vote whatever its ladder length; levels are never summed.
 
 ### D4. Trace
 
 - `member:<member_id>:weight` (float per bar), `member:<member_id>:veto` (bool per bar);
 - `member:<member_id>/<input_index>:value` for operand inputs (float or null), `member:<member_id>/<input_index>:level` (the
-  taken `at` or null), `member:<member_id>/<input_index>:count` for group inputs;
+  `at` of the fired level that gave the weight, or null), `member:<member_id>/<input_index>:count` for group inputs;
 - `vote:sum` (float), `vote:reason` (`veto:<member_id>` of the first vetoing member in declared order, `sum`, or null).
 
 ### D5. Identity and sharing
@@ -106,5 +106,4 @@ value on bar `t` depends only on values on `t`.
 ## Risks / Trade-offs
 
 - Large ladders cost O(bars × levels); typical ladders are tens of levels, negligible next to operand cost.
-- Non-monotone weights in a ladder are allowed; the deepest fired level wins by definition, not the largest weight. Tests pin
-  this.
+- Non-monotone weights in a ladder are allowed; the largest fired weight wins, not the deepest level. Tests pin this.

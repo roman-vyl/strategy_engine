@@ -20,13 +20,13 @@ from history (no quantiles, no outcome statistics).
   - a group input: `at_least k` of a list of predicates, with either a numeric weight or a veto mark.
 - **Evaluation on each bar and side.**
   - An operand input fires the levels its value has crossed (`value ≤ at` for `low`, `value ≥ at` for `high`); the input
-    takes the deepest fired level. A missing value fires nothing.
+    takes the largest weight among fired levels and vetoes if any fired level is a veto. A missing value fires nothing.
   - A group input fires when at least `k` of its predicates are True.
-  - A member's weight is the maximum weight over its inputs; a member vetoes when any input's taken level or group is a veto.
+  - A member's weight is the maximum weight over its inputs; a member vetoes when any input vetoes.
   - The entry is blocked when any member vetoes or the sum of member weights is at least `params.block_at`.
 - **Roles come from the data only.** A member whose levels are all veto marks is veto-only; one with numeric weights is a
   voter; both kinds in one ladder are allowed. A member is switched off by leaving it out.
-- **Trace.** Per member: input values, taken level, weight, veto; per bar: the sum and the reason (`veto:<member_id>`, `sum`
+- **Trace.** Per member: input values, weighting level, weight, veto; per bar: the sum and the reason (`veto:<member_id>`, `sum`
   or none).
 - **Cost and identity.** Operands are shared with every other user of the same operand node; the vote itself is vectorized
   and linear in bars × levels. Changing a weight, a level or `block_at` recomputes only the vote node.

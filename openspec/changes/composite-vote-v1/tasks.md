@@ -11,7 +11,7 @@
 
 ## 2. Evaluation
 
-- [ ] 2.1 Operand input: inclusive fire per side, deepest fired level taken, order of levels irrelevant, missing value silent, non-monotone weights take the deepest level. Verify: tests against a brute-force loop on synthetic arrays.
+- [ ] 2.1 Operand input: inclusive fire per side, largest fired weight taken, veto if any fired level is a veto, order of levels irrelevant, missing value silent, non-monotone weights take the largest weight. Verify: tests against a brute-force loop on synthetic arrays.
 - [ ] 2.2 Group input: fires at `at_least`, predicate masks reused unchanged. Verify: tests.
 - [ ] 2.3 Member max over inputs, veto any; vote sum; block on veto or `sum ≥ block_at`; `block_at` null = vetoes only; member and input order irrelevant. Verify: tests.
 - [ ] 2.4 Setup composition: local mask = not blocked, AND with other setups, `context_consumption` applied as for any setup. Verify: tests.
