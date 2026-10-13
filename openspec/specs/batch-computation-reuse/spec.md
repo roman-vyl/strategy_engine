@@ -3,9 +3,7 @@
 ## Purpose
 
 Defines the semantic node identity contract and batch-scoped evaluation context that let the Strategy Engine reuse a computation across candidates whenever, and only whenever, it is semantically identical, while guaranteeing one evaluation path (used by single-spec and batch alike) and bit-exact parity of Strategy Engine outputs with the current per-candidate evaluator.
-
 ## Requirements
-
 ### Requirement: Single evaluation path for single-spec and batch
 The system SHALL use exactly one evaluation context implementation and one shared range-input representation for both single-spec range evaluation and range-batch evaluation. A single-spec evaluation SHALL be modeled as an evaluation context with exactly one root; a range-batch evaluation SHALL be modeled as an evaluation context with N roots. The final architecture SHALL NOT contain a permanent, separate preparation or evaluation path for single-spec evaluation; single-spec evaluation is the same mechanism specialized to one root, not a parallel implementation. The system SHALL NOT contain logic that selects a different evaluation path, or a different code branch producing observably different intermediate computations, based on which strategy-spec field(s) vary across the candidates in a batch.
 
@@ -372,3 +370,97 @@ before this change.
 
 - **WHEN** a batch contains only A1 band candidates
 - **THEN** the number of node computations and the outputs SHALL equal those before this change.
+
+### Requirement: Candle operand identity and sharing
+
+A candle operand SHALL have its own node family whose identity carries the episode identity, the leg, the timeframe, the
+direction and the identity of the ATR column, and whose upstream is the episode, the market bars and that ATR column. Labels
+SHALL NOT enter the identity.
+
+#### Scenario: Band candidates share the operand
+
+- **WHEN** a batch contains candidates that differ only in `min` or `max` of one range over a ratio of two candle operands
+- **THEN** the ATR column, both candle operands and the ratio SHALL each be computed once per batch per side.
+
+### Requirement: Candle operand cost
+
+A candle operand SHALL cost O(n) per series, independent of leg length and of the timeframe. A spec without a candle operand
+SHALL have the same node set and the same results as before this change.
+
+#### Scenario: No compute regression without candle operands
+
+- **WHEN** a spec has no candle operand
+- **THEN** no candle node SHALL be created and no extra work done.
+
+### Requirement: Touch, side series, from-start and ratio floor identity
+
+`touch`, a `by_side` series and `value: from_start` SHALL enter the identity of a segment, and `right_floor` that of a ratio, only when set, so that
+the identity of every A1 and A2 segment and ratio is unchanged. A `by_side` series SHALL enter it with the identities of both features.
+
+#### Scenario: Unchanged identities
+
+- **WHEN** a spec has no `touch`, no `by_side` and no `from_start`
+- **THEN** its segment identities and results SHALL equal those before this change.
+
+### Requirement: Directional index waves share nodes
+
+Candidates that differ only in `min` or `max` of the range over a B2 ratio SHALL share both segments and the ratio. B2.1 and B2.2
+SHALL share the directional index columns and the touch points.
+
+#### Scenario: Band candidates
+
+- **WHEN** a batch contains candidates that differ only in `min` of one range over a ratio of two segments
+- **THEN** the directional index columns, both segments and the ratio SHALL each be computed once per batch per side.
+
+### Requirement: From-start cost
+
+`sum` and `mean_per_bar` of `from_start` SHALL cost O(n) per series; `max` and `min` SHALL cost at most O(n log n) per series and
+O(1) per bar, independent of leg length. A `previous` segment SHALL add no pass over bars.
+
+#### Scenario: No compute regression
+
+- **WHEN** a spec has no `touch`, `by_side` or `from_start`
+- **THEN** no extra node SHALL be created and no extra work done.
+
+### Requirement: Touch end identity
+
+`to: next_origin` SHALL enter the identity of a segment as its end point, so a `peak → next_origin` segment never shares a node with a
+`peak → current` or `peak → touch` segment. A spec without the next-origin end point SHALL keep every segment identity and result it had before this
+change.
+
+#### Scenario: Unchanged identities
+
+- **WHEN** a spec has no `to: next_origin`
+- **THEN** its segment identities and results SHALL equal those before this change.
+
+### Requirement: Counter-trade waves share nodes
+
+Candidates that differ only in `min` or `max` of the range over a C1 ratio SHALL share both segments and the ratio. C1.1 and C1.2
+SHALL share the counter-trade directional index columns and the touch points, and SHALL share the DI columns with B2 when the
+period is equal.
+
+#### Scenario: Band candidates
+
+- **WHEN** a batch contains candidates that differ only in a bound of one range over a ratio of two segments
+- **THEN** the directional index columns, both segments and the ratio SHALL each be computed once per batch per side.
+
+### Requirement: Leg mean operand identity and sharing
+
+A leg mean operand SHALL have its own node family whose identity carries the episode identity, the leg and the field, and whose
+upstream is the episode and the market bars. Labels SHALL NOT enter the identity.
+
+#### Scenario: Band candidates share the operands
+
+- **WHEN** a batch contains candidates that differ only in `min` or `max` of one range over a ratio of two leg mean operands
+- **THEN** both operands and the ratio SHALL each be computed once per batch per side.
+
+### Requirement: Leg mean cost
+
+A leg mean operand SHALL cost O(n) per series, independent of leg length. A spec without a leg mean operand SHALL have the same
+node set and the same results as before this change.
+
+#### Scenario: No compute regression
+
+- **WHEN** a spec has no leg mean operand
+- **THEN** no leg mean node SHALL be created and no extra work done.
+

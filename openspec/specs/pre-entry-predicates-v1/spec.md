@@ -4,9 +4,7 @@
 An internal boolean layer turns canonical Strategy Engine features and
 context into pre-entry conditions on the base timeline. The layer
 computes no indicator and performs no alignment of its own.
-
 ## Requirements
-
 ### Requirement: Predicate is an internal layer, not a strategy role
 
 `PreEntryPredicate` SHALL be an internal evaluation contract. It SHALL
@@ -701,3 +699,310 @@ SHALL be the same for every segment carrying the same eligibility.
 
 - **WHEN** the impulse sum of changes in its window is 0 or negative
 - **THEN** every segment with `impulse_positive` SHALL be missing on that bar.
+
+### Requirement: Candle operand shape
+
+A candle reference SHALL be `{"candle": {"episode", "leg", "timeframe", "direction", "atr"?}}`. `episode`, `leg`, `timeframe` and
+`direction` are required and no other field is allowed. `episode` SHALL name an episode declared in `raw_spec.ema_stack_episode`.
+`leg` SHALL be `impulse` or `pullback`, `direction` SHALL be `with` or `against`, and `timeframe` SHALL be a timeframe that is a
+multiple of the base timeframe.
+
+#### Scenario: Malformed candle
+
+- **WHEN** a candle names an undeclared episode, an unknown `leg` or `direction`, a timeframe that is not a multiple of the base
+  timeframe, a missing required field or an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Candle operand use
+
+A candle reference SHALL be accepted wherever a segment reference is accepted: as a side of a `ratio`, as the operand of a `range`
+and as an operand of a `compare`. It SHALL NOT be accepted as the operand of a `change`. A short override SHALL NOT replace it.
+
+#### Scenario: Candle as change operand
+
+- **WHEN** a `change` predicate has a candle reference as its operand
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Candle ATR normalisation
+
+When `atr` (feature kind `atr_wilder`, same timeframe as the candle) is present, each candle body SHALL be divided by that
+candle's ATR before the maximum is taken; a candle without a positive ATR SHALL be skipped. Without `atr`, bodies are in price units.
+
+#### Scenario: Forming candle
+
+- **WHEN** the last candle of the pullback is still forming on the evaluated bar
+- **THEN** its body SHALL be divided by the ATR of the candle before it.
+
+#### Scenario: Closed candle
+
+- **WHEN** a candle of the impulse ends inside the impulse
+- **THEN** its body SHALL be divided by its own ATR.
+
+#### Scenario: Different ATR timeframe
+
+- **WHEN** `atr` has a timeframe other than the candle's `timeframe` or a kind other than `atr_wilder`
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Candle legs
+
+For the evaluated side's episode and the current touch of bar `t`, the `impulse` leg SHALL be the bars from the origin bar `S*`
+to the peak bar `P` inclusive, and the `pullback` leg SHALL be the bars from `P+1` to `t` inclusive. Only bars up to `t` SHALL be
+read. When the touch has no pullback bars (`t = P`), no active episode, or a censored episode, the value SHALL be missing.
+
+#### Scenario: Peak bar
+
+- **WHEN** the pullback leg is evaluated on the peak bar itself
+- **THEN** the candle value SHALL be missing
+- **AND** the peak bar SHALL be counted in the impulse only.
+
+### Requirement: Candles assembled from base bars
+
+The candles of a leg SHALL be assembled from the base bars of that leg only. Base bars SHALL be grouped by bucket on the
+`timeframe` grid, aligned to the epoch with the bucket start included and the bucket end excluded. The open of a candle SHALL be
+the open of its first leg bar in the bucket and the close the close of its last leg bar in the bucket that is not after `t`.
+A candle SHALL therefore be clipped at the start of the leg and, for the impulse, at `P`.
+
+#### Scenario: Edge candle
+
+- **WHEN** a 1h bucket starts before the pullback and the pullback starts inside it
+- **THEN** the candle of that bucket in the pullback SHALL open at the first pullback bar.
+
+#### Scenario: Forming candle
+
+- **WHEN** the bar `t` lies inside a bucket that has not ended
+- **THEN** the candle of that bucket SHALL close at the close of bar `t`
+- **AND** the value on the next bar SHALL take the new close without waiting for the bucket to end.
+
+### Requirement: Candle body and direction
+
+A candle's body with the trade SHALL be `close − open` when positive on the long side and `open − close` when positive on the
+short side; its body against the trade SHALL be the opposite one. The value of the candle operand SHALL be the largest (normalised, when `atr` is set) body of the
+requested direction over the candles of the leg, and 0 when no candle has a positive body in that direction. The value SHALL be
+missing when an open or close that enters is not finite.
+
+#### Scenario: Pullback without a counter candle
+
+- **WHEN** no candle of the pullback closes against the trade
+- **THEN** the value SHALL be 0, a valid value.
+
+#### Scenario: Impulse without a with-trade candle
+
+- **WHEN** a ratio has the impulse with-trade value as its right side and that value is 0
+- **THEN** the ratio SHALL be missing on that bar
+- **AND** a `range` with `empty: pass` SHALL not block the bar.
+
+#### Scenario: Short side mirror
+
+- **WHEN** the evaluated side is short and a candle closes above its open in the pullback
+- **THEN** that candle SHALL count as against the trade.
+
+### Requirement: Candle operand per touch
+
+The impulse value SHALL be the same on every bar of one touch. The pullback value on bar `t` SHALL depend only on bars up to
+`t`: changing any later bar SHALL NOT change it. A candle assembled from bars with gaps in the base series SHALL use only the
+bars that exist.
+
+#### Scenario: No lookahead
+
+- **WHEN** the bars after `t` are replaced
+- **THEN** the candle values on bars up to `t` SHALL be unchanged.
+
+### Requirement: Wilder ATR feature
+
+A feature kind `atr_wilder` SHALL exist with the single parameter `period`, source close and any timeframe. Its first true range
+SHALL be `high − low`, its first value SHALL be the mean of the first `period` true ranges, and each next value SHALL be
+`(previous · (period − 1) + true range) / period`; values before the first SHALL be missing. The `atr` feature SHALL be
+unchanged.
+
+#### Scenario: Seed
+
+- **WHEN** a series has 20 candles and `period` is 14
+- **THEN** the first 13 values SHALL be missing and the 14th SHALL be the mean of the first 14 true ranges.
+
+### Requirement: Segment touch selection
+
+A segment MAY carry `touch`, `current` (default) or `previous`. With `previous` the points of the segment SHALL be read from the
+touch row before the current touch row of the same episode. With `previous` the segment SHALL be `origin → peak`, other pairs
+SHALL be rejected, and it SHALL be missing on a bar whose current touch is the first of its episode. A touch of an earlier
+episode SHALL NOT be read.
+
+#### Scenario: First touch
+
+- **WHEN** a `previous` segment is evaluated on a bar of the first touch of an episode
+- **THEN** its value SHALL be missing
+- **AND** a `range` over a ratio of it with `empty: pass` SHALL not block the bar.
+
+#### Scenario: Previous pair rejected
+
+- **WHEN** a `previous` segment is `peak → current` or `origin → current`
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Previous touch points
+
+For a bar `t` with current touch row `r` and `touch_number ≥ 2` in the episode, a `previous` segment SHALL use the origin bar
+and the peak bar of row `r − 1`, both ends inclusive. Only bars up to the peak SHALL be read, so no bar after `t` is read.
+
+#### Scenario: Second touch
+
+- **WHEN** the current touch is the second of its episode
+- **THEN** a `previous` segment SHALL span the origin and peak of the first touch.
+
+### Requirement: Segment series by side
+
+The `of` field of a segment MAY be `{"by_side": {"long", "short"}}` with exactly those two feature references, both on the base
+timeframe. The evaluated side SHALL read its own feature. A `by_side` series SHALL NOT be negated on the short side; a single
+feature or a difference SHALL be negated as before. `negate` SHALL keep its meaning.
+
+#### Scenario: Directional index by side
+
+- **WHEN** `of` is `by_side` with `di_plus` for long and `di_minus` for short and the evaluated side is short
+- **THEN** the series SHALL be the `di_minus` values, not negated.
+
+#### Scenario: Malformed by_side
+
+- **WHEN** `by_side` lacks `long` or `short`, has another key, or a feature is not on the base timeframe
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Segment value from start
+
+`value: from_start` SHALL read `x[u] − x[s]` for `u = s … e`, `s` being the first bar of the window. It SHALL be allowed with
+`sum`, `mean_per_bar`, `max` and `min`, and SHALL be rejected with `abs_sum`, `top_abs_sum` and `top_abs_share`. The value
+SHALL be missing when any `x[s … e]` is not finite.
+
+#### Scenario: Rise to the peak
+
+- **WHEN** a segment is `origin → peak`, `from_start`, `max` over a series `D`
+- **THEN** its value SHALL be `max(D[S* … P]) − D[S*]`.
+
+#### Scenario: Average area
+
+- **WHEN** a segment is `origin → peak`, `from_start`, `mean_per_bar` over a series `D`
+- **THEN** its value SHALL be `mean(D[S* … P]) − D[S*]`.
+
+#### Scenario: One-bar window
+
+- **WHEN** the window has one bar
+- **THEN** every `from_start` aggregate SHALL be 0 (`sum`, `mean_per_bar`, `max`, `min`).
+
+### Requirement: Ratio denominator floor
+
+A ratio MAY carry `right_floor`, a finite number, default 0. The ratio SHALL be missing when the right side is not greater than
+`right_floor`. A non-finite or non-numeric `right_floor` SHALL be rejected.
+
+#### Scenario: Tiny positive denominator
+
+- **WHEN** `right_floor` is 1e-6 and the right side is 1e-7
+- **THEN** the ratio SHALL be missing.
+
+### Requirement: Directional index wave ratio
+
+A ratio of a `from_start` segment of `touch` `current` over one of `touch` `previous`, both `origin → peak` over the same series,
+with `right_floor` 1e-6, SHALL be missing when the previous wave's value is not greater than 1e-6 or when either side is missing.
+A current wave value not greater than 0 SHALL stay a value.
+
+#### Scenario: Previous wave without a rise
+
+- **WHEN** the previous wave's value is 0, negative or at most 1e-6
+- **THEN** the ratio SHALL be missing and the entry SHALL not be blocked.
+
+#### Scenario: Weak new wave
+
+- **WHEN** the current wave's rise is 0.5 and the previous wave's rise is 1
+- **THEN** the ratio SHALL be 0.5 and a `range` with `min` 0.7 and `bounds exclusive` SHALL block the bar.
+
+### Requirement: Segment end at the touch bar
+
+A segment MAY end at `touch`, the touch bar of the CURRENT touch row. `to: touch` SHALL be allowed only with `touch: current` and
+`from: peak`; any other combination SHALL be rejected. The segment SHALL span the peak bar and the touch bar of the current touch,
+both ends inclusive, and SHALL NOT change on the bars after the touch bar. The touch bar of the current touch is never after the
+evaluated bar, so no bar after the evaluated bar is read.
+
+#### Scenario: Current pullback
+
+- **WHEN** the current touch has its touch bar at bar 30 and the evaluated bar is 32
+- **THEN** a `peak → touch` segment SHALL span the peak bar and bar 30 on both bars 30 and 32.
+
+### Requirement: Segment end at the next origin
+
+A segment MAY end at `next_origin`, the origin bar of the CURRENT touch row. `to: next_origin` SHALL be allowed only with
+`touch: previous` and `from: peak`; any other combination SHALL be rejected. The segment SHALL span the peak bar of the touch row
+before the current one in the same episode and the origin bar of the current touch row, both ends inclusive, and SHALL be missing
+on the first touch of an episode and when the origin bar is not after that peak bar.
+
+#### Scenario: Previous pullback
+
+- **WHEN** the current touch is the second of its episode and a segment is `peak → next_origin`, `touch: previous`
+- **THEN** it SHALL span the peak bar of the first touch and the origin bar of the second touch.
+
+#### Scenario: Next origin end rejected
+
+- **WHEN** `to: next_origin` is used with `touch: current` or with `from: origin`
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Counter-trade directional index wave ratio
+
+A ratio of a `from_start` segment `peak → touch` of `touch` `current` over a `from_start` segment `peak → next_origin` of `touch`
+`previous`, both over a `by_side` series with `long = di_minus` and `short = di_plus`, and `right_floor` 1e-6, SHALL be missing
+when the previous pullback's value is not greater than 1e-6 or when either side is missing. A current value not greater than 0
+SHALL stay a value.
+
+#### Scenario: Violent pullback
+
+- **WHEN** the current pullback's counter-DI rise is 2 and the previous pullback's rise is 1
+- **THEN** the ratio SHALL be 2 and a `range` with `max` 1.5 and `bounds exclusive` SHALL block the bar.
+
+#### Scenario: Previous pullback without a rise
+
+- **WHEN** the previous pullback's value is 0, negative or at most 1e-6
+- **THEN** the ratio SHALL be missing and the entry SHALL not be blocked.
+
+#### Scenario: Short side
+
+- **WHEN** the evaluated side is short
+- **THEN** the series SHALL be `di_plus`, not negated.
+
+### Requirement: Leg mean operand shape
+
+A leg mean reference SHALL be `{"leg_mean": {"episode", "leg", "field"}}`; all three are required and no other field is allowed.
+`episode` SHALL name an episode declared in `raw_spec.ema_stack_episode`, `leg` SHALL be `impulse` or `pullback` and `field` SHALL be
+`volume`. It SHALL be accepted as a side of a `ratio`, as the operand of a `range` and of a `compare`, and rejected as the operand
+of a `change`.
+
+#### Scenario: Malformed leg mean
+
+- **WHEN** a leg mean names an undeclared episode, an unknown `leg` or `field`, lacks a required field or has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Leg mean value
+
+On each bar `t` the impulse leg SHALL be the base bars from `origin_bar` to `peak_bar` of the current touch and the pullback leg the
+base bars from `peak_bar + 1` to `t`, both ends inclusive. The value SHALL be the arithmetic mean of the field over the leg's bars
+and SHALL be missing when the current touch has no valid wave, when the leg is empty or when any bar of the leg has a non-finite
+field. Bars after `t` SHALL NOT be read.
+
+#### Scenario: Pullback starts after the peak
+
+- **WHEN** `t` is the peak bar
+- **THEN** the pullback mean SHALL be missing.
+
+#### Scenario: Legs
+
+- **WHEN** a wave has origin 10, peak 14 and `t` = 20
+- **THEN** the impulse mean SHALL average bars 10 to 14 and the pullback mean bars 15 to 20.
+
+### Requirement: Volume ratio filter
+
+`range(ratio(leg_mean(pullback, volume), leg_mean(impulse, volume)))` with `bounds` `exclusive` and `empty: pass` SHALL block an
+entry when the ratio is not greater than `min` or not less than `max` (both inclusive), each bound optional. A zero or missing impulse mean SHALL make
+the ratio missing, and a missing ratio SHALL pass.
+
+#### Scenario: Zero impulse volume
+
+- **WHEN** the impulse leg has mean volume 0
+- **THEN** the entry SHALL pass.
+
+#### Scenario: Threshold
+
+- **WHEN** the ratio equals `min` or equals `max`
+- **THEN** the entry SHALL be blocked.
+
