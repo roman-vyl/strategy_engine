@@ -28,6 +28,9 @@ WEIGHTED_VOTE_SETUP = "weighted_vote_setup"
 
 WEIGHT_DIGITS = 9
 WEIGHT_SCALE: int = 10**WEIGHT_DIGITS
+# Upper bound of a weight and of the threshold. Keeps every voter sum far
+# inside int64 (at most 10**15 scaled per voter) for any realistic voter count.
+WEIGHT_MAX = 10**6
 
 _ROLES = frozenset({"vote", "veto"})
 _DIRECTIONS = frozenset({"at_most", "at_least"})
@@ -147,6 +150,8 @@ def exact_decimal(value: object, path: str) -> int:
         exact = Decimal(repr(number)) if isinstance(number, float) else Decimal(number)
     except InvalidOperation as exc:  # pragma: no cover - finite reals always parse
         raise InvalidRequestError(f"{path} must be a decimal number", value=value) from exc
+    if abs(exact) > WEIGHT_MAX:
+        raise InvalidRequestError(f"{path} must not exceed {WEIGHT_MAX} in magnitude", value=value)
     exponent = exact.as_tuple().exponent
     assert isinstance(exponent, int)
     if exponent < -WEIGHT_DIGITS:

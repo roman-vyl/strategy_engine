@@ -153,6 +153,7 @@ def _count(params: Spec) -> Spec:
         pytest.param(lambda p: p.update(threshold=math.inf), id="infinite-threshold"),
         pytest.param(lambda p: p.update(threshold=True), id="bool-threshold"),
         pytest.param(lambda p: p.update(threshold=0.1234567891), id="ten-digit-threshold"),
+        pytest.param(lambda p: p.update(threshold=10**6 + 1), id="huge-threshold"),
         pytest.param(lambda p: p.update(voters=[]), id="no-voters"),
         pytest.param(lambda p: p.update(extra=1), id="unknown-param"),
         pytest.param(
@@ -189,6 +190,7 @@ def _count(params: Spec) -> Spec:
         ),
         pytest.param(lambda p: _first_input(p)["steps"][0].update(weight=-0.1), id="neg-weight"),
         pytest.param(lambda p: _first_input(p)["steps"][0].update(weight=True), id="bool-weight"),
+        pytest.param(lambda p: _first_input(p)["steps"][0].update(weight=5e9), id="huge-weight"),
         pytest.param(
             lambda p: _first_input(p)["steps"][0].update(weight=0.1234567891), id="ten-digits"
         ),
@@ -265,6 +267,8 @@ def test_weights_and_threshold_are_exact_decimals() -> None:
     assert vote.voters[0].inputs[0].steps[0].weight == 100_000_000
     integer = _vote(2, _voter("a", _count_input("x", [ALWAYS], _ladder((1, 1)))))
     assert parse_weighted_vote_setup(integer).threshold == 2_000_000_000
+    bound = _vote(10**6, _voter("a", _count_input("x", [ALWAYS], _ladder((1, 10**6)))))
+    assert parse_weighted_vote_setup(bound).threshold == 10**15
     assert (
         parse_weighted_vote_setup(
             _vote(0.123456789, _voter("a", _count_input("x", [ALWAYS], _ladder((1, 0.1)))))
