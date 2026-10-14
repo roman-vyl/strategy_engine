@@ -309,6 +309,9 @@ def memoized_stage_consumptions(stages: MemoizedStageIdentities) -> tuple[NodeSp
             consumed.append(setup.local)
             if setup.width_prefix is not None:
                 consumed.append(setup.width_prefix)
+            # A weighted vote reads its inputs from inside its own compute:
+            # predicted per vote consumption, released when served from memo.
+            consumed += setup.vote_consumptions
             # A composite consumes its children from inside its own compute
             # (like the width prefix): predicted per composite consumption,
             # released by the root when the composite is served from memo.

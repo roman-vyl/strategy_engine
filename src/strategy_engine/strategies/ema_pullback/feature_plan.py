@@ -38,6 +38,10 @@ from strategy_engine.strategies.ema_pullback.stack_episode import (
     EpisodeParams,
     parse_episode_section,
 )
+from strategy_engine.strategies.ema_pullback.weighted_vote_spec import (
+    WEIGHTED_VOTE_SETUP,
+    parse_weighted_vote_setup,
+)
 
 _ALLOWED_KINDS = frozenset(contract.kind for contract in feature_kinds())
 
@@ -331,6 +335,18 @@ def build_feature_plan_from_canonical_spec(raw_spec: Mapping[str, Any]) -> EmaPu
                     child_item["params"],
                     f"setups[{index}].params.children[{child_index}].setup",
                 )
+        elif component_id == WEIGHTED_VOTE_SETUP:
+            vote = parse_weighted_vote_setup(setup, f"setups[{index}]")
+            for vote_input in vote.inputs():
+                for raw in vote_input.predicates():
+                    predicate_features.extend(
+                        parse_predicate(
+                            raw,
+                            f"setups[{index}].params.{vote_input.input_id}",
+                            context_refs=htf_columns,
+                            episode_refs=episode_refs,
+                        ).features()
+                    )
         else:
             plan_setup_columns(component_id, instance_id, params, f"setups[{index}]")
 
