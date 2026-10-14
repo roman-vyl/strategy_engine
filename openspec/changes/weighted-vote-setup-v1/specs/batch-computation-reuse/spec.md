@@ -2,25 +2,39 @@
 
 ### Requirement: Identity of the weighted vote setup
 
-A `weighted_vote_setup` SHALL be one semantic node under the requirement "Semantic node identity". Its identity SHALL be derived from:
+A `weighted_vote_setup` SHALL be one semantic node ("Semantic node identity"). Its identity SHALL be derived from:
 
-- the node kind `setup.weighted_vote` and its implementation version;
-- its normalized local configuration:
-  - `threshold` and every `weight` as the exact decimal strings of the requirement "Weight arithmetic";
-  - `level` as numbers;
-  - `role`, `direction`, the veto flags;
-  - `voter_id` and `input_id`, because they name the evidence series;
-  - the structure of voters, inputs and steps in declared order, because declared order names `blocked_by`;
-- the identities of its upstream nodes: the predicate-layer nodes of every `operand` and every predicate of `count.of`;
-- the side, since the node reads side-dependent operands;
+- the kind `setup.weighted_vote` and its implementation version;
+- its normalized configuration (next requirement);
+- the identities of its upstream operand and `count.of` predicate nodes;
+- the side;
 - the market/range identity of the batch.
 
-Identifiers and declared order SHALL NOT enter the identities of the upstream operand and predicate nodes. Those nodes keep their
-existing identities, so they are shared:
+#### Scenario: Same table on two sides
 
-- with other setups;
-- with `composite_setup` children;
-- with other weighted votes.
+- **WHEN** the same weighted vote is evaluated on the long and the short side
+- **THEN** the two vote nodes SHALL have different identities.
+
+### Requirement: Normalized configuration of the weighted vote
+
+The normalized local configuration of a weighted vote SHALL contain:
+
+- `threshold` and every `weight` as the exact decimal strings of the requirement "Exact decimal weights";
+- `level` as numbers;
+- `role`, `direction`, the veto flags;
+- `voter_id` and `input_id`, because they name the evidence series;
+- the structure of voters, inputs and steps in declared order, because declared order names `blocked_by`.
+
+#### Scenario: Labels change the vote node only
+
+- **WHEN** two weighted votes are identical except for a `voter_id`
+- **THEN** their vote nodes SHALL have different identities
+- **AND** their operand nodes SHALL have the same identities and be computed once.
+
+### Requirement: Sharing of weighted vote inputs
+
+Identifiers and declared order SHALL NOT enter the identities of the upstream operand and predicate nodes. Those nodes keep their
+existing identities, so they are shared with other setups, with `composite_setup` children and with other weighted votes.
 
 A batch of specs with weighted votes SHALL end with zero `unforeseen_consumptions`.
 
@@ -28,12 +42,6 @@ A batch of specs with weighted votes SHALL end with zero `unforeseen_consumption
 
 - **WHEN** a batch contains weighted votes that differ only in levels, weights, veto flags or `threshold`
 - **THEN** each operand and each predicate of their inputs SHALL be computed once per side.
-
-#### Scenario: Labels change the vote node only
-
-- **WHEN** two weighted votes are identical except for a `voter_id`
-- **THEN** their vote nodes SHALL have different identities
-- **AND** their operand nodes SHALL have the same identities and be computed once.
 
 #### Scenario: Operand shared with a range setup
 
