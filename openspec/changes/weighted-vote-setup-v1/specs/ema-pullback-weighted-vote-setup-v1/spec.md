@@ -20,7 +20,7 @@ setup composition. It SHALL NOT be accepted as a child of `composite_setup`.
 
 `params` SHALL contain exactly `threshold` and `voters`.
 
-- `threshold` SHALL be a finite number greater than 0.
+- `threshold` SHALL be a number greater than 0 (see "Weight arithmetic" for its precision).
 - `voters` SHALL be a non-empty list. Each voter SHALL have exactly:
   - `voter_id`: unique within the setup and without `/`;
   - `role`: `vote` or `veto`;
@@ -34,10 +34,11 @@ setup composition. It SHALL NOT be accepted as a child of `composite_setup`.
 - The `operand` SHALL be any operand the predicate layer accepts as the operand of a `range`, and it SHALL be validated by that layer.
 - Each element of `count.of` SHALL be a predicate of the layer, validated by that layer.
 - Each step SHALL have a finite `level` and exactly one of:
-  - `weight`: a finite number ≥ 0;
-  - `veto: true`.
+  - `weight`: a number ≥ 0 (see "Weight arithmetic" for its precision);
+  - `veto`: the literal `true`.
 - Levels SHALL be unique within an input. For a `count` input the levels SHALL be integers from 1 to the length of `of`.
 - A voter with `role` `veto` SHALL have only veto steps.
+- Booleans SHALL NOT be accepted as numbers in `threshold`, `level` or `weight`.
 - Unknown keys SHALL be rejected at every level.
 
 #### Scenario: Missing threshold
@@ -53,6 +54,11 @@ setup composition. It SHALL NOT be accepted as a child of `composite_setup`.
 #### Scenario: Step with both weight and veto
 
 - **WHEN** a step has both `weight` and `veto`, or neither
+- **THEN** static validation SHALL reject the spec.
+
+#### Scenario: Boolean in a numeric field
+
+- **WHEN** `threshold`, a `level` or a `weight` is `true` or `false`
 - **THEN** static validation SHALL reject the spec.
 
 #### Scenario: Count level out of range
@@ -75,10 +81,21 @@ On bar `t` of the evaluated side a step SHALL be crossed:
 
 A missing or non-finite operand value SHALL cross no step.
 
+A `count` input SHALL have no missing state. Each predicate of `of` is the boolean mask of the predicate layer, so on a bar where its
+operand is missing it is False, or True for a `range` with `empty: pass`, by the requirement "Non-finite values are not satisfied".
+The count SHALL be the number of True predicates on `t`.
+
 #### Scenario: Value exactly on a level
 
 - **WHEN** an `at_most` input has a step at level 0.4 and the value is 0.4
 - **THEN** that step SHALL be crossed.
+
+#### Scenario: Count with a missing operand
+
+- **WHEN** `count.of` is [A, B, C], A and C are True on `t`, B is a `range` with the default `empty` whose operand is missing, and the
+  step level is 2
+- **THEN** B SHALL be False, the count SHALL be 2 and the step SHALL be crossed
+- **AND** if B instead declares `empty: pass`, the count SHALL be 3.
 
 #### Scenario: Missing value
 
@@ -91,7 +108,8 @@ A missing or non-finite operand value SHALL cross no step.
 - An input SHALL veto on `t` when any crossed step is a veto step.
 - The weight of a voter SHALL be the largest weight among its inputs.
 - A voter SHALL veto when any of its inputs vetoes.
-- The order of steps, inputs and voters SHALL NOT change any weight or veto.
+- The order of steps, inputs and voters SHALL NOT change any weight, veto, score or mask. Declared order SHALL matter only for the
+  attribution `blocked_by` in the evidence.
 
 #### Scenario: Deepest step on a monotone ladder
 
@@ -112,10 +130,9 @@ A missing or non-finite operand value SHALL cross no step.
 
 On each bar `t` of the evaluated side:
 
-- `score[t]` SHALL be the sum of the voter weights;
-- the bar SHALL be blocked when any voter vetoes or `score[t] ≥ threshold`;
+- `score[t]` SHALL be the sum of the voter weights in the exact decimal arithmetic of the requirement "Weight arithmetic";
+- the bar SHALL be blocked when any voter vetoes or `score[t] ≥ threshold`, compared exactly in the same arithmetic;
 - the local mask SHALL be True exactly where the bar is not blocked.
-- The comparison SHALL be the plain floating-point comparison, with no tolerance.
 - No weight, level or threshold SHALL have a default in the Engine.
 
 #### Scenario: Chorus of weak voters
@@ -138,11 +155,38 @@ On each bar `t` of the evaluated side:
 - **WHEN** the same setup is evaluated on the long and the short side
 - **THEN** each side SHALL use its own operand values with the same steps and threshold.
 
+### Requirement: Weight arithmetic
+
+Weights and the threshold SHALL be exact decimal numbers.
+
+- The value of each one SHALL be the decimal number of the shortest representation that round-trips the parsed number (Python `repr`).
+- It SHALL have at most 9 digits after the decimal point. A value with more SHALL be rejected by static validation.
+- Sums and the comparison with the threshold SHALL be exact, for example on integers in units of 10⁻⁹. The result SHALL therefore not
+  depend on the order of the voters or on binary floating-point representation.
+- Levels are compared with operand values in the operands' own floating-point arithmetic.
+- In the evidence, `score` SHALL be the exact sum converted to the nearest float.
+
+#### Scenario: Exact sum on the threshold
+
+- **WHEN** `threshold` is 0.75 and three voters have weights 0.3, 0.25 and 0.2 on `t`, in any declared order
+- **THEN** `score` SHALL equal the threshold exactly and the bar SHALL be blocked.
+
+#### Scenario: Classic binary case
+
+- **WHEN** `threshold` is 0.8 and two voters have weights 0.1 and 0.7
+- **THEN** the bar SHALL be blocked, although the binary floating-point sum 0.1 + 0.7 is 0.7999999999999999.
+
+#### Scenario: Too many digits
+
+- **WHEN** a weight is 0.1234567891
+- **THEN** static validation SHALL reject the spec.
+
 ### Requirement: Weighted vote evidence
 
 The `SetupMask.trace` SHALL contain, per evaluated side:
 
 - `input:<input_id>:value`: the operand value, or for a `count` input the count, on every bar; null where missing;
+- `input:<input_id>:weight` and `input:<input_id>:veto` on every bar;
 - `voter:<voter_id>:weight` and `voter:<voter_id>:veto` on every bar;
 - `score` on every bar;
 - `blocked_by` on every bar:
@@ -150,10 +194,19 @@ The `SetupMask.trace` SHALL contain, per evaluated side:
   - otherwise `score` when `score ≥ threshold`;
   - otherwise null.
 
+The trading decision does not depend on declared order. Only the attribution `blocked_by` does: when several voters veto, it names
+the first one in declared order.
+
 #### Scenario: Reason of a block
 
 - **WHEN** voters `alpha` and `gamma` veto on `t`
-- **THEN** `blocked_by` SHALL be `veto:alpha` when `alpha` is declared before `gamma`.
+- **THEN** `blocked_by` SHALL be `veto:alpha` when `alpha` is declared before `gamma`
+- **AND** the mask SHALL be the same if their order is swapped.
+
+#### Scenario: Which input gave the weight
+
+- **WHEN** a voter has inputs with weights 0.2 and 0.3 on `t`
+- **THEN** the trace SHALL show both input weights and the voter weight 0.3.
 
 ### Requirement: No lookahead
 

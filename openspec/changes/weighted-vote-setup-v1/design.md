@@ -36,10 +36,16 @@
 - The role `veto` means "veto steps only".
 - Motivation: a voter can both vote softly at moderate levels and veto at extreme ones, in one ladder.
 
-### D6. Block rule
+### D6. Block rule and exact arithmetic
 
-- blocked = any veto, or Σ voter weights ≥ threshold. Plain comparison, with no tolerance.
+- blocked = any veto, or Σ voter weights ≥ threshold.
+- Weights and the threshold are exact decimals: at most 9 digits after the point, summed and compared exactly (integers in 10⁻⁹ units).
+- Motivation:
+  - a decision to trade must not depend on how 0.1 is stored in binary, or on the order in which voters are added;
+  - the volume of arithmetic is tiny.
 - A missing input crosses no step.
+- A `count` has no missing state: it counts the True masks of the predicate layer, where a missing operand already means False, or
+  True under `empty: pass`.
 - Motivation:
   - one simple rule;
   - "block on missing data" stays the job of a `range` with `empty: block`.
@@ -56,6 +62,14 @@
   - `voter:<id>:weight` and `voter:<id>:veto`;
   - `score`;
   - `blocked_by`: the first vetoing voter, else `score`, else null.
+- **Trace:** per-input weight and veto, so it is visible which input gave the voter's weight. The trading decision does not depend on
+  declared order; only the attribution `blocked_by` does.
+- **Identity:** the vote is one semantic node:
+  - kind and version;
+  - normalized config, including the ids, since they name the evidence;
+  - the upstream operand identities;
+  - the side;
+  - market/range.
 - **Reuse:** operands and predicates keep their predicate-layer identities, so they are shared with composites and between
   candidates. Candidates that differ only in the table compute each operand once.
 - **Cost:** O(bars × steps) on top of the operands.
