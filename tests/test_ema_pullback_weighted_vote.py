@@ -6,6 +6,7 @@ sharing and cost (group 4), feature and history plans (group 5) and parity acros
 from __future__ import annotations
 
 import copy
+import dataclasses
 import itertools
 import json
 import math
@@ -29,6 +30,7 @@ from strategy_engine.domain.market import MarketFrame
 from strategy_engine.domain.ranges import TimeRange
 from strategy_engine.indicators.contracts import IndicatorPlan
 from strategy_engine.indicators.implementations.range_evaluator import RangeIndicatorEvaluator
+from strategy_engine.indicators.market_arrays import MarketArrays
 from strategy_engine.strategies.ema_pullback.feature_plan import (
     build_feature_plan_from_canonical_spec,
 )
@@ -495,6 +497,27 @@ def test_count_with_a_missing_operand(empty: str, expected: int) -> None:
     assert trace["input:c:weight"][0] == 0.5
 
 
+def test_whole_float_count_level_is_an_integer() -> None:
+    as_float = _vote(1, _voter("a", _count_input("x", [ALWAYS, ALWAYS], _ladder((2.0, 0.5)))))
+    as_int = _vote(1, _voter("a", _count_input("x", [ALWAYS, ALWAYS], _ladder((2, 0.5)))))
+    assert parse_weighted_vote_setup(as_float) == parse_weighted_vote_setup(as_int)
+    check_ema_pullback_static_semantics(_spec(as_float))
+
+
+def test_zero_bar_frame_gives_empty_results() -> None:
+    full = _frame(_market_frame(5), SYNTHETIC)
+    frame = dataclasses.replace(
+        full,
+        time_ms=(),
+        market_bars=(),
+        market_arrays=MarketArrays((), ()),
+        series={key: values[:0] for key, values in full.series.items()},
+    )
+    local, trace = _compute(SYNTHETIC, frame)
+    assert local == ()
+    assert trace["score"] == () and trace["blocked_by"] == ()
+
+
 def test_no_lookahead_on_a_truncated_market() -> None:
     market = _market_frame(500)
     full_local, full_trace = _compute(SYNTHETIC, _frame(market, SYNTHETIC))
@@ -609,6 +632,22 @@ def test_a_changed_voter_id_changes_only_the_vote_node() -> None:
         assert "voter:renamed:weight" in _mask(b, side).trace
         assert "voter:pullback:weight" not in _mask(b, side).trace
         assert _mask(c, side, "other").trace == _mask(a, side).trace
+
+
+def test_whole_and_float_levels_give_one_vote_node() -> None:
+    whole = _ladder((1, 0.3), (0, 0.5))
+    floats = _ladder((1.0, 0.3), (0.0, 0.5))
+    recorder, context = _run(
+        [
+            _variant("a", _spec(_table_vote(a1_steps=whole))),
+            _variant("b", _spec(_table_vote(a1_steps=floats))),
+        ]
+    )
+    assert context.stats.unforeseen_consumptions == 0
+    assert _calls(context, "setup.weighted_vote") == 1 * 2
+    a, b = recorder.captures
+    for side in ("long", "short"):
+        assert _mask(a, side).trace == _mask(b, side).trace
 
 
 def test_a_spec_without_a_vote_has_no_vote_node() -> None:

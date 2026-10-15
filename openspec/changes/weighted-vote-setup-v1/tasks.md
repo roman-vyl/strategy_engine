@@ -59,7 +59,7 @@
 
 ## 4. Identity, sharing, cost
 
-- [ ] 4.1 Vote node identity:
+- [x] 4.1 Vote node identity: (memo on = memo off not run: the owner forbids the memo suites, 2026-10-14)
   - kind `setup.weighted_vote` and version;
   - normalized config (exact decimal strings, ids, declared order);
   - upstream operand and predicate identities;
@@ -82,7 +82,7 @@
 
 ## 5a. End-to-end parity across call paths
 
-- [ ] 5a.1 One spec with a weighted vote evaluated through:
+- [x] 5a.1 One spec with a weighted vote evaluated through: (memo on against memo off not run: the owner forbids the memo suites, 2026-10-14)
   - `/range` against `/range-batch`;
   - memo on against memo off;
   - live entry against the historical decision on the same bar.

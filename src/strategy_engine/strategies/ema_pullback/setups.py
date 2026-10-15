@@ -876,8 +876,9 @@ def _weighted_vote_compute(
         trace[f"voter:{voter.voter_id}:veto"] = tuple(voter_veto.tolist())
         voter_weights.append(voter_weight)
         voter_vetoes.append(voter_veto)
-    score = np.sum(np.array(voter_weights, dtype=np.int64).reshape(-1, length), axis=0)
-    vetoes = np.array(voter_vetoes, dtype=bool).reshape(-1, length)
+    # One row per voter (voters are never empty); a zero-bar frame gives (n, 0).
+    score = np.sum(np.stack(voter_weights), axis=0)
+    vetoes = np.stack(voter_vetoes)
     any_veto = np.logical_or.reduce(vetoes, axis=0, initial=False)
     by_score = score >= spec.threshold
     labels = np.array(

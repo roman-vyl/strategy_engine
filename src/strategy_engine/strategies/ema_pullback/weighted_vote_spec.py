@@ -167,11 +167,17 @@ def _step(raw: object, path: str, *, count_of: int | None) -> VoteStep:
     _only(payload, {"level", "weight", "veto"}, path)
     if "level" not in payload:
         raise InvalidRequestError(f"{path}.level is required")
-    level = _real(payload["level"], f"{path}.level")
-    if count_of is not None and (not isinstance(level, int) or not 1 <= level <= count_of):
-        raise InvalidRequestError(
-            f"{path}.level of a count input must be an integer in 1..len(of)", level=level
-        )
+    level: float | int = _real(payload["level"], f"{path}.level")
+    if count_of is not None:
+        # A whole float such as 2.0 is the integer 2 (JSON writers emit both).
+        if not float(level).is_integer() or not 1 <= level <= count_of:
+            raise InvalidRequestError(
+                f"{path}.level of a count input must be an integer in 1..len(of)", level=level
+            )
+        level = int(level)
+    else:
+        # One canonical type, so 60 and 60.0 give one node identity.
+        level = float(level)
     has_weight, has_veto = "weight" in payload, "veto" in payload
     if has_weight == has_veto:
         raise InvalidRequestError(f"{path} must carry exactly one of weight or veto")
