@@ -52,6 +52,7 @@ SETUP_SUPPORTED = frozenset(
         "anchor_stack_width_setup",
         "anchor_stack_width_band_setup",
         "composite_setup",
+        "weighted_vote_setup",
     }
 )
 WIDTH_BAND_SETUP = "anchor_stack_width_band_setup"

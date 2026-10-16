@@ -47,6 +47,7 @@ from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     resolve_trigger_rule,
 )
 from strategy_engine.strategies.ema_pullback.stack_episode import parse_episode_section
+from strategy_engine.strategies.ema_pullback.weighted_vote_spec import weighted_vote_items
 
 _EXIT_GROUPS = ("always_on", "aligned", "countertrend", "neutral")
 
@@ -117,6 +118,7 @@ def check_ema_pullback_static_semantics(raw_spec: Mapping[str, Any]) -> None:
     )
     episode_refs = _check_episodes(raw_spec, context_refs)
     _check_composite_setups(setups, context_refs, episode_refs)
+    _check_weighted_votes(setups, context_refs, episode_refs)
     _check_composite_phase_conditions(raw_spec, context_refs, episode_refs)
 
     exit_rule_groups = resolve_exit_rule_groups(raw_spec)
@@ -190,6 +192,27 @@ def _check_composite_setups(
     require_no_internal_key_collision(
         tuple(str(item.get("instance_id", "")) for item in items), composites
     )
+
+
+def _check_weighted_votes(
+    setups: tuple[object, ...],
+    context_refs: frozenset[str] | None,
+    episode_refs: frozenset[str],
+) -> None:
+    """Structural validation of every `weighted_vote_setup`; every operand
+    and `count.of` predicate is validated by the predicate layer
+    (`weighted-vote-setup-v1`, tasks 1.2-1.4)."""
+
+    items = tuple(_mapping(item, f"setups[{index}]") for index, item in enumerate(setups))
+    for spec in weighted_vote_items(items):
+        for vote_input in spec.inputs():
+            for raw in vote_input.predicates():
+                parse_predicate(
+                    raw,
+                    f"setup[{spec.instance_id}].{vote_input.input_id}",
+                    context_refs=context_refs,
+                    episode_refs=episode_refs,
+                )
 
 
 def _check_composite_phase_conditions(

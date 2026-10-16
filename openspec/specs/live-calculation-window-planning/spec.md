@@ -2,9 +2,7 @@
 
 ## Purpose
 Compute, without any I/O, a bounded history start timestamp that is sufficient, under a set of configured indicator-convergence and strategy-semantic warm-up policies, to evaluate a given live strategy spec at a target bar — so the live acquisition path stops reading history that scales with total accumulated market-data depth.
-
 ## Requirements
-
 ### Requirement: Pure history-start planning
 
 The planner SHALL compute a bounded history start (`from_ms`) from a strategy spec's indicator plan, the base timeframe, the strategy's event/lookback requirements, and a caller-supplied history anchor timestamp.
@@ -305,3 +303,15 @@ bar earlier for `change`) lie inside the history of the episode it names, which 
 - **WHEN** a composite child is a `range` over a ratio of two segments on episode `trend`
 - **THEN** the child SHALL contribute a zero-additional entry
 - **AND** the requirements SHALL still include `history_bars` of `trend` and the EMA warm-up of the series it reads.
+
+### Requirement: History policy for weighted vote inputs
+
+The history requirement of a `weighted_vote_setup` SHALL be the maximum of the requirements of the operands and predicates in its
+inputs, each derived exactly as for the same operand or predicate in a `composite_setup` child. The weighted vote SHALL add no
+history of its own. An input that the planner does not recognise SHALL fail closed, as for composite children.
+
+#### Scenario: Vote over episode operands
+
+- **WHEN** every input reads segment or leg mean operands of a declared episode
+- **THEN** the history requirement SHALL equal that of the same operands in a composite child.
+

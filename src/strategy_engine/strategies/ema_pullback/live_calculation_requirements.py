@@ -38,6 +38,10 @@ from strategy_engine.strategies.ema_pullback.stack_episode import (
     SECTION,
     parse_episode_section,
 )
+from strategy_engine.strategies.ema_pullback.weighted_vote_spec import (
+    WEIGHTED_VOTE_SETUP,
+    parse_weighted_vote_setup,
+)
 from strategy_engine.strategies.live_calculation.contracts import HistoryRequirement
 
 
@@ -301,6 +305,17 @@ class EmaPullbackLiveCalculationRequirements:
                     out += self._semantic_setup(
                         root, child_setup_item(composite, child), index
                     )
+                continue
+            if str(setup.get("component_id", "")) == WEIGHTED_VOTE_SETUP:
+                # The vote adds no history: the max over its inputs, each
+                # exactly as the same predicate in a composite child.
+                vote = parse_weighted_vote_setup(setup, f"setups[{index}]")
+                for vote_input in vote.inputs():
+                    for raw in vote_input.predicates():
+                        out += _predicate_history(
+                            parse_predicate(raw, f"setups[{index}].params.{vote_input.input_id}"),
+                            f"setups[{index}].{vote_input.input_id}",
+                        )
                 continue
             out += self._semantic_setup(root, setup, index)
         return out

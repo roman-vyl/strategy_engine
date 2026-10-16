@@ -1293,6 +1293,33 @@ def predicate_value(
     return value
 
 
+def range_operand_values(
+    predicate: AnyPredicate,
+    frame: FeatureFrameLike,
+    side: str,
+    *,
+    context: EvaluationContext | None = None,
+    identity: PredicateIdentity | None = None,
+    bundle: ContextBundle | None = None,
+) -> np.ndarray:
+    """The operand value of a `range`, on the base timeline for `side`, NaN
+    where missing, for any operand a `range` accepts (OpenSpec
+    `weighted-vote-setup-v1`, design D2). Consumes exactly the nodes the
+    range's own evaluation consumes for its operand."""
+
+    if side not in _SIDES:
+        raise InvalidRequestError("trade side must be long or short", side=side)
+    if not isinstance(predicate, Predicate):
+        raise InvalidRequestError("operand value requires a range predicate")
+    condition = predicate.for_side(side)
+    if not isinstance(condition, Range):
+        raise InvalidRequestError("operand value requires a range predicate")
+    value = _values(condition.operand, frame, context, identity, side, bundle, "operand")
+    length = len(frame.time_ms)
+    array = np.broadcast_to(np.asarray(value, dtype=np.float64), (length,))
+    return np.where(np.isfinite(array), array, np.nan)
+
+
 def _has_value(operand: Operand) -> bool:
     return (
         operand.segment is not None

@@ -46,6 +46,7 @@ from strategy_engine.strategies.ema_pullback.predicates import (
     evaluate_predicate,
     parse_predicate,
     predicate_value,
+    range_operand_values,
     resolve_predicate,
 )
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
@@ -55,6 +56,14 @@ from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
 )
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     resolve_setup_identity as _setup_identity,
+)
+from strategy_engine.strategies.ema_pullback.weighted_vote_spec import (
+    WEIGHT_SCALE,
+    WEIGHTED_VOTE_SETUP,
+    VoteInput,
+    WeightedVoteSpec,
+    parse_weighted_vote_setup,
+    scaled_to_text,
 )
 
 _VALID_SIDES = frozenset({"long", "short"})
@@ -759,6 +768,129 @@ def _composite_trace(spec: CompositeSpec, core: CompositeCore) -> dict[str, tupl
     return trace
 
 
+def _vote_input_crossings(
+    vote_input: VoteInput,
+    path: str,
+    frame: FeatureFrameLike,
+    side: str,
+    *,
+    context: EvaluationContext | None,
+    identities: tuple[PredicateIdentity, ...] | None,
+    bundle: ContextBundle | None,
+) -> tuple[tuple[object, ...], tuple[np.ndarray, ...]]:
+    """`(value trace, crossed mask per step)` of one vote input (design
+    D2, D6): an operand value against its levels, or the number of True
+    predicates of `count.of` against integer levels."""
+
+    if vote_input.operand_predicate is not None:
+        values = range_operand_values(
+            parse_predicate(vote_input.operand_predicate, path),
+            frame,
+            side,
+            context=context,
+            identity=identities[0] if identities is not None else None,
+            bundle=bundle,
+        )
+        finite = np.isfinite(values)
+        at_most = vote_input.direction == "at_most"
+        with np.errstate(invalid="ignore"):
+            crossed = tuple(
+                finite & ((values <= step.level) if at_most else (values >= step.level))
+                for step in vote_input.steps
+            )
+        trace = tuple(
+            float(item) if ok else None
+            for item, ok in zip(values.tolist(), finite.tolist(), strict=True)
+        )
+        return trace, crossed
+    length = len(frame.time_ms)
+    count = np.zeros(length, dtype=np.int64)
+    for index, raw in enumerate(vote_input.count_of):
+        mask = evaluate_predicate(
+            parse_predicate(raw, f"{path}.count.of[{index}]"),
+            frame,
+            side,
+            context=context,
+            identity=identities[index] if identities is not None else None,
+            bundle=bundle,
+        )
+        if len(mask) != length:
+            raise InvalidRequestError(
+                "weighted vote predicate mask length mismatch", input_id=vote_input.input_id
+            )
+        count += mask
+    return tuple(count.tolist()), tuple(count >= step.level for step in vote_input.steps)
+
+
+def _scaled_trace(values: np.ndarray) -> tuple[float, ...]:
+    # int64 below 2**53 converts exactly, so this division is correctly
+    # rounded: the nearest float of the exact decimal (design D6).
+    return tuple((values.astype(np.float64) / float(WEIGHT_SCALE)).tolist())
+
+
+def _weighted_vote_compute(
+    spec: WeightedVoteSpec,
+    frame: FeatureFrameLike,
+    side: str,
+    *,
+    context: EvaluationContext | None,
+    inputs: tuple[tuple[PredicateIdentity, ...], ...] | None,
+    bundle: ContextBundle | None = None,
+) -> tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]:
+    """Local mask and evidence of one weighted vote, vectorized, in exact
+    integer arithmetic (units of 10**-9). The memoized value carries the
+    labels: they are part of the vote node identity (design D8)."""
+
+    length = len(frame.time_ms)
+    trace: dict[str, tuple[object, ...]] = {}
+    voter_weights: list[np.ndarray] = []
+    voter_vetoes: list[np.ndarray] = []
+    input_index = 0
+    for voter in spec.voters:
+        voter_weight = np.zeros(length, dtype=np.int64)
+        voter_veto = np.zeros(length, dtype=bool)
+        for vote_input in voter.inputs:
+            value_trace, crossed = _vote_input_crossings(
+                vote_input,
+                f"setup[{spec.instance_id}].{vote_input.input_id}",
+                frame,
+                side,
+                context=context,
+                identities=inputs[input_index] if inputs is not None else None,
+                bundle=bundle,
+            )
+            input_index += 1
+            weight = np.zeros(length, dtype=np.int64)
+            veto = np.zeros(length, dtype=bool)
+            for step, mask in zip(vote_input.steps, crossed, strict=True):
+                if step.weight is None:
+                    veto |= mask
+                else:
+                    weight = np.where(mask, np.maximum(weight, step.weight), weight)
+            trace[f"input:{vote_input.input_id}:value"] = value_trace
+            trace[f"input:{vote_input.input_id}:weight"] = _scaled_trace(weight)
+            trace[f"input:{vote_input.input_id}:veto"] = tuple(veto.tolist())
+            voter_weight = np.maximum(voter_weight, weight)
+            voter_veto |= veto
+        trace[f"voter:{voter.voter_id}:weight"] = _scaled_trace(voter_weight)
+        trace[f"voter:{voter.voter_id}:veto"] = tuple(voter_veto.tolist())
+        voter_weights.append(voter_weight)
+        voter_vetoes.append(voter_veto)
+    # One row per voter (voters are never empty); a zero-bar frame gives (n, 0).
+    score = np.sum(np.stack(voter_weights), axis=0)
+    vetoes = np.stack(voter_vetoes)
+    any_veto = np.logical_or.reduce(vetoes, axis=0, initial=False)
+    by_score = score >= spec.threshold
+    labels = np.array(
+        [f"veto:{voter.voter_id}" for voter in spec.voters] + ["score", None], dtype=object
+    )
+    count = len(spec.voters)
+    reason = np.where(any_veto, np.argmax(vetoes, axis=0), np.where(by_score, count, count + 1))
+    trace["score"] = _scaled_trace(score)
+    trace["blocked_by"] = tuple(labels[reason].tolist())
+    return tuple((~(any_veto | by_score)).tolist()), trace
+
+
 def _setup(
     item: Mapping[str, Any],
     frame: FeatureFrameLike,
@@ -788,6 +920,20 @@ def _setup(
             ),
         )
         local, trace = core.local, _composite_trace(spec, core)
+    elif component_id == WEIGHTED_VOTE_SETUP:
+        local, trace = compute_through(
+            context,
+            identity.local if identity else None,
+            functools.partial(
+                _weighted_vote_compute,
+                parse_weighted_vote_setup(item, f"setup[{instance_id}]"),
+                frame,
+                side,
+                context=context,
+                inputs=identity.vote_inputs if identity else None,
+                bundle=bundle,
+            ),
+        )
     else:
         compute = _semantic_setup_compute(
             component_id, instance_id, params, frame, plan, side, context=context, identity=identity
@@ -904,6 +1050,10 @@ class SetupIdentity:
     children: tuple[SetupIdentity, ...] = ()
     # Set only for a composite predicate child (its column nodes).
     predicate: PredicateIdentity | None = None
+    # Weighted vote only: per input, the predicate identities it reads, and
+    # every consumption its compute makes, in order (design D8).
+    vote_inputs: tuple[tuple[PredicateIdentity, ...], ...] = ()
+    vote_consumptions: tuple[NodeSpec, ...] = ()
 
 
 def resolve_setup_local(
@@ -921,8 +1071,8 @@ def resolve_setup_local(
 
     component_id, instance_id, params = _setup_head(item, side)
     kind = f"setup.{component_id}"
-    if component_id == COMPOSITE_SETUP:
-        raise InvalidRequestError("composite_setup resolves through resolve_setup_identity")
+    if component_id in (COMPOSITE_SETUP, WEIGHTED_VOTE_SETUP):
+        raise InvalidRequestError(f"{component_id} resolves through resolve_setup_identity")
     if component_id == "untouched_anchor_setup":
         lookback, active_bars = _untouched_anchor_params(params)
         return (
@@ -1063,6 +1213,70 @@ def _resolve_composite(
     return local, tuple(children)
 
 
+def _vote_step_param(step: Any) -> tuple[object, ...]:
+    return (
+        step.level,
+        None if step.weight is None else scaled_to_text(step.weight),
+        step.weight is None,
+    )
+
+
+def _resolve_weighted_vote(
+    item: Mapping[str, Any],
+    feature_ids: Mapping[str, NodeSpec],
+    side: str,
+    contexts: Mapping[str, NodeSpec] | None = None,
+) -> tuple[NodeSpec, tuple[tuple[PredicateIdentity, ...], ...], tuple[NodeSpec, ...]]:
+    """`(vote node, per-input predicate identities, inner consumptions)`.
+
+    The vote node carries the normalized table with its labels and declared
+    order (they name the evidence) and the side; its upstream are the
+    predicate-layer nodes of the inputs, which keep their own identities and
+    are shared with composites and other votes (design D8)."""
+
+    _component_id, instance_id, _params = _setup_head(item, side)
+    spec = parse_weighted_vote_setup(item, f"setup[{instance_id}]")
+    inputs: list[tuple[PredicateIdentity, ...]] = []
+    consumed: list[NodeSpec] = []
+    upstream: dict[str, NodeSpec] = {}
+    for input_index, vote_input in enumerate(spec.inputs()):
+        path = f"setup[{instance_id}].{vote_input.input_id}"
+        identities = tuple(
+            resolve_predicate(parse_predicate(raw, path), feature_ids, side, contexts)
+            for raw in vote_input.predicates()
+        )
+        inputs.append(identities)
+        for predicate_index, identity in enumerate(identities):
+            upstream[f"input_{input_index}_{predicate_index}"] = identity.local
+            if vote_input.operand_predicate is None:
+                consumed.append(identity.local)
+            consumed += identity.nested
+    voters = tuple(
+        (
+            voter.voter_id,
+            voter.role,
+            tuple(
+                (
+                    vote_input.input_id,
+                    "operand" if vote_input.operand_predicate is not None else "count",
+                    vote_input.direction,
+                    tuple(_vote_step_param(step) for step in vote_input.steps),
+                )
+                for vote_input in voter.inputs
+            ),
+        )
+        for voter in spec.voters
+    )
+    local = node_spec(
+        "setup.weighted_vote",
+        version=SETUP_NODE_VERSION,
+        params={"threshold": scaled_to_text(spec.threshold), "voters": voters},
+        upstream=upstream,
+        side=side,
+    )
+    return local, tuple(inputs), tuple(consumed)
+
+
 def resolve_setup_identity_for_side(
     item: Mapping[str, Any],
     plan: EmaPullbackFeaturePlan,
@@ -1083,6 +1297,18 @@ def resolve_setup_identity_for_side(
             local=local,
             final=gated_mask_node(local, gate),
             children=children,
+        )
+    if component_id == WEIGHTED_VOTE_SETUP:
+        local, vote_inputs, vote_consumptions = _resolve_weighted_vote(
+            item, feature_ids, side, contexts
+        )
+        return SetupIdentity(
+            instance_id=instance_id,
+            side=side,
+            local=local,
+            final=gated_mask_node(local, gate),
+            vote_inputs=vote_inputs,
+            vote_consumptions=vote_consumptions,
         )
     local, prefix = resolve_setup_local(item, plan, feature_ids, side)
     return SetupIdentity(
