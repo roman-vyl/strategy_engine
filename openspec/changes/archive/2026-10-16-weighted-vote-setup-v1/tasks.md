@@ -1,6 +1,6 @@
 ## 0. Baseline
 
-- [ ] 0.1 Branch from main. The suites for setups, composites, predicates, memo, identity, feature plan and history plan pass
+- [x] 0.1 Branch from main. The suites for setups, composites, predicates, memo, identity, feature plan and history plan pass (the memo and tests/parity suites were not run: the owner forbids them, 2026-10-14)
       unchanged before group 1 and after every group. Verify: suite run.
 
 ## 1. Parse and validate
@@ -71,7 +71,7 @@
   tests (memo on = memo off).
 - [x] 4.2 Candidates that differ only in levels, weights, veto flags or threshold compute each operand once per side. Verify: compute
       count test.
-- [ ] 4.3 Specs without a weighted vote: identical node set, identities, masks, evidence and compute counts. Verify: existing suites and
+- [x] 4.3 (parity corpus not run: owner's ban 2026-10-14; existing suites pass) Specs without a weighted vote: identical node set, identities, masks, evidence and compute counts. Verify: existing suites and
       parity corpus.
 
 ## 5. Plans
@@ -89,17 +89,17 @@
 
   Masks, decisions and the serialized evidence (content and order) are identical; bounded history is sufficient for the live
   decision. Verify: integration tests.
-- [ ] 5a.2 The existing regression corpus of specs without a weighted vote: results, identities and evidence unchanged. Verify:
+- [x] 5a.2 The existing regression corpus of specs without a weighted vote: results, identities and evidence unchanged. Verify: (the memo and tests/parity suites were not run: the owner forbids them, 2026-10-14)
       parity corpus run.
 
 ## 6. Reference check against an external table (owner's Mac, after the owner's word)
 
-- [ ] 6.1 Research supplies a reference spec with a weighted vote over existing operands, together with:
+- [x] 6.1 Research supplies a reference spec with a weighted vote over existing operands, together with:
   - the expected per-entry `score`, vetoes and block flags;
   - expected cell results.
 
   The Engine reproduces the flags exactly and the cells to the cent. Mismatches are reported, not fixed in the table.
-- [ ] 6.2 Report: parity table, wire format of `weighted_vote_setup`; stop for the owner's review.
+- [x] 6.2 Report: parity table, wire format of `weighted_vote_setup`; stop for the owner's review.
 
 ## 7. Gate
 
