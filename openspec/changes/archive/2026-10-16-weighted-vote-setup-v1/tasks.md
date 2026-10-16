@@ -1,7 +1,11 @@
 ## 0. Baseline
 
-- [x] 0.1 Branch from main. The suites for setups, composites, predicates, memo, identity, feature plan and history plan pass (the memo and tests/parity suites were not run: the owner forbids them, 2026-10-14)
+- [x] 0.1 Branch from main. The suites for setups, composites, predicates, memo, identity, feature plan and history plan pass
       unchanged before group 1 and after every group. Verify: suite run.
+      Mac 2026-10-16, branch 60ca8d4 (base main d2fc94b), suite without `tests/parity` (the owner forbids the memo suites): the only
+      failure besides an environment artifact is `test_live_entry_responses_unchanged`, which fails the same way on main d2fc94b on this
+      Mac (byte hash, known since C1); `test_source_tree_has_no_stale_generated_package_artifacts` fails only on the ignored
+      `src/strategy_engine.egg-info` left by the local `uv sync` of the worktree.
 
 ## 1. Parse and validate
 
@@ -71,8 +75,9 @@
   tests (memo on = memo off).
 - [x] 4.2 Candidates that differ only in levels, weights, veto flags or threshold compute each operand once per side. Verify: compute
       count test.
-- [x] 4.3 (parity corpus not run: owner's ban 2026-10-14; existing suites pass) Specs without a weighted vote: identical node set, identities, masks, evidence and compute counts. Verify: existing suites and
-      parity corpus.
+- [x] 4.3 Specs without a weighted vote: identical node set, identities, masks, evidence and compute counts. Verify: existing suites and
+      parity corpus. (Existing suites as in 0.1; the parity corpus is not run: the owner forbids the memo suites, 2026-10-14. Engine
+      /range without a vote on the Mac: BTC W7 / LB 20 / SL 7 1275 entries, 427 trades / $25,760.99, equal to the reference.)
 
 ## 5. Plans
 
@@ -89,8 +94,9 @@
 
   Masks, decisions and the serialized evidence (content and order) are identical; bounded history is sufficient for the live
   decision. Verify: integration tests.
-- [x] 5a.2 The existing regression corpus of specs without a weighted vote: results, identities and evidence unchanged. Verify: (the memo and tests/parity suites were not run: the owner forbids them, 2026-10-14)
-      parity corpus run.
+- [x] 5a.2 The existing regression corpus of specs without a weighted vote: results, identities and evidence unchanged. Verify:
+      parity corpus run. (Not run: the owner forbids the memo suites, 2026-10-14; covered by the suite without `tests/parity` in 0.1
+      and the no-vote Engine cell in 4.3.)
 
 ## 6. Reference check against an external table (owner's Mac, after the owner's word)
 
@@ -100,6 +106,26 @@
 
   The Engine reproduces the flags exactly and the cells to the cent. Mismatches are reported, not fixed in the table.
 - [x] 6.2 Report: parity table, wire format of `weighted_vote_setup`; stop for the owner's review.
+
+Parity result (Mac 2026-10-16, local Engine from 60ca8d4, 32 Engine runs in total): the research v3 canon (`vote/v3_table_<series>.json`,
+chorus 3, x^2, theta 0.75, C5 veto only) as one `weighted_vote_setup` per series, each series with its own table, untouched; weights are the
+table floats rounded to 9 decimals (no entry within 1e-6 of the threshold, so the blocked set is unchanged).
+
+- Per-entry flags on every entry of the series: input values (to 1e-9 relative, NaN equal), input and voter weights and vetoes, `score`,
+  `blocked_by` and the block flag; 0 mismatches. BTC EMA500 2185 entries / 1584 blocked (equal to the canon set); BTC EMA500 + W3 / LB 10
+  2742 / 1928; ETH EMA500 1970 / 1192; BTC EMA1000 (episode 96) 1444 / 990.
+- One mismatch at first, in the reference: B2.2 `m14` of 2 BTC entries was a value of about 2e11 in research and empty in the Engine
+  (previous-wave area in (0, 1e-6]); research used `> 0`, the Engine the 1e-6 floor of `b2-di-wave-v1`. No step was crossed either way.
+  Owner 2026-10-16: the Engine rule is canonical; research B2.1 / B2.2 now use the 1e-6 floor, after which 0 mismatches.
+- Cells to the cent, 54 of 54: Engine entries equal the reference kept set (signals minus the blocked set) in every cell, and trades, win
+  rate and net of the research replay of the Engine entries equal the reference. BTC EMA500 24 cells over W3-W14, LB 20-300, SL 5-7, TP
+  4.5-8 (W7 / LB 20 / SL 7 / TP 5.5: 345 entries, 195 trades, WR 32.31 %, $179,482.88); W3 / LB 10 2 cells (TP 5.5: 334 / $73,082.64);
+  ETH EMA500 14 cells (W11 / LB 20 / SL 8 / TP 5.5: 96 / $46,702.90); BTC EMA1000 14 cells (W12 / LB 20 / SL 6 / TP 6.5: 75 / $23,223.63).
+- Wire format: one `weighted_vote_setup`, `threshold` 0.75, voters in the table order with `role` `vote`: A1 (`a1s_low`, `at_most`),
+  A2_1 (`accel_high`, `at_least`), A2vote (8 `count` inputs, each `of` = [`accel` >= a, `peak` <= p, `conc_norm` >= c] as inclusive
+  ranges with one step at level 2), B1 (`leg_5m` / `leg_15m` / `leg_1h`, `at_least`), B2 (`r14` / `m14`, `at_most`), C1 (`c11` `at_most`,
+  `c12` `at_least`), C5 (`c5` `at_most` and `at_least`); operands as in the archived A1, A2, B1, B2, C1 and C5 changes; a veto step is
+  `{"level": L, "veto": true}`, a weighted step `{"level": L, "weight": w}`.
 
 ## 7. Gate
 
