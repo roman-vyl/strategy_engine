@@ -5,6 +5,7 @@ sharing and cost (group 4), feature and history plans (group 5) and parity acros
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import dataclasses
 import itertools
@@ -32,6 +33,7 @@ from strategy_engine.indicators.contracts import IndicatorPlan
 from strategy_engine.indicators.evaluation_context import EvaluationContext
 from strategy_engine.indicators.implementations.range_evaluator import RangeIndicatorEvaluator
 from strategy_engine.indicators.market_arrays import MarketArrays
+from strategy_engine.strategies.application import evaluate_range_batch as batch_module
 from strategy_engine.strategies.ema_pullback.feature_plan import (
     build_feature_plan_from_canonical_spec,
 )
@@ -555,6 +557,31 @@ def test_no_lookahead_on_a_truncated_market() -> None:
 # -- groups 2-4 on the real fixture through the pipeline ---------------------------------------
 
 
+@contextlib.contextmanager
+def _with_evidence() -> Any:
+    """Range-batch contexts are execution-only (no per-bar traces); these
+    tests read the vote's evidence, so they force it on."""
+
+    original = batch_module.EvaluationContext
+
+    class EvidenceContext(original):  # type: ignore[misc, valid-type]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **{**kwargs, "evidence": True})
+
+    batch_module.EvaluationContext = EvidenceContext  # type: ignore[misc]
+    try:
+        yield
+    finally:
+        batch_module.EvaluationContext = original  # type: ignore[misc]
+
+
+def test_range_batch_builds_no_vote_trace() -> None:
+    recorder, _ = _run([_variant("v", _spec(_table_vote()))])
+    (capture,) = recorder.captures
+    for side in ("long", "short"):
+        assert _mask(capture, side).trace == {}
+
+
 def test_vote_is_and_composed_and_reads_the_same_values_as_a_composite_child() -> None:
     child = {
         "component_id": "composite_setup",
@@ -564,7 +591,8 @@ def test_vote_is_and_composed_and_reads_the_same_values_as_a_composite_child() -
             "paths": [{"path_id": "p", "require": ["a1"]}],
         },
     }
-    recorder, context = _run([_variant("v", _spec(_table_vote(), child, _untouched("u")))])
+    with _with_evidence():
+        recorder, context = _run([_variant("v", _spec(_table_vote(), child, _untouched("u")))])
     (capture,) = recorder.captures
     assert context.stats.unforeseen_consumptions == 0
     assert _calls(context, "predicate.ratio") == 2  # shared by the vote and the child
@@ -633,13 +661,14 @@ def test_candidates_differing_only_in_the_table_compute_each_operand_once() -> N
 
 
 def test_a_changed_voter_id_changes_only_the_vote_node() -> None:
-    recorder, context = _run(
-        [
-            _variant("a", _spec(_table_vote())),
-            _variant("b", _spec(_table_vote(voter_id="renamed"))),
-            _variant("c", _spec(_table_vote(instance_id="other"))),
-        ]
-    )
+    with _with_evidence():
+        recorder, context = _run(
+            [
+                _variant("a", _spec(_table_vote())),
+                _variant("b", _spec(_table_vote(voter_id="renamed"))),
+                _variant("c", _spec(_table_vote(instance_id="other"))),
+            ]
+        )
     assert context.stats.unforeseen_consumptions == 0
     assert _calls(context, "predicate.ratio") == 2
     # the instance_id is a label outside the node; the voter_id names the evidence
