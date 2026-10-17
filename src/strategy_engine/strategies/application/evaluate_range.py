@@ -65,17 +65,23 @@ class EvaluateStrategyRange:
         contract (I8 cutover)" requirements."""
 
         evaluator = self._prepare(request)
-        return self._evaluate_root(evaluator, request, evaluator.evaluate_execution_projection)
+        return self._evaluate_root(
+            evaluator, request, evaluator.evaluate_execution_projection, evidence=False
+        )
 
     def execute_diagnostics(self, request: StrategyRangeRequest) -> StrategyDiagnosticEvaluation:
         evaluator = self._prepare(request)
-        return self._evaluate_root(evaluator, request, evaluator.evaluate_diagnostics)
+        return self._evaluate_root(
+            evaluator, request, evaluator.evaluate_diagnostics, evidence=True
+        )
 
     def _evaluate_root[R](
         self,
         evaluator: StrategyEvaluator,
         request: StrategyRangeRequest,
         evaluate: Callable[[StrategyRangeRequest], R],
+        *,
+        evidence: bool,
     ) -> R:
         """Evaluate `request` as one root of an `EvaluationContext`
         (batch-computation-reuse, design.md D1/D4, tasks 2.4/5.2: one
@@ -89,12 +95,13 @@ class EvaluateStrategyRange:
         evaluation acquired it before (same validation, same `load_range`
         call, same failure precedence), and the request becomes the only
         root of a context over that frame, planned and scoped through the
-        same `plan_roots()` / `root()` the batch uses."""
+        same `plan_roots()` / `root()` the batch uses. `evidence` is False
+        for the execution projection, which never reads per-bar traces."""
 
         if request.evaluation_context is not None:
             return evaluate(request)
         market_frame = evaluator.load_market_frame(request)
-        context = EvaluationContext(market_frame, request.market_arrays)
+        context = EvaluationContext(market_frame, request.market_arrays, evidence=evidence)
         context.plan_roots([self.resolve_memoized_identities(request.strategy, request.market)])
         with context.root(0):
             return evaluate(

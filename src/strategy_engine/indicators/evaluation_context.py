@@ -40,6 +40,14 @@ reused, never in which code runs. Production never turns it off (no wiring
 or request field sets it); it is kept as the regression-testing knob the
 `tests/parity` memo-OFF vs memo-ON gates rely on.
 
+Evidence toggle: `evidence=False` marks a context whose roots only produce
+the execution projection (`/range`, `/range-batch`), so nodes may skip
+building their per-bar diagnostic traces (today: the weighted vote). The
+mode is fixed for the context's whole life and every root of one context
+shares it, so a memoized value built without a trace can never be served
+to a diagnostics root. `/range/diagnostics` and evaluation outside any
+context always build traces.
+
 D5 refcounts count *consumptions* (a root that reads one identity twice,
 e.g. two timeframe-aliased plan columns, contributes 2). A root's
 consumptions that never happen (the root failed earlier, or its pre-pass
@@ -194,6 +202,7 @@ class EvaluationContext:
         market_arrays: MarketArrays | None = None,
         *,
         memo_enabled: bool = True,
+        evidence: bool = True,
     ) -> None:
         if market_arrays is None:
             market_arrays = MarketArrays.from_market_frame(market_frame)
@@ -204,6 +213,7 @@ class EvaluationContext:
         self._market_frame = market_frame
         self._market_arrays = market_arrays
         self._memo_enabled = memo_enabled
+        self._evidence = evidence
         self._memo: dict[NodeSpec, _Value | _Failure] = {}
         self._refcounts: dict[NodeSpec, int] = {}
         self._pending: list[Counter[NodeSpec]] | None = None
@@ -237,6 +247,12 @@ class EvaluationContext:
     @property
     def memo_enabled(self) -> bool:
         return self._memo_enabled
+
+    @property
+    def evidence(self) -> bool:
+        """Whether nodes build per-bar diagnostic traces (see module docstring)."""
+
+        return self._evidence
 
     @property
     def live_entries(self) -> int:
