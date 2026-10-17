@@ -29,6 +29,7 @@ from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.market import MarketFrame
 from strategy_engine.domain.ranges import TimeRange
 from strategy_engine.indicators.contracts import IndicatorPlan
+from strategy_engine.indicators.evaluation_context import EvaluationContext
 from strategy_engine.indicators.implementations.range_evaluator import RangeIndicatorEvaluator
 from strategy_engine.indicators.market_arrays import MarketArrays
 from strategy_engine.strategies.ema_pullback.feature_plan import (
@@ -384,6 +385,23 @@ def test_evaluation_matches_a_brute_force_reference(side: str) -> None:
     )
     closes = [float(bar.close) for bar in market.bars]
     assert list(trace["input:close:value"]) == closes
+
+
+@pytest.mark.parametrize("side", ["long", "short"])
+def test_a_context_without_evidence_gives_the_same_mask_and_no_trace(side: str) -> None:
+    market = _market_frame(600)
+    frame = _frame(market, SYNTHETIC)
+    local, trace = _compute(SYNTHETIC, frame, side)
+    assert trace
+    lean_local, lean_trace = _weighted_vote_compute(
+        parse_weighted_vote_setup(SYNTHETIC, "s"),
+        frame,
+        side,
+        context=EvaluationContext(market, evidence=False),
+        inputs=None,
+    )
+    assert lean_local == local
+    assert lean_trace == {}
 
 
 def test_value_exactly_on_a_level_crosses_it() -> None:

@@ -81,7 +81,8 @@ class EvaluateStrategyRangeBatch:
         # conversion or computation yet (the arrays are derived lazily, on
         # first use by the first variant that needs them), so nothing
         # observable moves ahead of streaming.
-        context = EvaluationContext(market_frame, memo_enabled=self._memo_enabled)
+        # Variants only produce the execution projection: no per-bar traces.
+        context = EvaluationContext(market_frame, memo_enabled=self._memo_enabled, evidence=False)
         return self._stream_variants(request, market_frame, context)
 
     def _stream_variants(
