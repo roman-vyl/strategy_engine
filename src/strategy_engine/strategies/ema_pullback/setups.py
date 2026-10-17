@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import functools
 import math
-from collections.abc import Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from math import isfinite
 from typing import Any
@@ -77,7 +77,7 @@ class SetupMask:
     local_setup_allowed: tuple[bool, ...]
     context_gate_allowed: tuple[bool, ...] | None
     final_setup_allowed: tuple[bool, ...]
-    trace: dict[str, tuple[object, ...]]
+    trace: Mapping[str, tuple[object, ...]]
 
     def to_wire(self) -> dict[str, object]:
         return {
@@ -768,6 +768,60 @@ def _composite_trace(spec: CompositeSpec, core: CompositeCore) -> dict[str, tupl
     return trace
 
 
+class _VoteTrace(Mapping[str, tuple[object, ...]]):
+    """Evidence of one weighted vote as compact numpy columns; a column
+    becomes a tuple only when read (the diagnostic output). The memoized
+    value stays ~10x smaller than eager tuples and the execution path
+    never decodes it."""
+
+    def __init__(
+        self,
+        columns: Mapping[str, tuple[np.ndarray, Callable[[np.ndarray], tuple[object, ...]]]],
+    ) -> None:
+        self._columns = columns
+        self._decoded: dict[str, tuple[object, ...]] = {}
+
+    def __getitem__(self, key: str) -> tuple[object, ...]:
+        decoded = self._decoded.get(key)
+        if decoded is None:
+            array, decode = self._columns[key]
+            decoded = self._decoded[key] = decode(array)
+        return decoded
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._columns)
+
+    def __len__(self) -> int:
+        return len(self._columns)
+
+    def copy(self) -> _VoteTrace:
+        """A private view per consumer: shares the columns, not the cache."""
+
+        return _VoteTrace(self._columns)
+
+
+def _decode_list(array: np.ndarray) -> tuple[object, ...]:
+    return tuple(array.tolist())
+
+
+def _decode_finite(array: np.ndarray) -> tuple[object, ...]:
+    return tuple(
+        float(item) if ok else None
+        for item, ok in zip(array.tolist(), np.isfinite(array).tolist(), strict=True)
+    )
+
+
+def _decode_scaled(array: np.ndarray) -> tuple[object, ...]:
+    # int64 below 2**53 converts exactly, so this division is correctly
+    # rounded: the nearest float of the exact decimal (design D6).
+    return tuple((array.astype(np.float64) / float(WEIGHT_SCALE)).tolist())
+
+
+def _decode_labels(labels: tuple[str | None, ...]) -> Callable[[np.ndarray], tuple[object, ...]]:
+    table = np.array(labels, dtype=object)
+    return lambda array: tuple(table[array].tolist())
+
+
 def _vote_input_crossings(
     vote_input: VoteInput,
     path: str,
@@ -777,8 +831,8 @@ def _vote_input_crossings(
     context: EvaluationContext | None,
     identities: tuple[PredicateIdentity, ...] | None,
     bundle: ContextBundle | None,
-) -> tuple[tuple[object, ...], tuple[np.ndarray, ...]]:
-    """`(value trace, crossed mask per step)` of one vote input (design
+) -> tuple[tuple[np.ndarray, Callable[[np.ndarray], tuple[object, ...]]], tuple[np.ndarray, ...]]:
+    """`(value column, crossed mask per step)` of one vote input (design
     D2, D6): an operand value against its levels, or the number of True
     predicates of `count.of` against integer levels."""
 
@@ -798,11 +852,8 @@ def _vote_input_crossings(
                 finite & ((values <= step.level) if at_most else (values >= step.level))
                 for step in vote_input.steps
             )
-        trace = tuple(
-            float(item) if ok else None
-            for item, ok in zip(values.tolist(), finite.tolist(), strict=True)
-        )
-        return trace, crossed
+        # a private copy: `values` may be a shared array of the frame/memo
+        return (np.array(values, dtype=np.float64), _decode_finite), crossed
     length = len(frame.time_ms)
     count = np.zeros(length, dtype=np.int64)
     for index, raw in enumerate(vote_input.count_of):
@@ -819,13 +870,7 @@ def _vote_input_crossings(
                 "weighted vote predicate mask length mismatch", input_id=vote_input.input_id
             )
         count += mask
-    return tuple(count.tolist()), tuple(count >= step.level for step in vote_input.steps)
-
-
-def _scaled_trace(values: np.ndarray) -> tuple[float, ...]:
-    # int64 below 2**53 converts exactly, so this division is correctly
-    # rounded: the nearest float of the exact decimal (design D6).
-    return tuple((values.astype(np.float64) / float(WEIGHT_SCALE)).tolist())
+    return (count, _decode_list), tuple(count >= step.level for step in vote_input.steps)
 
 
 def _weighted_vote_compute(
@@ -836,13 +881,13 @@ def _weighted_vote_compute(
     context: EvaluationContext | None,
     inputs: tuple[tuple[PredicateIdentity, ...], ...] | None,
     bundle: ContextBundle | None = None,
-) -> tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]:
+) -> tuple[tuple[bool, ...], _VoteTrace]:
     """Local mask and evidence of one weighted vote, vectorized, in exact
     integer arithmetic (units of 10**-9). The memoized value carries the
     labels: they are part of the vote node identity (design D8)."""
 
     length = len(frame.time_ms)
-    trace: dict[str, tuple[object, ...]] = {}
+    trace: dict[str, tuple[np.ndarray, Callable[[np.ndarray], tuple[object, ...]]]] = {}
     voter_weights: list[np.ndarray] = []
     voter_vetoes: list[np.ndarray] = []
     input_index = 0
@@ -868,12 +913,12 @@ def _weighted_vote_compute(
                 else:
                     weight = np.where(mask, np.maximum(weight, step.weight), weight)
             trace[f"input:{vote_input.input_id}:value"] = value_trace
-            trace[f"input:{vote_input.input_id}:weight"] = _scaled_trace(weight)
-            trace[f"input:{vote_input.input_id}:veto"] = tuple(veto.tolist())
+            trace[f"input:{vote_input.input_id}:weight"] = (weight, _decode_scaled)
+            trace[f"input:{vote_input.input_id}:veto"] = (veto, _decode_list)
             voter_weight = np.maximum(voter_weight, weight)
             voter_veto |= veto
-        trace[f"voter:{voter.voter_id}:weight"] = _scaled_trace(voter_weight)
-        trace[f"voter:{voter.voter_id}:veto"] = tuple(voter_veto.tolist())
+        trace[f"voter:{voter.voter_id}:weight"] = (voter_weight, _decode_scaled)
+        trace[f"voter:{voter.voter_id}:veto"] = (voter_veto, _decode_list)
         voter_weights.append(voter_weight)
         voter_vetoes.append(voter_veto)
     # One row per voter (voters are never empty); a zero-bar frame gives (n, 0).
@@ -881,14 +926,12 @@ def _weighted_vote_compute(
     vetoes = np.stack(voter_vetoes)
     any_veto = np.logical_or.reduce(vetoes, axis=0, initial=False)
     by_score = score >= spec.threshold
-    labels = np.array(
-        [f"veto:{voter.voter_id}" for voter in spec.voters] + ["score", None], dtype=object
-    )
+    labels = tuple([f"veto:{voter.voter_id}" for voter in spec.voters] + ["score", None])
     count = len(spec.voters)
     reason = np.where(any_veto, np.argmax(vetoes, axis=0), np.where(by_score, count, count + 1))
-    trace["score"] = _scaled_trace(score)
-    trace["blocked_by"] = tuple(labels[reason].tolist())
-    return tuple((~(any_veto | by_score)).tolist()), trace
+    trace["score"] = (score, _decode_scaled)
+    trace["blocked_by"] = (reason, _decode_labels(labels))
+    return tuple((~(any_veto | by_score)).tolist()), _VoteTrace(trace)
 
 
 def _setup(
@@ -903,6 +946,7 @@ def _setup(
     bundle: ContextBundle | None = None,
 ) -> SetupMask:
     component_id, instance_id, params = _setup_head(item, side)
+    trace: Mapping[str, tuple[object, ...]]
     if component_id == COMPOSITE_SETUP:
         spec = parse_composite_setup(item, f"setup[{instance_id}]")
         core = compute_through(
@@ -954,7 +998,7 @@ def _setup(
         final_setup_allowed=final,
         # A private dict per consumer: a memoized trace is shared by every
         # candidate that reads it and must never be handed out mutable.
-        trace=dict(trace),
+        trace=trace.copy(),
     )
 
 
