@@ -50,7 +50,6 @@ from parity.harness import (
     recording_services,
 )
 from parity.snapshot import ArrayStore, encode
-from parity.test_indicator_memo import _PINNED
 from parity.test_parity_golden import CASE_NAMES, load_golden_case
 from strategy_engine.adapters.http import strategy_routes
 from strategy_engine.adapters.http.app import create_app
@@ -66,6 +65,17 @@ from strategy_engine.service.wiring import ApplicationServices
 
 _SECTIONS = ("plan", "frame", "evaluation", "projection")
 _OUTCOME_FIELDS = ("category", "code", "message", "details", "stage")
+
+
+# Pinned EMA source-collision candidates of the golden corpus.
+_PINNED = (
+    "anchor-ema200-close",
+    "anchor-ema200-open",
+    "anchor-ema200-high",
+    "anchor-ema200-close-again",
+    "within-spec-context-open-vs-stack-close",
+    "within-spec-exit-ema-open-vs-anchor-close",
+)
 
 
 @pytest.fixture(scope="module")
