@@ -777,10 +777,12 @@ def _vote_input_crossings(
     context: EvaluationContext | None,
     identities: tuple[PredicateIdentity, ...] | None,
     bundle: ContextBundle | None,
-) -> tuple[tuple[object, ...], tuple[np.ndarray, ...]]:
+    evidence: bool = True,
+) -> tuple[tuple[object, ...] | None, tuple[np.ndarray, ...]]:
     """`(value trace, crossed mask per step)` of one vote input (design
     D2, D6): an operand value against its levels, or the number of True
-    predicates of `count.of` against integer levels."""
+    predicates of `count.of` against integer levels. The value trace is
+    None when `evidence` is off."""
 
     if vote_input.operand_predicate is not None:
         values = range_operand_values(
@@ -798,6 +800,8 @@ def _vote_input_crossings(
                 finite & ((values <= step.level) if at_most else (values >= step.level))
                 for step in vote_input.steps
             )
+        if not evidence:
+            return None, crossed
         trace = tuple(
             float(item) if ok else None
             for item, ok in zip(values.tolist(), finite.tolist(), strict=True)
@@ -819,7 +823,8 @@ def _vote_input_crossings(
                 "weighted vote predicate mask length mismatch", input_id=vote_input.input_id
             )
         count += mask
-    return tuple(count.tolist()), tuple(count >= step.level for step in vote_input.steps)
+    crossed = tuple(count >= step.level for step in vote_input.steps)
+    return (tuple(count.tolist()) if evidence else None), crossed
 
 
 def _scaled_trace(values: np.ndarray) -> tuple[float, ...]:
@@ -839,9 +844,15 @@ def _weighted_vote_compute(
 ) -> tuple[tuple[bool, ...], dict[str, tuple[object, ...]]]:
     """Local mask and evidence of one weighted vote, vectorized, in exact
     integer arithmetic (units of 10**-9). The memoized value carries the
-    labels: they are part of the vote node identity (design D8)."""
+    labels: they are part of the vote node identity (design D8).
+
+    In a context without evidence (execution projection) the per-bar
+    trace is not built and the evidence dict is empty: ~20 inputs times
+    three Python tuples over every bar are what dominates memory, and
+    nothing on that path reads them. The mask is identical either way."""
 
     length = len(frame.time_ms)
+    evidence = context is None or context.evidence
     trace: dict[str, tuple[object, ...]] = {}
     voter_weights: list[np.ndarray] = []
     voter_vetoes: list[np.ndarray] = []
@@ -858,6 +869,7 @@ def _weighted_vote_compute(
                 context=context,
                 identities=inputs[input_index] if inputs is not None else None,
                 bundle=bundle,
+                evidence=evidence,
             )
             input_index += 1
             weight = np.zeros(length, dtype=np.int64)
@@ -867,13 +879,15 @@ def _weighted_vote_compute(
                     veto |= mask
                 else:
                     weight = np.where(mask, np.maximum(weight, step.weight), weight)
-            trace[f"input:{vote_input.input_id}:value"] = value_trace
-            trace[f"input:{vote_input.input_id}:weight"] = _scaled_trace(weight)
-            trace[f"input:{vote_input.input_id}:veto"] = tuple(veto.tolist())
+            if value_trace is not None:
+                trace[f"input:{vote_input.input_id}:value"] = value_trace
+                trace[f"input:{vote_input.input_id}:weight"] = _scaled_trace(weight)
+                trace[f"input:{vote_input.input_id}:veto"] = tuple(veto.tolist())
             voter_weight = np.maximum(voter_weight, weight)
             voter_veto |= veto
-        trace[f"voter:{voter.voter_id}:weight"] = _scaled_trace(voter_weight)
-        trace[f"voter:{voter.voter_id}:veto"] = tuple(voter_veto.tolist())
+        if evidence:
+            trace[f"voter:{voter.voter_id}:weight"] = _scaled_trace(voter_weight)
+            trace[f"voter:{voter.voter_id}:veto"] = tuple(voter_veto.tolist())
         voter_weights.append(voter_weight)
         voter_vetoes.append(voter_veto)
     # One row per voter (voters are never empty); a zero-bar frame gives (n, 0).
@@ -881,13 +895,14 @@ def _weighted_vote_compute(
     vetoes = np.stack(voter_vetoes)
     any_veto = np.logical_or.reduce(vetoes, axis=0, initial=False)
     by_score = score >= spec.threshold
-    labels = np.array(
-        [f"veto:{voter.voter_id}" for voter in spec.voters] + ["score", None], dtype=object
-    )
-    count = len(spec.voters)
-    reason = np.where(any_veto, np.argmax(vetoes, axis=0), np.where(by_score, count, count + 1))
-    trace["score"] = _scaled_trace(score)
-    trace["blocked_by"] = tuple(labels[reason].tolist())
+    if evidence:
+        labels = np.array(
+            [f"veto:{voter.voter_id}" for voter in spec.voters] + ["score", None], dtype=object
+        )
+        count = len(spec.voters)
+        reason = np.where(any_veto, np.argmax(vetoes, axis=0), np.where(by_score, count, count + 1))
+        trace["score"] = _scaled_trace(score)
+        trace["blocked_by"] = tuple(labels[reason].tolist())
     return tuple((~(any_veto | by_score)).tolist()), trace
 
 
