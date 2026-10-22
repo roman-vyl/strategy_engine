@@ -14,7 +14,8 @@ from strategy_engine.strategies.ema_pullback.stack_episode import SideEpisode
 
 FORCE_FIELDS = ("force_with", "force_against")
 LEG_MEAN_FIELDS = ("volume", *FORCE_FIELDS)
-LEG_SUM_FIELDS = ("volume",)
+OWN_COLOR_VOLUME = "own_color_volume"
+LEG_SUM_FIELDS = ("volume", OWN_COLOR_VOLUME)
 
 
 def force_series(close: np.ndarray, volume: np.ndarray, field: str, side: str) -> np.ndarray:
@@ -31,6 +32,24 @@ def force_series(close: np.ndarray, volume: np.ndarray, field: str, side: str) -
         out[0] = 0.0
         out[1:] = np.diff(close) * volume[1:]
     out *= sign
+    out.flags.writeable = False
+    return out
+
+
+def own_color_volume_series(
+    open_: np.ndarray, close: np.ndarray, volume: np.ndarray, side: str, leg: str
+) -> np.ndarray:
+    """Volume of the bars whose candle has the leg's own colour, 0 elsewhere:
+    with the trade on the impulse, against it on the pullback; a doji never
+    counts. Non-finite where open, close or volume is not finite
+    (`v1-own-color-volume-ratio-v1`, D1)."""
+
+    body = (close - open_) * (1.0 if side == "long" else -1.0)
+    own = body > 0 if leg == "impulse" else body < 0
+    with np.errstate(invalid="ignore"):
+        out = np.where(own, volume, 0.0)
+    finite = np.isfinite(open_) & np.isfinite(close) & np.isfinite(volume)
+    out = np.where(finite, out, math.nan)
     out.flags.writeable = False
     return out
 

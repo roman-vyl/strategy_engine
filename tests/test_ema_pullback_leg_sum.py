@@ -1,4 +1,5 @@
-"""V1.1 leg sum operand (OpenSpec `v1-volume-sum-ratio-v1`): parsing, the legs
+"""V1.1 leg sum operand (OpenSpec `v1-volume-sum-ratio-v1`) and its V1.2 own colour field
+(`v1-own-color-volume-ratio-v1`): parsing, the legs
 `[S*, P]` and `[P+1, t]`, missing cases and no look-ahead against a loop written
 like the research reference (`altvals.py`: `v11 = seg(cV, P+1, b) / seg(cV, S, P)`)."""
 
@@ -12,7 +13,11 @@ import pytest
 from test_ema_pullback_predicates_a2 import _episode, _legs, _parse
 
 from strategy_engine.domain.errors import InvalidRequestError
-from strategy_engine.strategies.ema_pullback.leg_means import leg_mean_values, leg_sum_values
+from strategy_engine.strategies.ema_pullback.leg_means import (
+    leg_mean_values,
+    leg_sum_values,
+    own_color_volume_series,
+)
 
 
 def _leg_sum(**fields: Any) -> dict[str, Any]:
@@ -152,3 +157,66 @@ def test_zero_impulse_volume_is_a_value_and_makes_the_ratio_missing() -> None:
     left = leg_sum_values(episode, volume + 1.0, "pullback")
     valid = np.isfinite(left) & np.isfinite(impulse) & (impulse > 0.0)
     assert not valid.any()
+
+
+# -- V1.2 own colour volume (OpenSpec `v1-own-color-volume-ratio-v1`) --------------------------
+
+
+def test_own_color_volume_is_a_leg_sum_field_only() -> None:
+    assert _parse(_leg_sum(field="own_color_volume")).long.operand.leg_sum.field == (
+        "own_color_volume"
+    )
+    with pytest.raises(InvalidRequestError):
+        _parse({"leg_mean": {"episode": "trend", "leg": "pullback", "field": "own_color_volume"}})
+
+
+def own_color_reference(
+    open_: np.ndarray, close: np.ndarray, volume: np.ndarray, side: str, leg: str
+) -> np.ndarray:
+    """Per bar, as research: long impulse = green volume, long pullback = red volume."""
+
+    out = np.empty(len(volume))
+    for u in range(len(volume)):
+        if not (math.isfinite(open_[u]) and math.isfinite(close[u]) and math.isfinite(volume[u])):
+            out[u] = math.nan
+            continue
+        green, red = close[u] > open_[u], close[u] < open_[u]
+        with_trade = green if side == "long" else red
+        against = red if side == "long" else green
+        out[u] = volume[u] if (with_trade if leg == "impulse" else against) else 0.0
+    return out
+
+
+@pytest.mark.parametrize("side", ["long", "short"])
+@pytest.mark.parametrize("leg", ["impulse", "pullback"])
+def test_own_color_series_matches_the_loop(side: str, leg: str) -> None:
+    rng = np.random.default_rng(5)
+    open_ = rng.uniform(90.0, 110.0, 400)
+    close = open_ + rng.choice([-1.0, 0.0, 1.0], 400)
+    volume = rng.uniform(1.0, 50.0, 400)
+    close[7] = math.nan
+    got = own_color_volume_series(open_, close, volume, side, leg)
+    np.testing.assert_array_equal(got, own_color_reference(open_, close, volume, side, leg))
+    assert math.isnan(got[7]) and (got[close == open_] == 0).all()
+
+
+def test_long_pullback_counts_red_volume_only() -> None:
+    open_ = np.array([10.0, 10.0, 10.0])
+    close = np.array([9.0, 11.0, 10.0])
+    volume = np.array([30.0, 50.0, 20.0])
+    assert own_color_volume_series(open_, close, volume, "long", "pullback").sum() == 30.0
+    assert own_color_volume_series(open_, close, volume, "short", "impulse").sum() == 30.0
+
+
+@pytest.mark.parametrize("seed", range(4))
+@pytest.mark.parametrize("leg", ["impulse", "pullback"])
+def test_own_color_leg_sum_matches_the_loop(seed: int, leg: str) -> None:
+    episode, size = _episode(seed)
+    rng = np.random.default_rng(seed + 70)
+    open_ = rng.uniform(90.0, 110.0, size)
+    close = open_ + rng.choice([-1.0, 0.0, 1.0], size)
+    volume = rng.uniform(1.0, 50.0, size)
+    series = own_color_volume_series(open_, close, volume, "long", leg)
+    got = leg_sum_values(episode, series, leg)
+    expected = _reference(episode, own_color_reference(open_, close, volume, "long", leg), leg)
+    np.testing.assert_allclose(got, expected, rtol=1e-12, atol=0, equal_nan=True)

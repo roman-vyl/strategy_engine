@@ -38,9 +38,11 @@ from strategy_engine.strategies.ema_pullback.leg_means import (
     FORCE_FIELDS,
     LEG_MEAN_FIELDS,
     LEG_SUM_FIELDS,
+    OWN_COLOR_VOLUME,
     force_series,
     leg_mean_values,
     leg_sum_values,
+    own_color_volume_series,
 )
 from strategy_engine.strategies.ema_pullback.stack_episode import (
     EpisodeRef,
@@ -1059,7 +1061,13 @@ def _leg_sum_operand(
         raise InvalidRequestError(
             "leg_sum operand has no evaluated episode", episode_ref=leg_sum.episode
         )
-    series = frame_market_arrays(frame).array(leg_sum.field)
+    arrays = frame_market_arrays(frame)
+    if leg_sum.field == OWN_COLOR_VOLUME:
+        series = own_color_volume_series(
+            arrays.array("open"), arrays.array("close"), arrays.array("volume"), side, leg_sum.leg
+        )
+    else:
+        series = arrays.array(leg_sum.field)
     return leg_sum_values(episodes.side(leg_sum.episode, side), series, leg_sum.leg)
 
 
