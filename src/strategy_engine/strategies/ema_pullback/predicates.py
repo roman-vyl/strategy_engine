@@ -37,8 +37,10 @@ from strategy_engine.strategies.ema_pullback.candles import (
 from strategy_engine.strategies.ema_pullback.leg_means import (
     FORCE_FIELDS,
     LEG_MEAN_FIELDS,
+    LEG_SUM_FIELDS,
     force_series,
     leg_mean_values,
+    leg_sum_values,
 )
 from strategy_engine.strategies.ema_pullback.stack_episode import (
     EpisodeRef,
@@ -139,6 +141,16 @@ class LegMean:
 
 
 @dataclass(frozen=True, slots=True)
+class LegSum:
+    """The sum of a base-bar market field over the impulse `[S*, P]` or the
+    pullback `[P+1, t]` of the current touch (`v1-volume-sum-ratio-v1`, D1)."""
+
+    episode: str
+    leg: str
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
 class AnchorFollow:
     """The share of the gap between the peak price and the anchor EMA at the
     peak that the EMA closed by the evaluated bar (`c5-anchor-follow-v1`, D1)."""
@@ -167,6 +179,7 @@ class Operand:
     ratio: Ratio | None = None
     candle: Candle | None = None
     leg_mean: LegMean | None = None
+    leg_sum: LegSum | None = None
     anchor_follow: AnchorFollow | None = None
 
 
@@ -278,6 +291,7 @@ def operand_needs_episode(operand: Operand) -> bool:
         or operand.segment is not None
         or operand.candle is not None
         or operand.leg_mean is not None
+        or operand.leg_sum is not None
         or operand.anchor_follow is not None
     ):
         return True
@@ -337,7 +351,9 @@ def _feature(raw: object, path: str) -> PlannedFeature:
     return plan_feature_request(kind, timeframe, source, params)
 
 
-_OPERAND_KEYS = "feature, episode, segment, candle, leg_mean, anchor_follow, ratio, price or const"
+_OPERAND_KEYS = (
+    "feature, episode, segment, candle, leg_mean, leg_sum, anchor_follow, ratio, price or const"
+)
 _SEGMENT_FIELDS = {
     "episode",
     "of",
@@ -574,6 +590,25 @@ def _leg_mean(raw: object, path: str, episode_refs: frozenset[str] | None) -> Le
     return LegMean(ref, str(leg), str(field))
 
 
+def _leg_sum(raw: object, path: str, episode_refs: frozenset[str] | None) -> LegSum:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "leg", "field"}, path)
+    for key in ("episode", "leg", "field"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    leg, field = payload["leg"], payload["field"]
+    if leg not in ("impulse", "pullback"):
+        raise InvalidRequestError(f"{path}.leg must be impulse or pullback", leg=leg)
+    if field not in LEG_SUM_FIELDS:
+        raise InvalidRequestError(f"{path}.field must be one of {LEG_SUM_FIELDS}", field=field)
+    return LegSum(ref, str(leg), str(field))
+
+
 def _anchor_follow(raw: object, path: str, episode_refs: frozenset[str] | None) -> AnchorFollow:
     payload = _mapping(raw, path)
     _only_fields(payload, {"episode"}, path)
@@ -617,6 +652,8 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         return Operand(candle=_candle(value, f"{path}.candle", episode_refs))
     if key == "leg_mean":
         return Operand(leg_mean=_leg_mean(value, f"{path}.leg_mean", episode_refs))
+    if key == "leg_sum":
+        return Operand(leg_sum=_leg_sum(value, f"{path}.leg_sum", episode_refs))
     if key == "anchor_follow":
         return Operand(anchor_follow=_anchor_follow(value, f"{path}.anchor_follow", episode_refs))
     if key == "ratio":
@@ -896,6 +933,12 @@ def _values(
             node,
             functools.partial(_leg_mean_operand, operand.leg_mean, frame, side, bundle),
         )
+    if operand.leg_sum is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(_leg_sum_operand, operand.leg_sum, frame, side, bundle),
+        )
     if operand.anchor_follow is not None:
         return compute_through(
             context,
@@ -1003,6 +1046,21 @@ def _leg_mean_operand(
     else:
         series = arrays.array(leg_mean.field)
     return leg_mean_values(episodes.side(leg_mean.episode, side), series, leg_mean.leg)
+
+
+def _leg_sum_operand(
+    leg_sum: LegSum,
+    frame: FeatureFrameLike,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "leg_sum operand has no evaluated episode", episode_ref=leg_sum.episode
+        )
+    series = frame_market_arrays(frame).array(leg_sum.field)
+    return leg_sum_values(episodes.side(leg_sum.episode, side), series, leg_sum.leg)
 
 
 def _anchor_follow_operand(
@@ -1326,6 +1384,7 @@ def _has_value(operand: Operand) -> bool:
         or operand.ratio is not None
         or operand.candle is not None
         or operand.leg_mean is not None
+        or operand.leg_sum is not None
         or operand.anchor_follow is not None
     )
 
@@ -1544,6 +1603,8 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("candle",)
     if operand.leg_mean is not None:
         return ("leg_mean",)
+    if operand.leg_sum is not None:
+        return ("leg_sum",)
     if operand.anchor_follow is not None:
         return ("anchor_follow",)
     if operand.ratio is not None:
@@ -1766,6 +1827,22 @@ def _resolve_operand(
             "predicate.leg_mean",
             version=PREDICATE_NODE_VERSION,
             params={"leg": leg_mean.leg, "field": leg_mean.field},
+            upstream={"episode": episode},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node]
+    if operand.leg_sum is not None:
+        leg_sum = operand.leg_sum
+        episode = (contexts or {}).get(episode_identity_key(leg_sum.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "leg_sum episode is not declared", episode_ref=leg_sum.episode
+            )
+        node = node_spec(
+            "predicate.leg_sum",
+            version=PREDICATE_NODE_VERSION,
+            params={"leg": leg_sum.leg, "field": leg_sum.field},
             upstream={"episode": episode},
             side=side,
         )

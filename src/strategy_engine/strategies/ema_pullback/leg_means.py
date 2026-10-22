@@ -1,7 +1,7 @@
-"""Mean of a base-bar market field over a leg of the current touch of an EMA
-stack episode (OpenSpec `v1-volume-ratio-v1`, `v2-force-ratio-v1`): the impulse
-`[S*, P]` or the pullback `[P + 1, t]`, both ends inclusive. Prefix sums,
-O(bars)."""
+"""Mean or sum of a base-bar market field over a leg of the current touch of
+an EMA stack episode (OpenSpec `v1-volume-ratio-v1`, `v2-force-ratio-v1`,
+`v1-volume-sum-ratio-v1`): the impulse `[S*, P]` or the pullback `[P + 1, t]`,
+both ends inclusive. Prefix sums, O(bars)."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from strategy_engine.strategies.ema_pullback.stack_episode import SideEpisode
 
 FORCE_FIELDS = ("force_with", "force_against")
 LEG_MEAN_FIELDS = ("volume", *FORCE_FIELDS)
+LEG_SUM_FIELDS = ("volume",)
 
 
 def force_series(close: np.ndarray, volume: np.ndarray, field: str, side: str) -> np.ndarray:
@@ -49,9 +50,12 @@ def leg_bar_counts(episode: SideEpisode, size: int, leg: str) -> np.ndarray:
     return out
 
 
-def leg_mean_values(episode: SideEpisode, series: np.ndarray, leg: str) -> np.ndarray:
-    """The leg mean on every bar as a read-only float64 array; missing where
-    the touch has no valid wave, the leg is empty or a bar of it is not finite."""
+def _leg_totals(
+    episode: SideEpisode, series: np.ndarray, leg: str
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Per bar: whether the leg is valid, the sum of `series` over it and its
+    bar count. A leg is invalid where the touch has no valid wave, the leg is
+    empty or a bar of it is not finite."""
 
     size = len(series)
     valid, origin, peak = touch_points(episode, size)
@@ -69,7 +73,24 @@ def leg_mean_values(episode: SideEpisode, series: np.ndarray, leg: str) -> np.nd
     total = np.zeros(size + 1)
     np.cumsum(np.where(finite, series, 0.0), out=total[1:])
     valid = valid & ((bad[end + 1] - bad[begin]) == 0)
-    mean = (total[end + 1] - total[begin]) / (end - begin + 1)
-    out = np.where(valid, mean, math.nan)
+    return valid, total[end + 1] - total[begin], end - begin + 1
+
+
+def leg_mean_values(episode: SideEpisode, series: np.ndarray, leg: str) -> np.ndarray:
+    """The leg mean on every bar as a read-only float64 array; missing where
+    the touch has no valid wave, the leg is empty or a bar of it is not finite."""
+
+    valid, total, count = _leg_totals(episode, series, leg)
+    out = np.where(valid, total / count, math.nan)
+    out.flags.writeable = False
+    return out
+
+
+def leg_sum_values(episode: SideEpisode, series: np.ndarray, leg: str) -> np.ndarray:
+    """The leg sum on every bar as a read-only float64 array, with the legs and
+    missing rules of the leg mean (`v1-volume-sum-ratio-v1`, D1)."""
+
+    valid, total, _ = _leg_totals(episode, series, leg)
+    out = np.where(valid, total, math.nan)
     out.flags.writeable = False
     return out
