@@ -128,3 +128,56 @@ def test_no_look_ahead() -> None:
             changed[cut + 1 :] = 1e9
             got = leg_speed_values(episode, changed, leg)
             np.testing.assert_array_equal(got[: cut + 1], full[: cut + 1])
+
+
+# -- leg bars (OpenSpec `a4-leg-bars-ratio-v1`) --------------------------------------
+
+
+def bars_reference(episode: Any, size: int, leg: str) -> np.ndarray:
+    out = np.full(size, math.nan)
+    for t in range(size):
+        legs = _legs(episode, t)
+        if legs is None:
+            continue
+        origin, peak, _ = legs
+        if origin <= peak <= t:
+            out[t] = (peak - origin + 1) if leg == "impulse" else (t - peak + 1)
+    return out
+
+
+def research_a4(episode: Any, close: np.ndarray) -> np.ndarray:
+    """`altvals.py`: `nR / nI` when `Hs > 0`."""
+
+    size = len(close)
+    pullback, impulse = (
+        bars_reference(episode, size, "pullback"),
+        bars_reference(episode, size, "impulse"),
+    )
+    height = reference(episode, close, "impulse")
+    out = np.full(size, math.nan)
+    ok = np.isfinite(pullback) & np.isfinite(impulse) & (height > 0)
+    out[ok] = pullback[ok] / impulse[ok]
+    return out
+
+
+def test_leg_bars_parses_and_rejects() -> None:
+    operand = {"leg_bars": {"episode": "trend", "leg": "impulse"}}
+    assert _parse(operand).long.operand.leg_bars.leg == "impulse"
+    for bad in ({"leg": "current"}, {"extra": 1}, {"episode": "other"}):
+        with pytest.raises(InvalidRequestError):
+            _parse({"leg_bars": {"episode": "trend", "leg": "pullback", **bad}})
+    with pytest.raises(InvalidRequestError):
+        _parse({"leg_bars": {"episode": "trend"}})
+
+
+@pytest.mark.parametrize("seed", range(6))
+@pytest.mark.parametrize("leg", ["impulse", "pullback"])
+@pytest.mark.parametrize("side", ["long", "short"])
+def test_leg_bars_matches_the_loop(seed: int, leg: str, side: str) -> None:
+    from strategy_engine.strategies.ema_pullback.leg_speed import leg_bars_values
+
+    episode, size, _ = _episode_bars(seed)
+    episode = dataclasses.replace(episode, side=side)
+    got = leg_bars_values(episode, leg)
+    np.testing.assert_array_equal(got, bars_reference(episode, size, leg))
+    assert np.isfinite(got).sum() > 20 and np.isnan(got).any() and not got.flags.writeable

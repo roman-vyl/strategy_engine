@@ -1,7 +1,8 @@
 """Price distance per bar of a leg of the current touch (OpenSpec
 `a3-leg-speed-ratio-v1`): the impulse `|peak_price - origin_price| / (P - S* + 1)`
 and the pullback `|peak_price - close[t]| / (t - P + 1)`, the bar `P` counted in
-both legs as in research. A3 is the ratio of the two."""
+both legs as in research. A3 is the ratio of the two; A4 the ratio of the
+leg bar counts (`a4-leg-bars-ratio-v1`)."""
 
 from __future__ import annotations
 
@@ -36,5 +37,19 @@ def leg_speed_values(episode: SideEpisode, close: np.ndarray, leg: str) -> np.nd
     with np.errstate(invalid="ignore"):
         ok = valid & np.isfinite(distance)
     out[ok] = distance[ok] / bars[ok]
+    out.flags.writeable = False
+    return out
+
+
+def leg_bars_values(episode: SideEpisode, leg: str) -> np.ndarray:
+    """The number of base bars of a leg of the current touch, both ends
+    inclusive (OpenSpec `a4-leg-bars-ratio-v1`): the impulse `P - S* + 1`, the
+    pullback `t - P + 1`. Missing where the touch has no valid wave."""
+
+    size = len(episode.state["touch_number"])
+    out = np.full(size, math.nan)
+    valid, origin, peak = touch_points(episode, size)
+    bars = (peak - origin + 1) if leg == "impulse" else (np.arange(size) - peak + 1)
+    out[valid] = bars[valid]
     out.flags.writeable = False
     return out
