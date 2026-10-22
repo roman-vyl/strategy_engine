@@ -10,7 +10,8 @@
 
 ## 3. Parity with research on EMA200 (cloud, on the owner's separate command)
 
-- [ ] 3.1 A5 ratio on all research entries of BTC, ETH, SOL against the review thread simulation (1e-9 relative, NaN equal), entries at the chosen thresholds equal, run time reported. Report in `/mnt/project-files/engine-tasks/ema200/parity_a5/`.
+- [x] 3.1 A5 ratio on all research entries of BTC, ETH, SOL against the review thread simulation (1e-9 relative, NaN equal), entries at the chosen thresholds equal, run time reported. Report in `/mnt/project-files/engine-tasks/ema200/parity_a5/`.
+  Result: values equal on all entries with a research value (BTC 2811, ETH 2520, SOL 2218; max relative 0), entries at ≥ 2.01 / 2.28 / 2.82 / 2.96 / 3.3 equal on all coins; engine run 40-45 s per coin.
 
 ## 4. Gate
 
