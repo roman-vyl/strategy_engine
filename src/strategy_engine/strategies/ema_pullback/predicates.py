@@ -179,9 +179,11 @@ class AnchorFollow:
 class PullbackDepth:
     """The share of the impulse height `|P - S*|` that the pullback `[P, t]`
     of the current touch gave back, by its extreme price
-    (`c3-pullback-depth-share-v1`, D1)."""
+    (`c3-pullback-depth-share-v1`, D1); `touch` previous gives the same share
+    of the previous pullback `[P0, S*]` (`c3-previous-depth-ratio-v1`, D1)."""
 
     episode: str
+    touch: str = "current"
 
 
 @dataclass(frozen=True, slots=True)
@@ -677,7 +679,7 @@ def _anchor_follow(raw: object, path: str, episode_refs: frozenset[str] | None) 
 
 def _pullback_depth(raw: object, path: str, episode_refs: frozenset[str] | None) -> PullbackDepth:
     payload = _mapping(raw, path)
-    _only_fields(payload, {"episode"}, path)
+    _only_fields(payload, {"episode", "touch"}, path)
     if "episode" not in payload:
         raise InvalidRequestError(f"{path}.episode is required")
     ref = payload["episode"]
@@ -685,7 +687,10 @@ def _pullback_depth(raw: object, path: str, episode_refs: frozenset[str] | None)
         raise InvalidRequestError(f"{path}.episode must be a non-empty string")
     if episode_refs is not None and ref not in episode_refs:
         raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
-    return PullbackDepth(ref)
+    touch = payload.get("touch", "current")
+    if touch not in ("current", "previous"):
+        raise InvalidRequestError(f"{path}.touch must be current or previous", touch=touch)
+    return PullbackDepth(ref, str(touch))
 
 
 def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio:
@@ -1194,7 +1199,10 @@ def _pullback_depth_operand(
         )
     market = frame_market_arrays(frame)
     return pullback_depth_values(
-        episodes.side(pullback_depth.episode, side), market.array("low"), market.array("high")
+        episodes.side(pullback_depth.episode, side),
+        market.array("low"),
+        market.array("high"),
+        pullback_depth.touch,
     )
 
 
@@ -2024,7 +2032,7 @@ def _resolve_operand(
         node = node_spec(
             "predicate.pullback_depth",
             version=PREDICATE_NODE_VERSION,
-            params={},
+            params={} if pullback_depth.touch == "current" else {"touch": pullback_depth.touch},
             upstream={"episode": episode},
             side=side,
         )

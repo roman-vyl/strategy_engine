@@ -118,3 +118,71 @@ def test_no_look_ahead() -> None:
 def test_spec_examples() -> None:
     assert (110.0 - 103.0) / abs(110.0 - 100.0) == pytest.approx(0.7)
     assert -1.0 * (100.0 - 104.0) / abs(100.0 - 110.0) == pytest.approx(0.4)
+
+
+# -- touch previous (OpenSpec `c3-previous-depth-ratio-v1`) ------------------------
+
+
+def previous_reference(episode: Any, low: np.ndarray, high: np.ndarray) -> np.ndarray:
+    """`altvals.py` C3.2: `ext0 = L[P0:S+1].min()` (long) or `H[P0:S+1].max()`,
+    `v0 = g * (Pp0 - ext0) / |Pp0 - Sp0|` when `S > P0` and the height is above 0."""
+
+    g = 1.0 if episode.side == "long" else -1.0
+    out = np.full(len(low), math.nan)
+    for t in range(len(low)):
+        legs = _legs(episode, t)
+        if legs is None:
+            continue
+        origin, peak, _ = legs
+        number = int(episode.state["touch_number"][t])
+        if not (origin <= peak <= t) or number < 2:
+            continue
+        row = int(episode.first_row[int(episode.state["episode_id"][t])]) + number - 1
+        p0 = int(episode.touches["peak_bar"][row - 1])
+        pp0 = float(episode.touches["peak_price"][row - 1])
+        sp0 = float(episode.touches["origin_price"][row - 1])
+        if origin <= p0 or abs(pp0 - sp0) == 0:
+            continue
+        ext0 = low[p0 : origin + 1].min() if g > 0 else high[p0 : origin + 1].max()
+        if math.isfinite(ext0):
+            out[t] = g * (pp0 - ext0) / abs(pp0 - sp0)
+    return out
+
+
+def test_touch_parses_and_defaults_to_current() -> None:
+    assert _parse(_operand()).long.operand.pullback_depth.touch == "current"
+    assert _parse(_operand(touch="previous")).long.operand.pullback_depth.touch == "previous"
+    with pytest.raises(InvalidRequestError):
+        _parse(_operand(touch="next"))
+
+
+@pytest.mark.parametrize("seed", range(6))
+@pytest.mark.parametrize("side", ["long", "short"])
+def test_previous_depth_matches_the_loop(seed: int, side: str) -> None:
+    episode, _, (high, low, _) = _episode_bars(seed)
+    episode = dataclasses.replace(episode, side=side)
+    got = pullback_depth_values(episode, low, high, "previous")
+    expected = previous_reference(episode, low, high)
+    np.testing.assert_allclose(got, expected, rtol=1e-12, atol=0, equal_nan=True)
+    assert np.isfinite(got).sum() > 20 and not got.flags.writeable
+    first = np.asarray(episode.state["touch_number"]) == 1
+    assert first.any() and np.isnan(got[first]).all()
+
+
+def test_previous_depth_zero_height_is_missing() -> None:
+    episode, _, (high, low, _) = _episode_bars(5)
+    touches = dict(episode.touches)
+    touches["origin_price"] = np.array(touches["peak_price"], dtype=float)
+    flat = dataclasses.replace(episode, touches=touches)
+    assert np.isnan(pullback_depth_values(flat, low, high, "previous")).all()
+
+
+def test_previous_depth_no_look_ahead() -> None:
+    episode, size, (high, low, _) = _episode_bars(2)
+    full = pullback_depth_values(episode, low, high, "previous")
+    for cut in (size // 3, size // 2, size - 5):
+        changed_low, changed_high = low.copy(), high.copy()
+        changed_low[cut + 1 :] = 0.0
+        changed_high[cut + 1 :] = 1e9
+        got = pullback_depth_values(episode, changed_low, changed_high, "previous")
+        np.testing.assert_array_equal(got[: cut + 1], full[: cut + 1])
