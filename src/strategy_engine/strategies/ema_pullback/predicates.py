@@ -44,6 +44,7 @@ from strategy_engine.strategies.ema_pullback.impulse_atr import (
     IMPULSE_ATR_KIND,
     impulse_atr_values,
 )
+from strategy_engine.strategies.ema_pullback.leg_efficiency import leg_efficiency_values
 from strategy_engine.strategies.ema_pullback.leg_means import (
     FORCE_FIELDS,
     LEG_MEAN_FIELDS,
@@ -216,6 +217,16 @@ class FormingCandle:
 
 
 @dataclass(frozen=True, slots=True)
+class LegEfficiency:
+    """The Kaufman efficiency ratio of the closes of the impulse `[S*, P]`
+    or the pullback `[P, t]` of the current touch
+    (`a5-leg-efficiency-ratio-v1`, D1)."""
+
+    episode: str
+    leg: str
+
+
+@dataclass(frozen=True, slots=True)
 class LegBars:
     """The number of base bars of the impulse `[S*, P]` or the pullback
     `[P, t]` of the current touch (`a4-leg-bars-ratio-v1`, D1)."""
@@ -264,6 +275,7 @@ class Operand:
     impulse_atr: ImpulseAtr | None = None
     leg_bars: LegBars | None = None
     forming_candle: FormingCandle | None = None
+    leg_efficiency: LegEfficiency | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -386,6 +398,7 @@ def operand_needs_episode(operand: Operand) -> bool:
         or operand.impulse_atr is not None
         or operand.leg_bars is not None
         or operand.forming_candle is not None
+        or operand.leg_efficiency is not None
     ):
         return True
     return operand.ratio is not None and (
@@ -446,7 +459,8 @@ def _feature(raw: object, path: str) -> PlannedFeature:
 
 _OPERAND_KEYS = (
     "feature, episode, segment, candle, leg_mean, leg_sum, leg_top_mean, anchor_follow, "
-    "pullback_depth, leg_speed, impulse_atr, leg_bars, forming_candle, ratio, price or const"
+    "pullback_depth, leg_speed, impulse_atr, leg_bars, forming_candle, leg_efficiency, "
+    "ratio, price or const"
 )
 _SEGMENT_FIELDS = {
     "episode",
@@ -771,6 +785,11 @@ def _leg_speed(raw: object, path: str, episode_refs: frozenset[str] | None) -> L
     return LegSpeed(ref, str(leg))
 
 
+def _leg_efficiency(raw: object, path: str, episode_refs: frozenset[str] | None) -> LegEfficiency:
+    speed = _leg_speed(raw, path, episode_refs)
+    return LegEfficiency(speed.episode, speed.leg)
+
+
 def _leg_bars(raw: object, path: str, episode_refs: frozenset[str] | None) -> LegBars:
     speed = _leg_speed(raw, path, episode_refs)
     return LegBars(speed.episode, speed.leg)
@@ -866,6 +885,10 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         )
     if key == "leg_speed":
         return Operand(leg_speed=_leg_speed(value, f"{path}.leg_speed", episode_refs))
+    if key == "leg_efficiency":
+        return Operand(
+            leg_efficiency=_leg_efficiency(value, f"{path}.leg_efficiency", episode_refs)
+        )
     if key == "leg_bars":
         return Operand(leg_bars=_leg_bars(value, f"{path}.leg_bars", episode_refs))
     if key == "forming_candle":
@@ -1197,6 +1220,12 @@ def _values(
                 _impulse_atr_operand, operand.impulse_atr, frame, context, identity, side, bundle
             ),
         )
+    if operand.leg_efficiency is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(_leg_efficiency_operand, operand.leg_efficiency, frame, side, bundle),
+        )
     if operand.leg_speed is not None:
         return compute_through(
             context,
@@ -1378,6 +1407,23 @@ def _pullback_depth_operand(
         market.array("low"),
         market.array("high"),
         pullback_depth.touch,
+    )
+
+
+def _leg_efficiency_operand(
+    leg_efficiency: LegEfficiency,
+    frame: FeatureFrameLike,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "leg_efficiency operand has no evaluated episode", episode_ref=leg_efficiency.episode
+        )
+    close = frame_market_arrays(frame).array("close")
+    return leg_efficiency_values(
+        episodes.side(leg_efficiency.episode, side), close, leg_efficiency.leg
     )
 
 
@@ -1774,6 +1820,7 @@ def _has_value(operand: Operand) -> bool:
         or operand.impulse_atr is not None
         or operand.leg_bars is not None
         or operand.forming_candle is not None
+        or operand.leg_efficiency is not None
     )
 
 
@@ -2001,6 +2048,8 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("pullback_depth",)
     if operand.leg_speed is not None:
         return ("leg_speed",)
+    if operand.leg_efficiency is not None:
+        return ("leg_efficiency",)
     if operand.impulse_atr is not None:
         return ("impulse_atr",)
     if operand.leg_bars is not None:
@@ -2334,6 +2383,22 @@ def _resolve_operand(
         )
         operand_ids[path] = node
         return node, [node, column]
+    if operand.leg_efficiency is not None:
+        leg_efficiency = operand.leg_efficiency
+        episode = (contexts or {}).get(episode_identity_key(leg_efficiency.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "leg_efficiency episode is not declared", episode_ref=leg_efficiency.episode
+            )
+        node = node_spec(
+            "predicate.leg_efficiency",
+            version=PREDICATE_NODE_VERSION,
+            params={"leg": leg_efficiency.leg},
+            upstream={"episode": episode},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node]
     if operand.leg_speed is not None:
         leg_speed = operand.leg_speed
         episode = (contexts or {}).get(episode_identity_key(leg_speed.episode, side))
