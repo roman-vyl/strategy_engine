@@ -598,3 +598,13 @@ A pullback depth operand with `touch: previous` SHALL be a node of the pullback 
 
 - **WHEN** a spec writes `{"pullback_depth": {"episode": "trend", "touch": "current"}}`
 - **THEN** it SHALL resolve to the same node as `{"pullback_depth": {"episode": "trend"}}`.
+
+### Requirement: Leg speed identity and cost
+
+A leg speed operand SHALL have its own node family whose identity carries the episode identity and the leg. A spec without it SHALL
+have the same node set and results as before this change.
+
+#### Scenario: Level candidates share the operands
+
+- **WHEN** a batch contains candidates that differ only in a level over a ratio of two leg speed operands
+- **THEN** both operands and the ratio SHALL each be computed once per batch per side.
