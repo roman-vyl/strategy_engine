@@ -37,7 +37,7 @@ One filter = one commit: groups 1 to 4 land as one commit per filter, in the ord
 
 ## 6. Parity with research on EMA200 (cloud, after the owner's word)
 
-- [ ] 6.1 Reference tables built in the cloud from `/mnt/project-files/ema200_calib/` (candles npz, entries, `alt_*.npz` / research values) for BTC, ETH, SOL: every entry with a wave, values of D1, V1.1, V1.2, V1.4, C3.1, C3.2, A3, B3, A5, A4 and of the existing A1s, A2.2, B1 15m, V1.3, V2.2, C5. Target 1e-9 relative, NaN equal; differences explained (filled grid, first ATR day).
+- [ ] 6.1 Reference tables built in the cloud from `/mnt/project-files/ema200_calib/` (candles npz, entries, `alt_*.npz` / research values) for BTC, ETH, SOL: every entry with a wave, values of D1, V1.1, V1.2, V1.4, C3.1, C3.2, A3, B3, A5, A4. The existing A1s, A2.2, B1 15m, V1.3, V2.2, C5 already match on EMA200 (main 95162fd, 1e-9, `/mnt/project-files/engine-tasks/ema200/parity/README.md`); reuse its `run_engine.py` / `compare.py` and `ema_stack_episode.window_bars` 24 for EMA200. Target 1e-9 relative, NaN equal; differences explained (filled grid, first ATR day).
 - [ ] 6.2 Vote B block masks equal to research on all entries of the working zones (BTC 447, ETH 372, SOL 218 unique entries).
 - [ ] 6.3 Report the parity table; stop for the owner's review.
 
