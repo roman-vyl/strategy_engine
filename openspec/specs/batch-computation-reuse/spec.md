@@ -628,3 +628,23 @@ have the same node set and results as before this change.
 
 - **WHEN** a batch contains candidates that differ only in a level over a ratio of two leg bars operands
 - **THEN** both operands and the ratio SHALL each be computed once per batch per side.
+
+### Requirement: Forming candle identity and cost
+
+A forming candle operand SHALL have its own node family whose identity carries the episode identity, the timeframe and the ATR
+column. A spec without it SHALL have the same node set and results as before this change.
+
+#### Scenario: Level candidates share the operand
+
+- **WHEN** a batch contains candidates that differ only in a level over the same forming candle operand
+- **THEN** the operand SHALL be computed once per batch per side.
+
+### Requirement: Leg efficiency identity and cost
+
+A leg efficiency operand SHALL have its own node family whose identity carries the episode identity and the leg. A spec without it
+SHALL have the same node set and results as before this change.
+
+#### Scenario: Level candidates share the operands
+
+- **WHEN** a batch contains candidates that differ only in a level over a ratio of two leg efficiency operands
+- **THEN** both operands and the ratio SHALL each be computed once per batch per side.
