@@ -38,10 +38,12 @@ from strategy_engine.strategies.ema_pullback.leg_means import (
     FORCE_FIELDS,
     LEG_MEAN_FIELDS,
     LEG_SUM_FIELDS,
+    LEG_TOP_MEAN_FIELDS,
     OWN_COLOR_VOLUME,
     force_series,
     leg_mean_values,
     leg_sum_values,
+    leg_top_mean_values,
     own_color_volume_series,
 )
 from strategy_engine.strategies.ema_pullback.stack_episode import (
@@ -153,6 +155,18 @@ class LegSum:
 
 
 @dataclass(frozen=True, slots=True)
+class LegTopMean:
+    """The mean of the largest `share` of a base-bar field over the impulse
+    `[S*, P]` or the pullback `[P+1, t]` of the current touch
+    (`v1-top-volume-ratio-v1`, D1)."""
+
+    episode: str
+    leg: str
+    field: str
+    share: float
+
+
+@dataclass(frozen=True, slots=True)
 class AnchorFollow:
     """The share of the gap between the peak price and the anchor EMA at the
     peak that the EMA closed by the evaluated bar (`c5-anchor-follow-v1`, D1)."""
@@ -182,6 +196,7 @@ class Operand:
     candle: Candle | None = None
     leg_mean: LegMean | None = None
     leg_sum: LegSum | None = None
+    leg_top_mean: LegTopMean | None = None
     anchor_follow: AnchorFollow | None = None
 
 
@@ -294,6 +309,7 @@ def operand_needs_episode(operand: Operand) -> bool:
         or operand.candle is not None
         or operand.leg_mean is not None
         or operand.leg_sum is not None
+        or operand.leg_top_mean is not None
         or operand.anchor_follow is not None
     ):
         return True
@@ -354,7 +370,8 @@ def _feature(raw: object, path: str) -> PlannedFeature:
 
 
 _OPERAND_KEYS = (
-    "feature, episode, segment, candle, leg_mean, leg_sum, anchor_follow, ratio, price or const"
+    "feature, episode, segment, candle, leg_mean, leg_sum, leg_top_mean, anchor_follow, ratio, "
+    "price or const"
 )
 _SEGMENT_FIELDS = {
     "episode",
@@ -611,6 +628,28 @@ def _leg_sum(raw: object, path: str, episode_refs: frozenset[str] | None) -> Leg
     return LegSum(ref, str(leg), str(field))
 
 
+def _leg_top_mean(raw: object, path: str, episode_refs: frozenset[str] | None) -> LegTopMean:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "leg", "field", "share"}, path)
+    for key in ("episode", "leg", "field", "share"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    leg, field = payload["leg"], payload["field"]
+    if leg not in ("impulse", "pullback"):
+        raise InvalidRequestError(f"{path}.leg must be impulse or pullback", leg=leg)
+    if field not in LEG_TOP_MEAN_FIELDS:
+        raise InvalidRequestError(f"{path}.field must be one of {LEG_TOP_MEAN_FIELDS}", field=field)
+    share = _number(payload["share"], f"{path}.share")
+    if not 0.0 < share <= 1.0:
+        raise InvalidRequestError(f"{path}.share must be in (0, 1]", share=share)
+    return LegTopMean(ref, str(leg), str(field), share)
+
+
 def _anchor_follow(raw: object, path: str, episode_refs: frozenset[str] | None) -> AnchorFollow:
     payload = _mapping(raw, path)
     _only_fields(payload, {"episode"}, path)
@@ -656,6 +695,8 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         return Operand(leg_mean=_leg_mean(value, f"{path}.leg_mean", episode_refs))
     if key == "leg_sum":
         return Operand(leg_sum=_leg_sum(value, f"{path}.leg_sum", episode_refs))
+    if key == "leg_top_mean":
+        return Operand(leg_top_mean=_leg_top_mean(value, f"{path}.leg_top_mean", episode_refs))
     if key == "anchor_follow":
         return Operand(anchor_follow=_anchor_follow(value, f"{path}.anchor_follow", episode_refs))
     if key == "ratio":
@@ -941,6 +982,12 @@ def _values(
             node,
             functools.partial(_leg_sum_operand, operand.leg_sum, frame, side, bundle),
         )
+    if operand.leg_top_mean is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(_leg_top_mean_operand, operand.leg_top_mean, frame, side, bundle),
+        )
     if operand.anchor_follow is not None:
         return compute_through(
             context,
@@ -1069,6 +1116,23 @@ def _leg_sum_operand(
     else:
         series = arrays.array(leg_sum.field)
     return leg_sum_values(episodes.side(leg_sum.episode, side), series, leg_sum.leg)
+
+
+def _leg_top_mean_operand(
+    leg_top_mean: LegTopMean,
+    frame: FeatureFrameLike,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "leg_top_mean operand has no evaluated episode", episode_ref=leg_top_mean.episode
+        )
+    series = frame_market_arrays(frame).array(leg_top_mean.field)
+    return leg_top_mean_values(
+        episodes.side(leg_top_mean.episode, side), series, leg_top_mean.leg, leg_top_mean.share
+    )
 
 
 def _anchor_follow_operand(
@@ -1393,6 +1457,7 @@ def _has_value(operand: Operand) -> bool:
         or operand.candle is not None
         or operand.leg_mean is not None
         or operand.leg_sum is not None
+        or operand.leg_top_mean is not None
         or operand.anchor_follow is not None
     )
 
@@ -1613,6 +1678,8 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("leg_mean",)
     if operand.leg_sum is not None:
         return ("leg_sum",)
+    if operand.leg_top_mean is not None:
+        return ("leg_top_mean",)
     if operand.anchor_follow is not None:
         return ("anchor_follow",)
     if operand.ratio is not None:
@@ -1851,6 +1918,26 @@ def _resolve_operand(
             "predicate.leg_sum",
             version=PREDICATE_NODE_VERSION,
             params={"leg": leg_sum.leg, "field": leg_sum.field},
+            upstream={"episode": episode},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node]
+    if operand.leg_top_mean is not None:
+        leg_top_mean = operand.leg_top_mean
+        episode = (contexts or {}).get(episode_identity_key(leg_top_mean.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "leg_top_mean episode is not declared", episode_ref=leg_top_mean.episode
+            )
+        node = node_spec(
+            "predicate.leg_top_mean",
+            version=PREDICATE_NODE_VERSION,
+            params={
+                "leg": leg_top_mean.leg,
+                "field": leg_top_mean.field,
+                "share": leg_top_mean.share,
+            },
             upstream={"episode": episode},
             side=side,
         )

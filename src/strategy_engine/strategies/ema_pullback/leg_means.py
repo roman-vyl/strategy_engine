@@ -5,6 +5,7 @@ both ends inclusive. Prefix sums, O(bars)."""
 
 from __future__ import annotations
 
+import bisect
 import math
 
 import numpy as np
@@ -111,5 +112,55 @@ def leg_sum_values(episode: SideEpisode, series: np.ndarray, leg: str) -> np.nda
 
     valid, total, _ = _leg_totals(episode, series, leg)
     out = np.where(valid, total, math.nan)
+    out.flags.writeable = False
+    return out
+
+
+LEG_TOP_MEAN_FIELDS = ("volume",)
+
+
+def _top_mean(ordered: list[float], share: float) -> float:
+    k = max(1, math.ceil(share * len(ordered)))
+    return math.fsum(ordered[-k:]) / k
+
+
+def leg_top_mean_values(
+    episode: SideEpisode, series: np.ndarray, leg: str, share: float
+) -> np.ndarray:
+    """Mean of the `k = max(1, ceil(share * L))` largest values of `series`
+    over the leg on every bar (`v1-top-volume-ratio-v1`, D1, D2), with the legs
+    and missing rules of the leg sum. The impulse is sorted once per touch;
+    the pullback window is kept sorted while `t` grows within a touch."""
+
+    size = len(series)
+    valid, origin, peak = touch_points(episode, size)
+    out = np.full(size, math.nan)
+    finite = np.isfinite(series)
+    bad = np.zeros(size + 1, dtype=np.int64)
+    np.cumsum(~finite, out=bad[1:])
+    impulse_cache: dict[tuple[int, int], float] = {}
+    window: list[float] = []
+    window_begin, window_end = -1, -1
+    for t in np.flatnonzero(valid):
+        if leg == "impulse":
+            begin, end = int(origin[t]), int(peak[t])
+        else:
+            begin, end = int(peak[t]) + 1, int(t)
+            if begin > end:
+                continue
+        if bad[end + 1] - bad[begin]:
+            continue
+        if leg == "impulse":
+            key = (begin, end)
+            if key not in impulse_cache:
+                impulse_cache[key] = _top_mean(sorted(series[begin : end + 1].tolist()), share)
+            out[t] = impulse_cache[key]
+            continue
+        if begin == window_begin and end == window_end + 1:
+            bisect.insort(window, float(series[end]))
+        else:
+            window = sorted(series[begin : end + 1].tolist())
+        window_begin, window_end = begin, end
+        out[t] = _top_mean(window, share)
     out.flags.writeable = False
     return out
