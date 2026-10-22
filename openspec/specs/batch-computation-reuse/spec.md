@@ -588,3 +588,13 @@ bars with a valid wave. A spec without it SHALL have the same node set and resul
 
 - **WHEN** a batch contains candidates that differ only in a level over the pullback depth operand
 - **THEN** the operand SHALL be computed once per batch per side.
+
+### Requirement: Previous pullback depth identity
+
+A pullback depth operand with `touch: previous` SHALL be a node of the pullback depth family whose params carry the touch; one with
+`touch` absent or `current` SHALL keep the identity it had before this change.
+
+#### Scenario: Current depth identity unchanged
+
+- **WHEN** a spec writes `{"pullback_depth": {"episode": "trend", "touch": "current"}}`
+- **THEN** it SHALL resolve to the same node as `{"pullback_depth": {"episode": "trend"}}`.
