@@ -3,7 +3,9 @@
 ## Purpose
 
 Defines the semantic node identity contract and batch-scoped evaluation context that let the Strategy Engine reuse a computation across candidates whenever, and only whenever, it is semantically identical, while guaranteeing one evaluation path (used by single-spec and batch alike) and bit-exact parity of Strategy Engine outputs with the current per-candidate evaluator.
+
 ## Requirements
+
 ### Requirement: Single evaluation path for single-spec and batch
 The system SHALL use exactly one evaluation context implementation and one shared range-input representation for both single-spec range evaluation and range-batch evaluation. A single-spec evaluation SHALL be modeled as an evaluation context with exactly one root; a range-batch evaluation SHALL be modeled as an evaluation context with N roots. The final architecture SHALL NOT contain a permanent, separate preparation or evaluation path for single-spec evaluation; single-spec evaluation is the same mechanism specialized to one root, not a parallel implementation. The system SHALL NOT contain logic that selects a different evaluation path, or a different code branch producing observably different intermediate computations, based on which strategy-spec field(s) vary across the candidates in a batch.
 
@@ -555,3 +557,13 @@ identical to those before this change.
 - **WHEN** an existing spec without a weighted vote is evaluated
 - **THEN** its results and identities SHALL equal those before this change.
 
+### Requirement: Leg sum identity and cost
+
+A leg sum operand SHALL have its own node family whose identity carries the episode identity, the leg and the field, with the
+episode and the market bars upstream; labels SHALL NOT enter it. It SHALL cost O(n) per series. A spec without a leg sum operand
+SHALL have the same node set and results as before this change.
+
+#### Scenario: Level candidates share the operands
+
+- **WHEN** a batch contains candidates that differ only in a level over a ratio of two leg sum operands
+- **THEN** both operands and the ratio SHALL each be computed once per batch per side.
