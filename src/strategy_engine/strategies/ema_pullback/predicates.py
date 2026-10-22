@@ -34,6 +34,11 @@ from strategy_engine.strategies.ema_pullback.candles import (
     CANDLE_ATR_KIND,
     candle_values,
 )
+from strategy_engine.strategies.ema_pullback.impulse_atr import (
+    IMPULSE_ATR_FIELD,
+    IMPULSE_ATR_KIND,
+    impulse_atr_values,
+)
 from strategy_engine.strategies.ema_pullback.leg_means import (
     FORCE_FIELDS,
     LEG_MEAN_FIELDS,
@@ -186,6 +191,15 @@ class LegSpeed:
 
 
 @dataclass(frozen=True, slots=True)
+class ImpulseAtr:
+    """The impulse height `|P - S*|` of the current touch over a rolling-mean
+    ATR read on the peak bar (`b3-impulse-atr-v1`, D1)."""
+
+    episode: str
+    atr: PlannedFeature
+
+
+@dataclass(frozen=True, slots=True)
 class PullbackDepth:
     """The share of the impulse height `|P - S*|` that the pullback `[P, t]`
     of the current touch gave back, by its extreme price
@@ -222,6 +236,7 @@ class Operand:
     anchor_follow: AnchorFollow | None = None
     pullback_depth: PullbackDepth | None = None
     leg_speed: LegSpeed | None = None
+    impulse_atr: ImpulseAtr | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,6 +334,8 @@ def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
         return operand.segment.series.features()
     if operand.candle is not None:
         return () if operand.candle.atr is None else (operand.candle.atr,)
+    if operand.impulse_atr is not None:
+        return (operand.impulse_atr.atr,)
     if operand.ratio is not None:
         return (*operand_features(operand.ratio.left), *operand_features(operand.ratio.right))
     return ()
@@ -337,6 +354,7 @@ def operand_needs_episode(operand: Operand) -> bool:
         or operand.anchor_follow is not None
         or operand.pullback_depth is not None
         or operand.leg_speed is not None
+        or operand.impulse_atr is not None
     ):
         return True
     return operand.ratio is not None and (
@@ -397,7 +415,7 @@ def _feature(raw: object, path: str) -> PlannedFeature:
 
 _OPERAND_KEYS = (
     "feature, episode, segment, candle, leg_mean, leg_sum, leg_top_mean, anchor_follow, "
-    "pullback_depth, leg_speed, ratio, price or const"
+    "pullback_depth, leg_speed, impulse_atr, ratio, price or const"
 )
 _SEGMENT_FIELDS = {
     "episode",
@@ -722,6 +740,27 @@ def _leg_speed(raw: object, path: str, episode_refs: frozenset[str] | None) -> L
     return LegSpeed(ref, str(leg))
 
 
+def _impulse_atr(raw: object, path: str, episode_refs: frozenset[str] | None) -> ImpulseAtr:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", IMPULSE_ATR_FIELD}, path)
+    for key in ("episode", IMPULSE_ATR_FIELD):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    atr = _feature(payload[IMPULSE_ATR_FIELD], f"{path}.{IMPULSE_ATR_FIELD}")
+    if atr.kind != IMPULSE_ATR_KIND:
+        raise InvalidRequestError(f"{path}.atr must be a feature of kind atr", kind=atr.kind)
+    if atr.timeframe != "base":
+        raise InvalidRequestError(
+            f"{path}.atr must be on the base timeframe", timeframe=atr.timeframe
+        )
+    return ImpulseAtr(ref, atr)
+
+
 def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio:
     payload = _mapping(raw, path)
     _only_fields(payload, {"left", "right", "right_floor"}, path)
@@ -764,6 +803,8 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         )
     if key == "leg_speed":
         return Operand(leg_speed=_leg_speed(value, f"{path}.leg_speed", episode_refs))
+    if key == "impulse_atr":
+        return Operand(impulse_atr=_impulse_atr(value, f"{path}.impulse_atr", episode_refs))
     if key == "ratio":
         return Operand(ratio=_ratio(value, f"{path}.ratio", episode_refs))
     if key == "price":
@@ -1059,6 +1100,14 @@ def _values(
             node,
             functools.partial(_anchor_follow_operand, operand.anchor_follow, side, bundle),
         )
+    if operand.impulse_atr is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _impulse_atr_operand, operand.impulse_atr, frame, context, identity, side, bundle
+            ),
+        )
     if operand.leg_speed is not None:
         return compute_through(
             context,
@@ -1256,6 +1305,23 @@ def _leg_speed_operand(
         )
     close = frame_market_arrays(frame).array("close")
     return leg_speed_values(episodes.side(leg_speed.episode, side), close, leg_speed.leg)
+
+
+def _impulse_atr_operand(
+    impulse_atr: ImpulseAtr,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "impulse_atr operand has no evaluated episode", episode_ref=impulse_atr.episode
+        )
+    atr = _feature_array(impulse_atr.atr, frame, context, identity)
+    return impulse_atr_values(episodes.side(impulse_atr.episode, side), atr)
 
 
 def _ratio_operand(
@@ -1573,6 +1639,7 @@ def _has_value(operand: Operand) -> bool:
         or operand.anchor_follow is not None
         or operand.pullback_depth is not None
         or operand.leg_speed is not None
+        or operand.impulse_atr is not None
     )
 
 
@@ -1800,6 +1867,8 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("pullback_depth",)
     if operand.leg_speed is not None:
         return ("leg_speed",)
+    if operand.impulse_atr is not None:
+        return ("impulse_atr",)
     if operand.ratio is not None:
         return ("ratio",)
     return ("feature",)
@@ -2077,6 +2146,23 @@ def _resolve_operand(
         )
         operand_ids[path] = node
         return node, [node]
+    if operand.impulse_atr is not None:
+        impulse_atr = operand.impulse_atr
+        episode = (contexts or {}).get(episode_identity_key(impulse_atr.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "impulse_atr episode is not declared", episode_ref=impulse_atr.episode
+            )
+        column = _column_identity(impulse_atr.atr, feature_ids, column_ids)
+        node = node_spec(
+            "predicate.impulse_atr",
+            version=PREDICATE_NODE_VERSION,
+            params={},
+            upstream={"episode": episode, IMPULSE_ATR_FIELD: column},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node, column]
     if operand.leg_speed is not None:
         leg_speed = operand.leg_speed
         episode = (contexts or {}).get(episode_identity_key(leg_speed.episode, side))
