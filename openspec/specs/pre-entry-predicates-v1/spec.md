@@ -4,7 +4,9 @@
 An internal boolean layer turns canonical Strategy Engine features and
 context into pre-entry conditions on the base timeline. The layer
 computes no indicator and performs no alignment of its own.
+
 ## Requirements
+
 ### Requirement: Predicate is an internal layer, not a strategy role
 
 `PreEntryPredicate` SHALL be an internal evaluation contract. It SHALL
@@ -1115,3 +1117,314 @@ not less than `max` (both inclusive), each bound optional. A missing value SHALL
 - **WHEN** there is no wave or the denominator is not greater than 0
 - **THEN** the entry SHALL pass.
 
+### Requirement: Leg sum operand shape
+
+A leg sum reference SHALL be `{"leg_sum": {"episode", "leg", "field"}}`; all three are required and no other field is allowed.
+`episode` SHALL name an episode declared in `raw_spec.ema_stack_episode`, `leg` SHALL be `impulse` or `pullback` and `field` SHALL be
+`volume`. It SHALL be accepted as a side of a `ratio`, as the operand of a `range`, of a `compare` and of a weighted vote input, and
+rejected as the operand of a `change`.
+
+#### Scenario: Malformed leg sum
+
+- **WHEN** a leg sum names an undeclared episode, an unknown `leg` or `field`, lacks a required field or has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Leg sum value
+
+On each bar `t` the legs SHALL be those of the leg mean operand: the impulse from `origin_bar` to `peak_bar` of the current touch
+and the pullback from `peak_bar + 1` to `t`, both ends inclusive. The value SHALL be the sum of the field over the leg's bars and
+SHALL be missing when the touch has no valid wave, when the leg is empty or when any bar of the leg has a non-finite field. Bars
+after `t` SHALL NOT be read.
+
+#### Scenario: Legs
+
+- **WHEN** a wave has origin 10, peak 14 and `t` = 20
+- **THEN** the impulse sum SHALL add bars 10 to 14 and the pullback sum bars 15 to 20.
+
+#### Scenario: Peak bar
+
+- **WHEN** `t` is the peak bar
+- **THEN** the pullback sum SHALL be missing.
+
+### Requirement: Volume sum ratio
+
+`ratio(leg_sum(pullback, volume), leg_sum(impulse, volume))` SHALL be the pullback volume sum divided by the impulse volume sum. It
+SHALL be missing when either sum is missing or the impulse sum is not greater than the ratio's `right_floor` (default 0). It SHALL
+be the same on the long and the short side.
+
+#### Scenario: Zero impulse volume
+
+- **WHEN** the impulse leg has volume sum 0
+- **THEN** the ratio SHALL be missing and a `range` with `empty: pass` SHALL not block the bar.
+
+#### Scenario: Value
+
+- **WHEN** the impulse sums to 2000 and the pullback to 100
+- **THEN** the ratio SHALL be 0.05.
+
+### Requirement: Own colour volume field
+
+A leg sum MAY have `field` `own_color_volume`; a leg mean SHALL reject it. Its series on the evaluated side SHALL be `volume[u]` for a
+bar whose candle has the leg's own colour and 0 otherwise. A non-finite `open`, `close` or `volume` on a leg bar SHALL make the value
+missing.
+
+#### Scenario: Missing input
+
+- **WHEN** a pullback bar has a non-finite close
+- **THEN** the own colour pullback sum SHALL be missing.
+
+### Requirement: Own colour of a leg
+
+On the impulse the own colour SHALL be `close > open` on the long side and `close < open` on the short side; on the pullback it
+SHALL be `close < open` on the long side and `close > open` on the short side. A bar with `close = open` SHALL never count.
+
+#### Scenario: Long pullback
+
+- **WHEN** the side is long and the pullback has a red bar with volume 30, a green bar with volume 50 and a doji with volume 20
+- **THEN** the own colour pullback sum SHALL be 30.
+
+#### Scenario: Short impulse
+
+- **WHEN** the side is short and an impulse bar closes below its open with volume 40
+- **THEN** its volume SHALL count in the own colour impulse sum.
+
+### Requirement: Own colour volume ratio
+
+`ratio(leg_sum(pullback, own_color_volume), leg_sum(impulse, own_color_volume))` SHALL be missing when the impulse sum is not greater
+than the ratio's `right_floor` (default 0) or either sum is missing. A pullback without a counter candle SHALL give 0, a value.
+
+#### Scenario: Impulse without a with-trade candle
+
+- **WHEN** no impulse bar of the long side closes above its open
+- **THEN** the ratio SHALL be missing.
+
+### Requirement: Leg top mean operand shape
+
+A leg top mean reference SHALL be `{"leg_top_mean": {"episode", "leg", "field", "share"}}`; all four are required and no other field
+is allowed. `episode` SHALL name a declared episode, `leg` SHALL be `impulse` or `pullback`, `field` SHALL be `volume` and `share` a
+finite number greater than 0 and at most 1. It SHALL be accepted where a leg sum is accepted and rejected as the operand of a `change`.
+
+#### Scenario: Malformed leg top mean
+
+- **WHEN** `share` is 0, above 1 or missing, or the operand has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Leg top mean value
+
+With the legs of the leg sum operand and `L` the number of bars of the leg, the value SHALL be the mean of the `k` largest field
+values of the leg, `k = max(1, ceil(share · L))`, as research computes it in float64. It SHALL be missing when the touch has no valid wave, the leg is
+empty or a bar of the leg has a non-finite field. Bars after `t` SHALL NOT be read.
+
+#### Scenario: Top mean
+
+- **WHEN** the pullback has 12 bars, `share` is 0.1 and its two largest volumes are 50 and 30
+- **THEN** `k` SHALL be 2 and the value 40.
+
+#### Scenario: Rounding of k
+
+- **WHEN** the leg has 30 bars and `share` is 0.1
+- **THEN** `k` SHALL be 3; with 11 bars it SHALL be 2.
+
+### Requirement: Top volume ratio
+
+`ratio(leg_top_mean(pullback), leg_top_mean(impulse))` SHALL be missing when either value is missing or the impulse value is not
+greater than the ratio's `right_floor` (default 0).
+
+#### Scenario: Zero impulse volume
+
+- **WHEN** every impulse bar has volume 0
+- **THEN** the ratio SHALL be missing.
+
+### Requirement: Pullback depth operand shape
+
+A pullback depth reference SHALL be `{"pullback_depth": {"episode", "touch"}}`; `episode` is required and SHALL name a declared
+episode, `touch` is optional, `current` (default) or `previous`, and no other field is allowed. It SHALL be accepted where a leg sum
+is accepted and rejected as the operand of a `change`.
+
+#### Scenario: Malformed pullback depth
+
+- **WHEN** `episode` is missing or undeclared, `touch` is neither `current` nor `previous`, or the operand has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Pullback depth value
+
+On a bar `t` with a valid wave of the current touch, the value SHALL be `g · (peak_price − ext) / |peak_price − origin_price|`,
+where `ext` is the lowest low of the bars `P..t` on the long side and the highest high on the short side, `g` is +1 long and −1
+short. It SHALL be missing when the touch has no valid wave, the impulse height is 0 or a price of `P..t` is not finite. Bars after
+`t` SHALL NOT be read.
+
+#### Scenario: Long depth
+
+- **WHEN** on the long side the origin price is 100, the peak price 110 and the lowest low of `P..t` is 103
+- **THEN** the value SHALL be 0.7.
+
+#### Scenario: Short depth
+
+- **WHEN** on the short side the origin price is 110, the peak price 100 and the highest high of `P..t` is 104
+- **THEN** the value SHALL be 0.4.
+
+### Requirement: Previous pullback depth value
+
+With `touch: previous`, on a bar `t` whose current touch has a valid wave and a previous touch row in the same episode, the value
+SHALL be `g · (P0_price − ext0) / |P0_price − S0_price|`, where `S0`, `P0` are the origin and peak of the previous touch row and
+`ext0` is the lowest low (long) or highest high (short) of the bars `P0..S*`, `S*` the origin of the current touch.
+
+#### Scenario: Previous depth
+
+- **WHEN** on the long side the previous origin price is 100, the previous peak price 110 and the lowest low of `P0..S*` is 108
+- **THEN** the value SHALL be 0.2.
+
+### Requirement: Previous pullback depth missing cases
+
+The previous depth SHALL be missing on the first touch of an episode, when `S* ≤ P0`, when the previous impulse height is 0 or a
+price of `P0..S*` is not finite. Bars after `t` SHALL NOT be read.
+
+#### Scenario: Zero previous height
+
+- **WHEN** the previous origin and peak prices are equal
+- **THEN** the value SHALL be missing.
+
+#### Scenario: First touch
+
+- **WHEN** the current touch is the first of its episode
+- **THEN** the value SHALL be missing.
+
+### Requirement: Depth ratio to the previous pullback
+
+`ratio(pullback_depth, pullback_depth touch previous, right_floor)` SHALL be missing when either value is missing or the previous
+depth is not greater than `right_floor`.
+
+#### Scenario: Three times deeper
+
+- **WHEN** the current depth is 0.6 and the previous 0.2 with `right_floor` 1e-6
+- **THEN** the ratio SHALL be 3.
+
+### Requirement: Leg speed operand shape
+
+A leg speed reference SHALL be `{"leg_speed": {"episode", "leg"}}`; both are required and no other field is allowed. `episode` SHALL
+name a declared episode and `leg` SHALL be `impulse` or `pullback`. It SHALL be accepted where a leg sum is accepted and rejected as
+the operand of a `change`.
+
+#### Scenario: Malformed leg speed
+
+- **WHEN** `leg` is missing or neither `impulse` nor `pullback`, or the operand has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Leg speed value
+
+On a bar `t` with a valid wave of the current touch, the impulse value SHALL be `|peak_price − origin_price| / (P − S* + 1)` and the
+pullback value `|peak_price − close[t]| / (t − P + 1)`. It SHALL be missing when the touch has no valid wave or an input price is not
+finite. Bars after `t` SHALL NOT be read.
+
+#### Scenario: Pullback three times faster
+
+- **WHEN** the impulse rises 10 over the bars `S*..P` (10 bars) and the close of `t` is 6 below the peak price with `t − P + 1 = 2`
+- **THEN** the impulse value SHALL be 1, the pullback value 3 and `ratio(pullback, impulse)` 3.
+
+#### Scenario: Zero impulse height
+
+- **WHEN** the origin and peak prices are equal
+- **THEN** the impulse value SHALL be 0 and `ratio(pullback, impulse)` missing.
+
+### Requirement: Impulse ATR operand shape
+
+An impulse ATR reference SHALL be `{"impulse_atr": {"episode", "atr"}}`; both are required and no other field is allowed. `episode`
+SHALL name a declared episode and `atr` SHALL be a feature request of kind `atr` on the base timeframe. It SHALL be accepted where a
+leg sum is accepted and rejected as the operand of a `change`.
+
+#### Scenario: Malformed impulse ATR
+
+- **WHEN** `atr` is missing, of another kind or on another timeframe, or the operand has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Impulse ATR value
+
+On a bar `t` with a valid wave of the current touch, the value SHALL be `|peak_price − origin_price| / atr[P]`. It SHALL be missing
+when the touch has no valid wave, a price is not finite, or `atr[P]` is not finite or not above 0. Bars after `t` SHALL NOT be read.
+
+#### Scenario: Twelve average candles
+
+- **WHEN** the impulse height is 6 and the ATR on the peak bar is 0.5
+- **THEN** the value SHALL be 12 on every bar of that touch.
+
+#### Scenario: ATR not yet defined
+
+- **WHEN** the peak bar lies before the first full ATR window
+- **THEN** the value SHALL be missing.
+
+### Requirement: Leg bars operand shape
+
+A leg bars reference SHALL be `{"leg_bars": {"episode", "leg"}}`; both are required and no other field is allowed. `episode` SHALL
+name a declared episode and `leg` SHALL be `impulse` or `pullback`. It SHALL be accepted where a leg sum is accepted and rejected as
+the operand of a `change`.
+
+#### Scenario: Malformed leg bars
+
+- **WHEN** `leg` is missing or neither `impulse` nor `pullback`, or the operand has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Leg bars value
+
+On a bar `t` with a valid wave of the current touch, the impulse value SHALL be `P − S* + 1` and the pullback value `t − P + 1`. It
+SHALL be missing when the touch has no valid wave. Bars after `t` SHALL NOT be read.
+
+#### Scenario: Pullback ten times longer
+
+- **WHEN** the impulse spans bars 100..109 and the evaluated bar is 199
+- **THEN** the impulse value SHALL be 10, the pullback value 100 and `ratio(pullback, impulse)` 10.
+
+### Requirement: Forming candle operand shape
+
+A forming candle reference SHALL be `{"forming_candle": {"episode", "timeframe", "atr"}}`; all are required and no other field is
+allowed. `episode` SHALL name a declared episode; `timeframe` SHALL be longer than the base timeframe, a multiple of it and a divisor
+of a day; `atr` SHALL be a feature request of kind `atr_wilder` on the same timeframe. It SHALL be accepted where a leg sum is
+accepted and rejected as the operand of a `change`.
+
+#### Scenario: Malformed forming candle
+
+- **WHEN** `atr` is missing, of another kind or on another timeframe, `timeframe` is the base timeframe, or a field is unknown
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Forming candle value
+
+On a bar `t` with a valid wave of the current touch, the value SHALL be `g · (close[t] − open) / atr`, where `open` is the open of
+the first base bar of the candle of `timeframe` that contains `t`, `atr` is the ATR of the last completed candle before it, and `g`
+is +1 on the long side and −1 on the short side. It SHALL be missing without a valid wave, or when a price is not finite or the ATR
+is not finite or not above 0. Bars after `t` SHALL NOT be read.
+
+#### Scenario: Day moved against a long
+
+- **WHEN** the day opened at 100, the close of `t` is 98 and the ATR of the previous day is 4, on the long side
+- **THEN** the value SHALL be −0.5, and on the short side 0.5.
+
+#### Scenario: ATR not yet defined
+
+- **WHEN** fewer completed candles than the ATR period precede the candle of `t`
+- **THEN** the value SHALL be missing.
+
+### Requirement: Leg efficiency operand shape
+
+A leg efficiency reference SHALL be `{"leg_efficiency": {"episode", "leg"}}`; both are required and no other field is allowed.
+`episode` SHALL name a declared episode and `leg` SHALL be `impulse` or `pullback`. It SHALL be accepted where a leg sum is accepted
+and rejected as the operand of a `change`.
+
+#### Scenario: Malformed leg efficiency
+
+- **WHEN** `leg` is missing or neither `impulse` nor `pullback`, or the operand has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Leg efficiency value
+
+On a bar `t` with a valid wave of the current touch, the value SHALL be `|close[z] − close[a]| / Σ |close[k] − close[k−1]|` over
+`k = a+1..z`, with `a = S*, z = P` for the impulse and `a = P, z = t` for the pullback. It SHALL be missing without a valid wave,
+when `z ≤ a`, when the sum is 0, or when a close of `[a, z]` is not finite. Bars after `t` SHALL NOT be read.
+
+#### Scenario: Straight pullback, crooked impulse
+
+- **WHEN** the impulse closes go 100, 103, 101, 104 and the pullback closes go 104, 102, 100
+- **THEN** the impulse value SHALL be 0.5, the pullback value 1 and `ratio(pullback, impulse)` 2.
+
+#### Scenario: Pullback of one bar
+
+- **WHEN** the evaluated bar is the peak bar
+- **THEN** the pullback value SHALL be missing.

@@ -3,7 +3,9 @@
 ## Purpose
 
 Defines the semantic node identity contract and batch-scoped evaluation context that let the Strategy Engine reuse a computation across candidates whenever, and only whenever, it is semantically identical, while guaranteeing one evaluation path (used by single-spec and batch alike) and bit-exact parity of Strategy Engine outputs with the current per-candidate evaluator.
+
 ## Requirements
+
 ### Requirement: Single evaluation path for single-spec and batch
 The system SHALL use exactly one evaluation context implementation and one shared range-input representation for both single-spec range evaluation and range-batch evaluation. A single-spec evaluation SHALL be modeled as an evaluation context with exactly one root; a range-batch evaluation SHALL be modeled as an evaluation context with N roots. The final architecture SHALL NOT contain a permanent, separate preparation or evaluation path for single-spec evaluation; single-spec evaluation is the same mechanism specialized to one root, not a parallel implementation. The system SHALL NOT contain logic that selects a different evaluation path, or a different code branch producing observably different intermediate computations, based on which strategy-spec field(s) vary across the candidates in a batch.
 
@@ -555,3 +557,94 @@ identical to those before this change.
 - **WHEN** an existing spec without a weighted vote is evaluated
 - **THEN** its results and identities SHALL equal those before this change.
 
+### Requirement: Leg sum identity and cost
+
+A leg sum operand SHALL have its own node family whose identity carries the episode identity, the leg and the field, with the
+episode and the market bars upstream; labels SHALL NOT enter it. It SHALL cost O(n) per series. A spec without a leg sum operand
+SHALL have the same node set and results as before this change.
+
+#### Scenario: Level candidates share the operands
+
+- **WHEN** a batch contains candidates that differ only in a level over a ratio of two leg sum operands
+- **THEN** both operands and the ratio SHALL each be computed once per batch per side.
+
+### Requirement: Leg top mean identity and cost
+
+A leg top mean operand SHALL have its own node family whose identity carries the episode identity, the leg, the field and the
+share. Its impulse value SHALL be computed once per touch and its pullback value only on bars with a valid wave. A spec without it
+SHALL have the same node set and results as before this change.
+
+#### Scenario: Level candidates share the operands
+
+- **WHEN** a batch contains candidates that differ only in a level over a ratio of two leg top mean operands
+- **THEN** both operands and the ratio SHALL each be computed once per batch per side.
+
+### Requirement: Pullback depth identity and cost
+
+A pullback depth operand SHALL have its own node family whose identity carries the episode identity. It SHALL be computed only on
+bars with a valid wave. A spec without it SHALL have the same node set and results as before this change.
+
+#### Scenario: Level candidates share the operand
+
+- **WHEN** a batch contains candidates that differ only in a level over the pullback depth operand
+- **THEN** the operand SHALL be computed once per batch per side.
+
+### Requirement: Previous pullback depth identity
+
+A pullback depth operand with `touch: previous` SHALL be a node of the pullback depth family whose params carry the touch; one with
+`touch` absent or `current` SHALL keep the identity it had before this change.
+
+#### Scenario: Current depth identity unchanged
+
+- **WHEN** a spec writes `{"pullback_depth": {"episode": "trend", "touch": "current"}}`
+- **THEN** it SHALL resolve to the same node as `{"pullback_depth": {"episode": "trend"}}`.
+
+### Requirement: Leg speed identity and cost
+
+A leg speed operand SHALL have its own node family whose identity carries the episode identity and the leg. A spec without it SHALL
+have the same node set and results as before this change.
+
+#### Scenario: Level candidates share the operands
+
+- **WHEN** a batch contains candidates that differ only in a level over a ratio of two leg speed operands
+- **THEN** both operands and the ratio SHALL each be computed once per batch per side.
+
+### Requirement: Impulse ATR identity and cost
+
+An impulse ATR operand SHALL have its own node family whose identity carries the episode identity and the ATR column identity. A
+spec without it SHALL have the same node set and results as before this change.
+
+#### Scenario: Level candidates share the operand
+
+- **WHEN** a batch contains candidates that differ only in a level over the same impulse ATR operand
+- **THEN** the operand and its ATR column SHALL each be computed once per batch per side.
+
+### Requirement: Leg bars identity and cost
+
+A leg bars operand SHALL have its own node family whose identity carries the episode identity and the leg. A spec without it SHALL
+have the same node set and results as before this change.
+
+#### Scenario: Level candidates share the operands
+
+- **WHEN** a batch contains candidates that differ only in a level over a ratio of two leg bars operands
+- **THEN** both operands and the ratio SHALL each be computed once per batch per side.
+
+### Requirement: Forming candle identity and cost
+
+A forming candle operand SHALL have its own node family whose identity carries the episode identity, the timeframe and the ATR
+column. A spec without it SHALL have the same node set and results as before this change.
+
+#### Scenario: Level candidates share the operand
+
+- **WHEN** a batch contains candidates that differ only in a level over the same forming candle operand
+- **THEN** the operand SHALL be computed once per batch per side.
+
+### Requirement: Leg efficiency identity and cost
+
+A leg efficiency operand SHALL have its own node family whose identity carries the episode identity and the leg. A spec without it
+SHALL have the same node set and results as before this change.
+
+#### Scenario: Level candidates share the operands
+
+- **WHEN** a batch contains candidates that differ only in a level over a ratio of two leg efficiency operands
+- **THEN** both operands and the ratio SHALL each be computed once per batch per side.

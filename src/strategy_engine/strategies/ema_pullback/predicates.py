@@ -34,12 +34,31 @@ from strategy_engine.strategies.ema_pullback.candles import (
     CANDLE_ATR_KIND,
     candle_values,
 )
+from strategy_engine.strategies.ema_pullback.forming_candle import (
+    FORMING_CANDLE_ATR_FIELD,
+    FORMING_CANDLE_ATR_KIND,
+    forming_candle_values,
+)
+from strategy_engine.strategies.ema_pullback.impulse_atr import (
+    IMPULSE_ATR_FIELD,
+    IMPULSE_ATR_KIND,
+    impulse_atr_values,
+)
+from strategy_engine.strategies.ema_pullback.leg_efficiency import leg_efficiency_values
 from strategy_engine.strategies.ema_pullback.leg_means import (
     FORCE_FIELDS,
     LEG_MEAN_FIELDS,
+    LEG_SUM_FIELDS,
+    LEG_TOP_MEAN_FIELDS,
+    OWN_COLOR_VOLUME,
     force_series,
     leg_mean_values,
+    leg_sum_values,
+    leg_top_mean_values,
+    own_color_volume_series,
 )
+from strategy_engine.strategies.ema_pullback.leg_speed import leg_bars_values, leg_speed_values
+from strategy_engine.strategies.ema_pullback.pullback_depth import pullback_depth_values
 from strategy_engine.strategies.ema_pullback.stack_episode import (
     EpisodeRef,
     SideEpisode,
@@ -139,11 +158,92 @@ class LegMean:
 
 
 @dataclass(frozen=True, slots=True)
+class LegSum:
+    """The sum of a base-bar market field over the impulse `[S*, P]` or the
+    pullback `[P+1, t]` of the current touch (`v1-volume-sum-ratio-v1`, D1)."""
+
+    episode: str
+    leg: str
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
+class LegTopMean:
+    """The mean of the largest `share` of a base-bar field over the impulse
+    `[S*, P]` or the pullback `[P+1, t]` of the current touch
+    (`v1-top-volume-ratio-v1`, D1)."""
+
+    episode: str
+    leg: str
+    field: str
+    share: float
+
+
+@dataclass(frozen=True, slots=True)
 class AnchorFollow:
     """The share of the gap between the peak price and the anchor EMA at the
     peak that the EMA closed by the evaluated bar (`c5-anchor-follow-v1`, D1)."""
 
     episode: str
+
+
+@dataclass(frozen=True, slots=True)
+class LegSpeed:
+    """The price distance per bar of the impulse `[S*, P]` or the pullback
+    `[P, t]` of the current touch (`a3-leg-speed-ratio-v1`, D1)."""
+
+    episode: str
+    leg: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImpulseAtr:
+    """The impulse height `|P - S*|` of the current touch over a rolling-mean
+    ATR read on the peak bar (`b3-impulse-atr-v1`, D1)."""
+
+    episode: str
+    atr: PlannedFeature
+
+
+@dataclass(frozen=True, slots=True)
+class FormingCandle:
+    """The move of the forming candle of `timeframe` from its open to the
+    close of the evaluated bar over the Wilder ATR of the last completed
+    candle, signed by the side (`d1-forming-candle-v1`, D1)."""
+
+    episode: str
+    timeframe: str
+    atr: PlannedFeature
+
+
+@dataclass(frozen=True, slots=True)
+class LegEfficiency:
+    """The Kaufman efficiency ratio of the closes of the impulse `[S*, P]`
+    or the pullback `[P, t]` of the current touch
+    (`a5-leg-efficiency-ratio-v1`, D1)."""
+
+    episode: str
+    leg: str
+
+
+@dataclass(frozen=True, slots=True)
+class LegBars:
+    """The number of base bars of the impulse `[S*, P]` or the pullback
+    `[P, t]` of the current touch (`a4-leg-bars-ratio-v1`, D1)."""
+
+    episode: str
+    leg: str
+
+
+@dataclass(frozen=True, slots=True)
+class PullbackDepth:
+    """The share of the impulse height `|P - S*|` that the pullback `[P, t]`
+    of the current touch gave back, by its extreme price
+    (`c3-pullback-depth-share-v1`, D1); `touch` previous gives the same share
+    of the previous pullback `[P0, S*]` (`c3-previous-depth-ratio-v1`, D1)."""
+
+    episode: str
+    touch: str = "current"
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,7 +267,15 @@ class Operand:
     ratio: Ratio | None = None
     candle: Candle | None = None
     leg_mean: LegMean | None = None
+    leg_sum: LegSum | None = None
+    leg_top_mean: LegTopMean | None = None
     anchor_follow: AnchorFollow | None = None
+    pullback_depth: PullbackDepth | None = None
+    leg_speed: LegSpeed | None = None
+    impulse_atr: ImpulseAtr | None = None
+    leg_bars: LegBars | None = None
+    forming_candle: FormingCandle | None = None
+    leg_efficiency: LegEfficiency | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,6 +373,10 @@ def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
         return operand.segment.series.features()
     if operand.candle is not None:
         return () if operand.candle.atr is None else (operand.candle.atr,)
+    if operand.impulse_atr is not None:
+        return (operand.impulse_atr.atr,)
+    if operand.forming_candle is not None:
+        return (operand.forming_candle.atr,)
     if operand.ratio is not None:
         return (*operand_features(operand.ratio.left), *operand_features(operand.ratio.right))
     return ()
@@ -278,7 +390,15 @@ def operand_needs_episode(operand: Operand) -> bool:
         or operand.segment is not None
         or operand.candle is not None
         or operand.leg_mean is not None
+        or operand.leg_sum is not None
+        or operand.leg_top_mean is not None
         or operand.anchor_follow is not None
+        or operand.pullback_depth is not None
+        or operand.leg_speed is not None
+        or operand.impulse_atr is not None
+        or operand.leg_bars is not None
+        or operand.forming_candle is not None
+        or operand.leg_efficiency is not None
     ):
         return True
     return operand.ratio is not None and (
@@ -337,7 +457,11 @@ def _feature(raw: object, path: str) -> PlannedFeature:
     return plan_feature_request(kind, timeframe, source, params)
 
 
-_OPERAND_KEYS = "feature, episode, segment, candle, leg_mean, anchor_follow, ratio, price or const"
+_OPERAND_KEYS = (
+    "feature, episode, segment, candle, leg_mean, leg_sum, leg_top_mean, anchor_follow, "
+    "pullback_depth, leg_speed, impulse_atr, leg_bars, forming_candle, leg_efficiency, "
+    "ratio, price or const"
+)
 _SEGMENT_FIELDS = {
     "episode",
     "of",
@@ -574,6 +698,47 @@ def _leg_mean(raw: object, path: str, episode_refs: frozenset[str] | None) -> Le
     return LegMean(ref, str(leg), str(field))
 
 
+def _leg_sum(raw: object, path: str, episode_refs: frozenset[str] | None) -> LegSum:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "leg", "field"}, path)
+    for key in ("episode", "leg", "field"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    leg, field = payload["leg"], payload["field"]
+    if leg not in ("impulse", "pullback"):
+        raise InvalidRequestError(f"{path}.leg must be impulse or pullback", leg=leg)
+    if field not in LEG_SUM_FIELDS:
+        raise InvalidRequestError(f"{path}.field must be one of {LEG_SUM_FIELDS}", field=field)
+    return LegSum(ref, str(leg), str(field))
+
+
+def _leg_top_mean(raw: object, path: str, episode_refs: frozenset[str] | None) -> LegTopMean:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "leg", "field", "share"}, path)
+    for key in ("episode", "leg", "field", "share"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    leg, field = payload["leg"], payload["field"]
+    if leg not in ("impulse", "pullback"):
+        raise InvalidRequestError(f"{path}.leg must be impulse or pullback", leg=leg)
+    if field not in LEG_TOP_MEAN_FIELDS:
+        raise InvalidRequestError(f"{path}.field must be one of {LEG_TOP_MEAN_FIELDS}", field=field)
+    share = _number(payload["share"], f"{path}.share")
+    if not 0.0 < share <= 1.0:
+        raise InvalidRequestError(f"{path}.share must be in (0, 1]", share=share)
+    return LegTopMean(ref, str(leg), str(field), share)
+
+
 def _anchor_follow(raw: object, path: str, episode_refs: frozenset[str] | None) -> AnchorFollow:
     payload = _mapping(raw, path)
     _only_fields(payload, {"episode"}, path)
@@ -585,6 +750,97 @@ def _anchor_follow(raw: object, path: str, episode_refs: frozenset[str] | None) 
     if episode_refs is not None and ref not in episode_refs:
         raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
     return AnchorFollow(ref)
+
+
+def _pullback_depth(raw: object, path: str, episode_refs: frozenset[str] | None) -> PullbackDepth:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "touch"}, path)
+    if "episode" not in payload:
+        raise InvalidRequestError(f"{path}.episode is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    touch = payload.get("touch", "current")
+    if touch not in ("current", "previous"):
+        raise InvalidRequestError(f"{path}.touch must be current or previous", touch=touch)
+    return PullbackDepth(ref, str(touch))
+
+
+def _leg_speed(raw: object, path: str, episode_refs: frozenset[str] | None) -> LegSpeed:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "leg"}, path)
+    for key in ("episode", "leg"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    leg = payload["leg"]
+    if leg not in ("impulse", "pullback"):
+        raise InvalidRequestError(f"{path}.leg must be impulse or pullback", leg=leg)
+    return LegSpeed(ref, str(leg))
+
+
+def _leg_efficiency(raw: object, path: str, episode_refs: frozenset[str] | None) -> LegEfficiency:
+    speed = _leg_speed(raw, path, episode_refs)
+    return LegEfficiency(speed.episode, speed.leg)
+
+
+def _leg_bars(raw: object, path: str, episode_refs: frozenset[str] | None) -> LegBars:
+    speed = _leg_speed(raw, path, episode_refs)
+    return LegBars(speed.episode, speed.leg)
+
+
+def _impulse_atr(raw: object, path: str, episode_refs: frozenset[str] | None) -> ImpulseAtr:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", IMPULSE_ATR_FIELD}, path)
+    for key in ("episode", IMPULSE_ATR_FIELD):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    atr = _feature(payload[IMPULSE_ATR_FIELD], f"{path}.{IMPULSE_ATR_FIELD}")
+    if atr.kind != IMPULSE_ATR_KIND:
+        raise InvalidRequestError(f"{path}.atr must be a feature of kind atr", kind=atr.kind)
+    if atr.timeframe != "base":
+        raise InvalidRequestError(
+            f"{path}.atr must be on the base timeframe", timeframe=atr.timeframe
+        )
+    return ImpulseAtr(ref, atr)
+
+
+def _forming_candle(raw: object, path: str, episode_refs: frozenset[str] | None) -> FormingCandle:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "timeframe", FORMING_CANDLE_ATR_FIELD}, path)
+    for key in ("episode", "timeframe", FORMING_CANDLE_ATR_FIELD):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    timeframe = payload["timeframe"]
+    if not isinstance(timeframe, str) or not timeframe or timeframe == "base":
+        raise InvalidRequestError(f"{path}.timeframe must be a timeframe such as 1d")
+    timeframe_duration_ms(timeframe)
+    atr = _feature(payload[FORMING_CANDLE_ATR_FIELD], f"{path}.{FORMING_CANDLE_ATR_FIELD}")
+    if atr.kind != FORMING_CANDLE_ATR_KIND:
+        raise InvalidRequestError(f"{path}.atr must be the candle ATR feature", kind=atr.kind)
+    if atr.timeframe != timeframe:
+        raise InvalidRequestError(
+            f"{path}.atr.timeframe must equal the candle timeframe",
+            atr_timeframe=atr.timeframe,
+            timeframe=timeframe,
+        )
+    return FormingCandle(ref, timeframe, atr)
 
 
 def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio:
@@ -617,8 +873,30 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         return Operand(candle=_candle(value, f"{path}.candle", episode_refs))
     if key == "leg_mean":
         return Operand(leg_mean=_leg_mean(value, f"{path}.leg_mean", episode_refs))
+    if key == "leg_sum":
+        return Operand(leg_sum=_leg_sum(value, f"{path}.leg_sum", episode_refs))
+    if key == "leg_top_mean":
+        return Operand(leg_top_mean=_leg_top_mean(value, f"{path}.leg_top_mean", episode_refs))
     if key == "anchor_follow":
         return Operand(anchor_follow=_anchor_follow(value, f"{path}.anchor_follow", episode_refs))
+    if key == "pullback_depth":
+        return Operand(
+            pullback_depth=_pullback_depth(value, f"{path}.pullback_depth", episode_refs)
+        )
+    if key == "leg_speed":
+        return Operand(leg_speed=_leg_speed(value, f"{path}.leg_speed", episode_refs))
+    if key == "leg_efficiency":
+        return Operand(
+            leg_efficiency=_leg_efficiency(value, f"{path}.leg_efficiency", episode_refs)
+        )
+    if key == "leg_bars":
+        return Operand(leg_bars=_leg_bars(value, f"{path}.leg_bars", episode_refs))
+    if key == "forming_candle":
+        return Operand(
+            forming_candle=_forming_candle(value, f"{path}.forming_candle", episode_refs)
+        )
+    if key == "impulse_atr":
+        return Operand(impulse_atr=_impulse_atr(value, f"{path}.impulse_atr", episode_refs))
     if key == "ratio":
         return Operand(ratio=_ratio(value, f"{path}.ratio", episode_refs))
     if key == "price":
@@ -896,11 +1174,69 @@ def _values(
             node,
             functools.partial(_leg_mean_operand, operand.leg_mean, frame, side, bundle),
         )
+    if operand.leg_sum is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(_leg_sum_operand, operand.leg_sum, frame, side, bundle),
+        )
+    if operand.leg_top_mean is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(_leg_top_mean_operand, operand.leg_top_mean, frame, side, bundle),
+        )
     if operand.anchor_follow is not None:
         return compute_through(
             context,
             node,
             functools.partial(_anchor_follow_operand, operand.anchor_follow, side, bundle),
+        )
+    if operand.leg_bars is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(_leg_bars_operand, operand.leg_bars, side, bundle),
+        )
+    if operand.forming_candle is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _forming_candle_operand,
+                operand.forming_candle,
+                frame,
+                context,
+                identity,
+                side,
+                bundle,
+            ),
+        )
+    if operand.impulse_atr is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _impulse_atr_operand, operand.impulse_atr, frame, context, identity, side, bundle
+            ),
+        )
+    if operand.leg_efficiency is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(_leg_efficiency_operand, operand.leg_efficiency, frame, side, bundle),
+        )
+    if operand.leg_speed is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(_leg_speed_operand, operand.leg_speed, frame, side, bundle),
+        )
+    if operand.pullback_depth is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(_pullback_depth_operand, operand.pullback_depth, frame, side, bundle),
         )
     if operand.ratio is not None:
         return compute_through(
@@ -1005,6 +1341,44 @@ def _leg_mean_operand(
     return leg_mean_values(episodes.side(leg_mean.episode, side), series, leg_mean.leg)
 
 
+def _leg_sum_operand(
+    leg_sum: LegSum,
+    frame: FeatureFrameLike,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "leg_sum operand has no evaluated episode", episode_ref=leg_sum.episode
+        )
+    arrays = frame_market_arrays(frame)
+    if leg_sum.field == OWN_COLOR_VOLUME:
+        series = own_color_volume_series(
+            arrays.array("open"), arrays.array("close"), arrays.array("volume"), side, leg_sum.leg
+        )
+    else:
+        series = arrays.array(leg_sum.field)
+    return leg_sum_values(episodes.side(leg_sum.episode, side), series, leg_sum.leg)
+
+
+def _leg_top_mean_operand(
+    leg_top_mean: LegTopMean,
+    frame: FeatureFrameLike,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "leg_top_mean operand has no evaluated episode", episode_ref=leg_top_mean.episode
+        )
+    series = frame_market_arrays(frame).array(leg_top_mean.field)
+    return leg_top_mean_values(
+        episodes.side(leg_top_mean.episode, side), series, leg_top_mean.leg, leg_top_mean.share
+    )
+
+
 def _anchor_follow_operand(
     anchor_follow: AnchorFollow, side: str, bundle: ContextBundle | None
 ) -> np.ndarray:
@@ -1014,6 +1388,118 @@ def _anchor_follow_operand(
             "anchor_follow operand has no evaluated episode", episode_ref=anchor_follow.episode
         )
     return anchor_follow_values(episodes.side(anchor_follow.episode, side))
+
+
+def _pullback_depth_operand(
+    pullback_depth: PullbackDepth,
+    frame: FeatureFrameLike,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "pullback_depth operand has no evaluated episode", episode_ref=pullback_depth.episode
+        )
+    market = frame_market_arrays(frame)
+    return pullback_depth_values(
+        episodes.side(pullback_depth.episode, side),
+        market.array("low"),
+        market.array("high"),
+        pullback_depth.touch,
+    )
+
+
+def _leg_efficiency_operand(
+    leg_efficiency: LegEfficiency,
+    frame: FeatureFrameLike,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "leg_efficiency operand has no evaluated episode", episode_ref=leg_efficiency.episode
+        )
+    close = frame_market_arrays(frame).array("close")
+    return leg_efficiency_values(
+        episodes.side(leg_efficiency.episode, side), close, leg_efficiency.leg
+    )
+
+
+def _leg_speed_operand(
+    leg_speed: LegSpeed,
+    frame: FeatureFrameLike,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "leg_speed operand has no evaluated episode", episode_ref=leg_speed.episode
+        )
+    close = frame_market_arrays(frame).array("close")
+    return leg_speed_values(episodes.side(leg_speed.episode, side), close, leg_speed.leg)
+
+
+def _leg_bars_operand(leg_bars: LegBars, side: str, bundle: ContextBundle | None) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "leg_bars operand has no evaluated episode", episode_ref=leg_bars.episode
+        )
+    return leg_bars_values(episodes.side(leg_bars.episode, side), leg_bars.leg)
+
+
+def _forming_candle_operand(
+    forming_candle: FormingCandle,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "forming_candle operand has no evaluated episode", episode_ref=forming_candle.episode
+        )
+    base = frame.market.base_timeframe
+    base_ms = timeframe_duration_ms(base)
+    timeframe_ms = timeframe_duration_ms(forming_candle.timeframe)
+    if timeframe_ms <= base_ms or timeframe_ms % base_ms or 86_400_000 % timeframe_ms:
+        raise InvalidRequestError(
+            "forming candle timeframe must be a longer multiple of the base timeframe "
+            "that divides a day",
+            timeframe=forming_candle.timeframe,
+            base_timeframe=base,
+        )
+    market = frame_market_arrays(frame)
+    return forming_candle_values(
+        episodes.side(forming_candle.episode, side),
+        time_ms=np.asarray(frame.time_ms, dtype=np.int64),
+        open_=market.array("open"),
+        close=market.array("close"),
+        timeframe_ms=timeframe_ms,
+        atr=_feature_array(forming_candle.atr, frame, context, identity),
+    )
+
+
+def _impulse_atr_operand(
+    impulse_atr: ImpulseAtr,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "impulse_atr operand has no evaluated episode", episode_ref=impulse_atr.episode
+        )
+    atr = _feature_array(impulse_atr.atr, frame, context, identity)
+    return impulse_atr_values(episodes.side(impulse_atr.episode, side), atr)
 
 
 def _ratio_operand(
@@ -1326,7 +1812,15 @@ def _has_value(operand: Operand) -> bool:
         or operand.ratio is not None
         or operand.candle is not None
         or operand.leg_mean is not None
+        or operand.leg_sum is not None
+        or operand.leg_top_mean is not None
         or operand.anchor_follow is not None
+        or operand.pullback_depth is not None
+        or operand.leg_speed is not None
+        or operand.impulse_atr is not None
+        or operand.leg_bars is not None
+        or operand.forming_candle is not None
+        or operand.leg_efficiency is not None
     )
 
 
@@ -1544,8 +2038,24 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("candle",)
     if operand.leg_mean is not None:
         return ("leg_mean",)
+    if operand.leg_sum is not None:
+        return ("leg_sum",)
+    if operand.leg_top_mean is not None:
+        return ("leg_top_mean",)
     if operand.anchor_follow is not None:
         return ("anchor_follow",)
+    if operand.pullback_depth is not None:
+        return ("pullback_depth",)
+    if operand.leg_speed is not None:
+        return ("leg_speed",)
+    if operand.leg_efficiency is not None:
+        return ("leg_efficiency",)
+    if operand.impulse_atr is not None:
+        return ("impulse_atr",)
+    if operand.leg_bars is not None:
+        return ("leg_bars",)
+    if operand.forming_candle is not None:
+        return ("forming_candle",)
     if operand.ratio is not None:
         return ("ratio",)
     return ("feature",)
@@ -1771,6 +2281,42 @@ def _resolve_operand(
         )
         operand_ids[path] = node
         return node, [node]
+    if operand.leg_sum is not None:
+        leg_sum = operand.leg_sum
+        episode = (contexts or {}).get(episode_identity_key(leg_sum.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "leg_sum episode is not declared", episode_ref=leg_sum.episode
+            )
+        node = node_spec(
+            "predicate.leg_sum",
+            version=PREDICATE_NODE_VERSION,
+            params={"leg": leg_sum.leg, "field": leg_sum.field},
+            upstream={"episode": episode},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node]
+    if operand.leg_top_mean is not None:
+        leg_top_mean = operand.leg_top_mean
+        episode = (contexts or {}).get(episode_identity_key(leg_top_mean.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "leg_top_mean episode is not declared", episode_ref=leg_top_mean.episode
+            )
+        node = node_spec(
+            "predicate.leg_top_mean",
+            version=PREDICATE_NODE_VERSION,
+            params={
+                "leg": leg_top_mean.leg,
+                "field": leg_top_mean.field,
+                "share": leg_top_mean.share,
+            },
+            upstream={"episode": episode},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node]
     if operand.anchor_follow is not None:
         anchor_follow = operand.anchor_follow
         episode = (contexts or {}).get(episode_identity_key(anchor_follow.episode, side))
@@ -1782,6 +2328,104 @@ def _resolve_operand(
             "predicate.anchor_follow",
             version=PREDICATE_NODE_VERSION,
             params={},
+            upstream={"episode": episode},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node]
+    if operand.leg_bars is not None:
+        leg_bars = operand.leg_bars
+        episode = (contexts or {}).get(episode_identity_key(leg_bars.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "leg_bars episode is not declared", episode_ref=leg_bars.episode
+            )
+        node = node_spec(
+            "predicate.leg_bars",
+            version=PREDICATE_NODE_VERSION,
+            params={"leg": leg_bars.leg},
+            upstream={"episode": episode},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node]
+    if operand.forming_candle is not None:
+        forming_candle = operand.forming_candle
+        episode = (contexts or {}).get(episode_identity_key(forming_candle.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "forming_candle episode is not declared", episode_ref=forming_candle.episode
+            )
+        column = _column_identity(forming_candle.atr, feature_ids, column_ids)
+        node = node_spec(
+            "predicate.forming_candle",
+            version=PREDICATE_NODE_VERSION,
+            params={"timeframe": forming_candle.timeframe},
+            upstream={"episode": episode, FORMING_CANDLE_ATR_FIELD: column},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node, column]
+    if operand.impulse_atr is not None:
+        impulse_atr = operand.impulse_atr
+        episode = (contexts or {}).get(episode_identity_key(impulse_atr.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "impulse_atr episode is not declared", episode_ref=impulse_atr.episode
+            )
+        column = _column_identity(impulse_atr.atr, feature_ids, column_ids)
+        node = node_spec(
+            "predicate.impulse_atr",
+            version=PREDICATE_NODE_VERSION,
+            params={},
+            upstream={"episode": episode, IMPULSE_ATR_FIELD: column},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node, column]
+    if operand.leg_efficiency is not None:
+        leg_efficiency = operand.leg_efficiency
+        episode = (contexts or {}).get(episode_identity_key(leg_efficiency.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "leg_efficiency episode is not declared", episode_ref=leg_efficiency.episode
+            )
+        node = node_spec(
+            "predicate.leg_efficiency",
+            version=PREDICATE_NODE_VERSION,
+            params={"leg": leg_efficiency.leg},
+            upstream={"episode": episode},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node]
+    if operand.leg_speed is not None:
+        leg_speed = operand.leg_speed
+        episode = (contexts or {}).get(episode_identity_key(leg_speed.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "leg_speed episode is not declared", episode_ref=leg_speed.episode
+            )
+        node = node_spec(
+            "predicate.leg_speed",
+            version=PREDICATE_NODE_VERSION,
+            params={"leg": leg_speed.leg},
+            upstream={"episode": episode},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node]
+    if operand.pullback_depth is not None:
+        pullback_depth = operand.pullback_depth
+        episode = (contexts or {}).get(episode_identity_key(pullback_depth.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "pullback_depth episode is not declared", episode_ref=pullback_depth.episode
+            )
+        node = node_spec(
+            "predicate.pullback_depth",
+            version=PREDICATE_NODE_VERSION,
+            params={} if pullback_depth.touch == "current" else {"touch": pullback_depth.touch},
             upstream={"episode": episode},
             side=side,
         )
