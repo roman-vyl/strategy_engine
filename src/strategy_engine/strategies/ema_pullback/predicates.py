@@ -46,6 +46,7 @@ from strategy_engine.strategies.ema_pullback.leg_means import (
     leg_top_mean_values,
     own_color_volume_series,
 )
+from strategy_engine.strategies.ema_pullback.leg_speed import leg_speed_values
 from strategy_engine.strategies.ema_pullback.pullback_depth import pullback_depth_values
 from strategy_engine.strategies.ema_pullback.stack_episode import (
     EpisodeRef,
@@ -176,6 +177,15 @@ class AnchorFollow:
 
 
 @dataclass(frozen=True, slots=True)
+class LegSpeed:
+    """The price distance per bar of the impulse `[S*, P]` or the pullback
+    `[P, t]` of the current touch (`a3-leg-speed-ratio-v1`, D1)."""
+
+    episode: str
+    leg: str
+
+
+@dataclass(frozen=True, slots=True)
 class PullbackDepth:
     """The share of the impulse height `|P - S*|` that the pullback `[P, t]`
     of the current touch gave back, by its extreme price
@@ -211,6 +221,7 @@ class Operand:
     leg_top_mean: LegTopMean | None = None
     anchor_follow: AnchorFollow | None = None
     pullback_depth: PullbackDepth | None = None
+    leg_speed: LegSpeed | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -325,6 +336,7 @@ def operand_needs_episode(operand: Operand) -> bool:
         or operand.leg_top_mean is not None
         or operand.anchor_follow is not None
         or operand.pullback_depth is not None
+        or operand.leg_speed is not None
     ):
         return True
     return operand.ratio is not None and (
@@ -385,7 +397,7 @@ def _feature(raw: object, path: str) -> PlannedFeature:
 
 _OPERAND_KEYS = (
     "feature, episode, segment, candle, leg_mean, leg_sum, leg_top_mean, anchor_follow, "
-    "pullback_depth, ratio, price or const"
+    "pullback_depth, leg_speed, ratio, price or const"
 )
 _SEGMENT_FIELDS = {
     "episode",
@@ -693,6 +705,23 @@ def _pullback_depth(raw: object, path: str, episode_refs: frozenset[str] | None)
     return PullbackDepth(ref, str(touch))
 
 
+def _leg_speed(raw: object, path: str, episode_refs: frozenset[str] | None) -> LegSpeed:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "leg"}, path)
+    for key in ("episode", "leg"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    leg = payload["leg"]
+    if leg not in ("impulse", "pullback"):
+        raise InvalidRequestError(f"{path}.leg must be impulse or pullback", leg=leg)
+    return LegSpeed(ref, str(leg))
+
+
 def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio:
     payload = _mapping(raw, path)
     _only_fields(payload, {"left", "right", "right_floor"}, path)
@@ -733,6 +762,8 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         return Operand(
             pullback_depth=_pullback_depth(value, f"{path}.pullback_depth", episode_refs)
         )
+    if key == "leg_speed":
+        return Operand(leg_speed=_leg_speed(value, f"{path}.leg_speed", episode_refs))
     if key == "ratio":
         return Operand(ratio=_ratio(value, f"{path}.ratio", episode_refs))
     if key == "price":
@@ -1028,6 +1059,12 @@ def _values(
             node,
             functools.partial(_anchor_follow_operand, operand.anchor_follow, side, bundle),
         )
+    if operand.leg_speed is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(_leg_speed_operand, operand.leg_speed, frame, side, bundle),
+        )
     if operand.pullback_depth is not None:
         return compute_through(
             context,
@@ -1204,6 +1241,21 @@ def _pullback_depth_operand(
         market.array("high"),
         pullback_depth.touch,
     )
+
+
+def _leg_speed_operand(
+    leg_speed: LegSpeed,
+    frame: FeatureFrameLike,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "leg_speed operand has no evaluated episode", episode_ref=leg_speed.episode
+        )
+    close = frame_market_arrays(frame).array("close")
+    return leg_speed_values(episodes.side(leg_speed.episode, side), close, leg_speed.leg)
 
 
 def _ratio_operand(
@@ -1520,6 +1572,7 @@ def _has_value(operand: Operand) -> bool:
         or operand.leg_top_mean is not None
         or operand.anchor_follow is not None
         or operand.pullback_depth is not None
+        or operand.leg_speed is not None
     )
 
 
@@ -1745,6 +1798,8 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("anchor_follow",)
     if operand.pullback_depth is not None:
         return ("pullback_depth",)
+    if operand.leg_speed is not None:
+        return ("leg_speed",)
     if operand.ratio is not None:
         return ("ratio",)
     return ("feature",)
@@ -2017,6 +2072,22 @@ def _resolve_operand(
             "predicate.anchor_follow",
             version=PREDICATE_NODE_VERSION,
             params={},
+            upstream={"episode": episode},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node]
+    if operand.leg_speed is not None:
+        leg_speed = operand.leg_speed
+        episode = (contexts or {}).get(episode_identity_key(leg_speed.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "leg_speed episode is not declared", episode_ref=leg_speed.episode
+            )
+        node = node_spec(
+            "predicate.leg_speed",
+            version=PREDICATE_NODE_VERSION,
+            params={"leg": leg_speed.leg},
             upstream={"episode": episode},
             side=side,
         )
