@@ -8,6 +8,7 @@ import pandas as pd
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.market import MarketFrame
+from strategy_engine.domain.ranges import timeframe_duration_ms
 from strategy_engine.domain.values import normalized_decimal_text
 from strategy_engine.indicators.market_arrays import MarketArrays
 
@@ -20,7 +21,9 @@ def pandas_frequency(timeframe: str) -> str:
     if timeframe.endswith("d"):
         return f"{int(timeframe[:-1])}D"
     if timeframe.endswith("w"):
-        return f"{int(timeframe[:-1])}W"
+        # Weeks start on Monday 00:00 UTC, as exchange weekly candles
+        # (OpenSpec `completed-candle-v1`); a plain "W" bins from Sunday.
+        return f"{int(timeframe[:-1])}W-MON"
     raise InvalidRequestError("unsupported indicator timeframe", timeframe=timeframe)
 
 
@@ -59,9 +62,8 @@ def align_completed_to_base(
     base_index: pd.Index,
 ) -> pd.Series:
     completed = feature.copy()
-    completed.index = completed.index + pd.tseries.frequencies.to_offset(
-        pandas_frequency(timeframe)
-    )
+    # A fixed duration: an anchored weekly offset would roll to its anchor day.
+    completed.index = completed.index + pd.Timedelta(timeframe_duration_ms(timeframe), unit="ms")
     return completed.reindex(base_index, method="ffill")
 
 

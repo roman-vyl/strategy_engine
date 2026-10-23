@@ -34,6 +34,12 @@ from strategy_engine.strategies.ema_pullback.candles import (
     CANDLE_ATR_KIND,
     candle_values,
 )
+from strategy_engine.strategies.ema_pullback.completed_candle import (
+    COMPLETED_CANDLE_ATR_FIELD,
+    COMPLETED_CANDLE_ATR_KIND,
+    COMPLETED_CANDLE_FIELDS,
+    completed_candle_values,
+)
 from strategy_engine.strategies.ema_pullback.forming_candle import (
     FORMING_CANDLE_ATR_FIELD,
     FORMING_CANDLE_ATR_KIND,
@@ -217,6 +223,18 @@ class FormingCandle:
 
 
 @dataclass(frozen=True, slots=True)
+class CompletedCandle:
+    """The body over the Wilder ATR of the candle before it, or the close
+    position in the range, of the last completed candle of `timeframe`,
+    signed by the side (`completed-candle-v1`, D1)."""
+
+    episode: str
+    timeframe: str
+    field: str
+    atr: PlannedFeature
+
+
+@dataclass(frozen=True, slots=True)
 class LegEfficiency:
     """The Kaufman efficiency ratio of the closes of the impulse `[S*, P]`
     or the pullback `[P, t]` of the current touch
@@ -276,6 +294,7 @@ class Operand:
     leg_bars: LegBars | None = None
     forming_candle: FormingCandle | None = None
     leg_efficiency: LegEfficiency | None = None
+    completed_candle: CompletedCandle | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -377,6 +396,8 @@ def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
         return (operand.impulse_atr.atr,)
     if operand.forming_candle is not None:
         return (operand.forming_candle.atr,)
+    if operand.completed_candle is not None:
+        return (operand.completed_candle.atr,)
     if operand.ratio is not None:
         return (*operand_features(operand.ratio.left), *operand_features(operand.ratio.right))
     return ()
@@ -399,6 +420,7 @@ def operand_needs_episode(operand: Operand) -> bool:
         or operand.leg_bars is not None
         or operand.forming_candle is not None
         or operand.leg_efficiency is not None
+        or operand.completed_candle is not None
     ):
         return True
     return operand.ratio is not None and (
@@ -460,7 +482,7 @@ def _feature(raw: object, path: str) -> PlannedFeature:
 _OPERAND_KEYS = (
     "feature, episode, segment, candle, leg_mean, leg_sum, leg_top_mean, anchor_follow, "
     "pullback_depth, leg_speed, impulse_atr, leg_bars, forming_candle, leg_efficiency, "
-    "ratio, price or const"
+    "completed_candle, ratio, price or const"
 )
 _SEGMENT_FIELDS = {
     "episode",
@@ -843,6 +865,39 @@ def _forming_candle(raw: object, path: str, episode_refs: frozenset[str] | None)
     return FormingCandle(ref, timeframe, atr)
 
 
+def _completed_candle(
+    raw: object, path: str, episode_refs: frozenset[str] | None
+) -> CompletedCandle:
+    payload = _mapping(raw, path)
+    keys = ("episode", "timeframe", "field", COMPLETED_CANDLE_ATR_FIELD)
+    _only_fields(payload, set(keys), path)
+    for key in keys:
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    timeframe = payload["timeframe"]
+    if not isinstance(timeframe, str) or not timeframe or timeframe == "base":
+        raise InvalidRequestError(f"{path}.timeframe must be a timeframe such as 1d or 1w")
+    timeframe_duration_ms(timeframe)
+    field = payload["field"]
+    if field not in COMPLETED_CANDLE_FIELDS:
+        raise InvalidRequestError(f"{path}.field must be body or close_position", field=field)
+    atr = _feature(payload[COMPLETED_CANDLE_ATR_FIELD], f"{path}.{COMPLETED_CANDLE_ATR_FIELD}")
+    if atr.kind != COMPLETED_CANDLE_ATR_KIND:
+        raise InvalidRequestError(f"{path}.atr must be the candle ATR feature", kind=atr.kind)
+    if atr.timeframe != timeframe:
+        raise InvalidRequestError(
+            f"{path}.atr.timeframe must equal the candle timeframe",
+            atr_timeframe=atr.timeframe,
+            timeframe=timeframe,
+        )
+    return CompletedCandle(ref, timeframe, str(field), atr)
+
+
 def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio:
     payload = _mapping(raw, path)
     _only_fields(payload, {"left", "right", "right_floor"}, path)
@@ -894,6 +949,10 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
     if key == "forming_candle":
         return Operand(
             forming_candle=_forming_candle(value, f"{path}.forming_candle", episode_refs)
+        )
+    if key == "completed_candle":
+        return Operand(
+            completed_candle=_completed_candle(value, f"{path}.completed_candle", episode_refs)
         )
     if key == "impulse_atr":
         return Operand(impulse_atr=_impulse_atr(value, f"{path}.impulse_atr", episode_refs))
@@ -1212,6 +1271,20 @@ def _values(
                 bundle,
             ),
         )
+    if operand.completed_candle is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _completed_candle_operand,
+                operand.completed_candle,
+                frame,
+                context,
+                identity,
+                side,
+                bundle,
+            ),
+        )
     if operand.impulse_atr is not None:
         return compute_through(
             context,
@@ -1482,6 +1555,46 @@ def _forming_candle_operand(
         close=market.array("close"),
         timeframe_ms=timeframe_ms,
         atr=_feature_array(forming_candle.atr, frame, context, identity),
+    )
+
+
+def _completed_candle_operand(
+    completed_candle: CompletedCandle,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "completed_candle operand has no evaluated episode",
+            episode_ref=completed_candle.episode,
+        )
+    base = frame.market.base_timeframe
+    base_ms = timeframe_duration_ms(base)
+    timeframe_ms = timeframe_duration_ms(completed_candle.timeframe)
+    if timeframe_ms <= base_ms or timeframe_ms % base_ms or (
+        86_400_000 % timeframe_ms and timeframe_ms % 604_800_000
+    ):
+        raise InvalidRequestError(
+            "completed candle timeframe must be a longer multiple of the base timeframe "
+            "that divides a day, or whole weeks",
+            timeframe=completed_candle.timeframe,
+            base_timeframe=base,
+        )
+    market = frame_market_arrays(frame)
+    return completed_candle_values(
+        episodes.side(completed_candle.episode, side),
+        time_ms=np.asarray(frame.time_ms, dtype=np.int64),
+        open_=market.array("open"),
+        high=market.array("high"),
+        low=market.array("low"),
+        close=market.array("close"),
+        timeframe_ms=timeframe_ms,
+        field=completed_candle.field,
+        atr=_feature_array(completed_candle.atr, frame, context, identity),
     )
 
 
@@ -1821,6 +1934,7 @@ def _has_value(operand: Operand) -> bool:
         or operand.leg_bars is not None
         or operand.forming_candle is not None
         or operand.leg_efficiency is not None
+        or operand.completed_candle is not None
     )
 
 
@@ -2056,6 +2170,8 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("leg_bars",)
     if operand.forming_candle is not None:
         return ("forming_candle",)
+    if operand.completed_candle is not None:
+        return ("completed_candle",)
     if operand.ratio is not None:
         return ("ratio",)
     return ("feature",)
@@ -2362,6 +2478,23 @@ def _resolve_operand(
             version=PREDICATE_NODE_VERSION,
             params={"timeframe": forming_candle.timeframe},
             upstream={"episode": episode, FORMING_CANDLE_ATR_FIELD: column},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node, column]
+    if operand.completed_candle is not None:
+        completed_candle = operand.completed_candle
+        episode = (contexts or {}).get(episode_identity_key(completed_candle.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "completed_candle episode is not declared", episode_ref=completed_candle.episode
+            )
+        column = _column_identity(completed_candle.atr, feature_ids, column_ids)
+        node = node_spec(
+            "predicate.completed_candle",
+            version=PREDICATE_NODE_VERSION,
+            params={"timeframe": completed_candle.timeframe, "field": completed_candle.field},
+            upstream={"episode": episode, COMPLETED_CANDLE_ATR_FIELD: column},
             side=side,
         )
         operand_ids[path] = node
