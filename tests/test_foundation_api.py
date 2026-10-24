@@ -109,6 +109,8 @@ def test_catalogs_advertise_only_ported_capabilities() -> None:
             "di_plus",
             "di_minus",
             "atr_wilder",
+            "candle_body_atr",
+            "candle_close_position",
         ]
         assert client.get("/v1/indicators/ema/schema").status_code == 200
         strategies = client.get("/v1/strategies").json()["items"]

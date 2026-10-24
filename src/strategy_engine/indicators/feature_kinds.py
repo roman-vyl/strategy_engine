@@ -24,6 +24,10 @@ from strategy_engine.indicators.implementations.atr import validate_atr_feature
 from strategy_engine.indicators.implementations.atr_distance import (
     validate_atr_distance_feature,
 )
+from strategy_engine.indicators.implementations.candle_shape import (
+    validate_candle_body_atr_feature,
+    validate_candle_close_position_feature,
+)
 from strategy_engine.indicators.implementations.ema import validate_ema_feature
 from strategy_engine.indicators.implementations.rsi import validate_rsi_feature
 
@@ -126,6 +130,28 @@ _DI_MINUS_SCHEMA = {
     "title": "Negative Directional Index",
 }
 
+_CANDLE_BODY_ATR_SCHEMA: dict[str, Any] = {
+    **_ATR_SCHEMA,
+    "indicator_id": "candle_body_atr",
+    "title": "Candle body over the Wilder ATR of the previous candle",
+    "inputs": ["open", "high", "low", "close"],
+}
+
+_CANDLE_CLOSE_POSITION_SCHEMA: dict[str, Any] = {
+    "indicator_id": "candle_close_position",
+    "title": "Candle close position in its range",
+    "inputs": ["high", "low", "close"],
+    "parameters": {
+        "source": {"const": "close"},
+        "timeframe": {"type": "string"},
+    },
+    "outputs": ["value"],
+    "supports_batch": True,
+    "supports_managed_replay": True,
+    "supports_incremental": False,
+    "compatibility_profile": "bbb_v1",
+}
+
 
 Label = Callable[[str, str | None, Mapping[str, Any], tuple[str, ...]], str]
 
@@ -174,6 +200,16 @@ def _atr_distance_label(
     return f"{dependencies[0]}_x{_multiplier_token(float(params['multiplier']))}"
 
 
+def _close_position_label(
+    timeframe: str, source: str | None, params: Mapping[str, Any], _: tuple[str, ...]
+) -> str:
+    return f"candle_close_position_{timeframe}"
+
+
+def _no_identity(feature: PlannedFeature) -> dict[str, Any]:
+    return {}
+
+
 def _period_identity(feature: PlannedFeature) -> dict[str, Any]:
     return {"period": int(feature.parameters["period"])}
 
@@ -215,6 +251,17 @@ _CONTRACTS: dict[str, FeatureKindContract] = {
         _period_kind("di_plus", _DI_PLUS_SCHEMA, validate_adx_dmi_feature),
         _period_kind("di_minus", _DI_MINUS_SCHEMA, validate_adx_dmi_feature),
         _period_kind("atr_wilder", _ATR_WILDER_SCHEMA, validate_atr_feature),
+        _period_kind(
+            "candle_body_atr", _CANDLE_BODY_ATR_SCHEMA, validate_candle_body_atr_feature
+        ),
+        FeatureKindContract(
+            kind="candle_close_position",
+            schema=_CANDLE_CLOSE_POSITION_SCHEMA,
+            default_source="close",
+            validate=validate_candle_close_position_feature,
+            label=_close_position_label,
+            identity_params=_no_identity,
+        ),
     )
 }
 

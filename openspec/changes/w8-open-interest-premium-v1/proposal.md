@@ -4,18 +4,17 @@ DRAFT for the owner's decision. No code until the owner's word: the market data 
 
 ## Why
 
-Vote **W8 variant 6** for EMA200 has 12 voters. Two read candles only (D1v, Wk: OpenSpec `completed-candle-v1`). The other ten read
+Vote **W8 variant 6** for EMA200 has 12 voters. Two read candles only (D1v, Wk: OpenSpec `htf-candle-shape-v1`). The other ten read
 market data the Engine never receives today:
 
 - **open interest (OI), Bybit, 15-minute series**: W8_30, W8_14, W8r, W8p, O1, kI, W1r, W1d, W2d;
 - **premium index, Bybit, 5-minute kline**: PS_R.
 
-The Engine request carries only OHLCV candles (`MarketFrame`). MDS stores and streams only candles. Research Service passes MDS
-candles to the Engine. Runtime receives MDS candles live.
+The Engine reads only OHLCV candles from MDS (`MarketFrame`); MDS stores and streams only candles.
 
 ## What Changes (proposed)
 
-1. **Market series input.** The evaluation request MAY carry named extra series next to the candles:
+1. **Market series input.** The evaluation MAY read named extra series next to the candles:
    `open_interest` (15m points) and `premium_index` (5m closes), each as `(time_ms, value)` pairs. A spec that reads none of them
    needs none; a spec that reads one fails closed without it.
 2. **As-of alignment to base bars** (no look-ahead):
@@ -32,11 +31,13 @@ candles to the Engine. Runtime receives MDS candles live.
      W1r = `ratio(kR, kI)` only when kI > 0; W1d = kR − kI; W2d = O1 − O1p. The Engine has `ratio` but no difference and no nested
      ratio, so this change adds a `difference` operand and allows one level of nesting, or adds `kI`/`kR` as operands (to decide
      in design).
-4. **Outside the Engine** (separate OpenSpecs in other repos, owner's word needed):
-   - MDS: store and serve Bybit OI 15m and premium index 5m history and stream them live (Bybit REST `open-interest`,
-     `premium-index-price-kline`; WS ticker `openInterest`).
-   - Research Service: read them from MDS and pass them in the evaluation request.
-   - Runtime: pass the live values with the bar.
+4. **Reading the series.** The Engine reads its candles from MDS itself (`adapters/market_data_service/client.py`), in live and in
+   research runs; Research Service and Runtime do not pass candles. The Engine's MDS client SHALL read the new series the same way,
+   from the MDS contract drafted in market_data_service (branch `claude/project-thread-vt9bk5`, OpenSpec
+   `mds-open-interest-premium-series-v1`): `GET /v1/series?ticker=&series=open_interest_15m|premium_index_5m&from_ms=&to_ms=` and
+   `GET /v1/series-streams/{ticker}/{series}/bounds`. An OI point is stamped with the start of its 15-minute bucket, a premium point
+   with the open of its 5m bar; the as-of rule above stays in the Engine. Storing and downloading the series is MDS work, in its own
+   thread.
 
 ## Research references
 

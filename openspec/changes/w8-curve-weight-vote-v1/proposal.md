@@ -20,7 +20,10 @@ with how bad its value is:
    `grid` strictly increasing, `excess` the same length; outside the grid the end value is used (as `np.interp`); a missing value
    weighs 0. The weight is a float (the step weights stay exact decimals).
 2. A vote input MAY carry `when`: a list of `range` conditions over other operands; the input weighs 0 unless all hold. D1v is
-   `forming_candle 1d` with `when` `completed_candle 1d body ≥ 1` and `completed_candle 1d close_position ≥ 0.85`.
+   `forming_candle 1d` with `when` `candle_body_atr 1d ≥ 1` and `candle_close_position 1d ≥ 0.85` on a long (short: `≤ −1`,
+   `≤ 0.15`), the `short` override of a predicate.
+4. A curve input reads its operand "our way": the config MAY give a `short` operand override (Wk on a short reads
+   `−candle_body_atr 1w`).
 3. The trace keeps `input:<id>:value`, `input:<id>:weight`, and adds `input:<id>:excess`.
 
 ## Config of variant 6 (from research, no numbers in the Engine)

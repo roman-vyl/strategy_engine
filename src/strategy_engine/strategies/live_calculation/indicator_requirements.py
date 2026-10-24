@@ -24,10 +24,14 @@ _CALIBRATED_EMA_CONVERGENCE_TOLERANCE = 1e-4
 _CALIBRATED_ADX_DMI_CONVERGENCE_TOLERANCE = 1e-4
 
 _FINITE_KINDS = {"rsi", "atr"}
+# htf-candle-shape-v1: the close position reads only its own candle.
+_SINGLE_CANDLE_KINDS = {"candle_close_position"}
 _EMA_KINDS = {"ema"}
 _WILDER_KINDS = {"adx", "di_plus", "di_minus"}
 _ZERO_WARMUP_KINDS = {"atr_distance"}
-_WILDER_ATR_KINDS = {"atr_wilder"}
+# htf-candle-shape-v1: the candle body is normalised by the Wilder ATR of the
+# previous candle, one candle more than the ATR itself.
+_WILDER_ATR_KINDS = {"atr_wilder", "candle_body_atr"}
 
 
 def _ema_convergence_bars(period: int, tolerance: float) -> int:
@@ -125,6 +129,12 @@ class ResolveIndicatorHistoryRequirements:
                 reason=f"{feature.output_id}: {kind} inherits upstream dependency's own "
                 "requirement, contributes zero additional warm-up",
             )
+        if kind in _SINGLE_CANDLE_KINDS:
+            return HistoryRequirement(
+                timeframe=feature.timeframe,
+                bars=1,
+                reason=f"{feature.output_id}: {kind} reads its own candle only",
+            )
         if kind in _FINITE_KINDS:
             period = int(feature.parameters["period"])
             return HistoryRequirement(
@@ -157,11 +167,13 @@ class ResolveIndicatorHistoryRequirements:
         if kind in _WILDER_ATR_KINDS:
             period = int(feature.parameters["period"])
             bars = period + _wilder_convergence_bars(period, self._adx_dmi_tolerance)
+            if kind == "candle_body_atr":
+                bars += 1
             return HistoryRequirement(
                 timeframe=feature.timeframe,
                 bars=bars,
                 reason=(
-                    f"{feature.output_id}: atr_wilder(period={period}) seed plus Wilder RMA "
+                    f"{feature.output_id}: {kind}(period={period}) seed plus Wilder RMA "
                     f"convergence warm-up at tolerance={self._adx_dmi_tolerance}"
                 ),
             )

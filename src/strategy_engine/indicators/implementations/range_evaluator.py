@@ -32,6 +32,12 @@ from strategy_engine.indicators.implementations.atr import (
 from strategy_engine.indicators.implementations.atr_distance import (
     validate_atr_distance_feature,
 )
+from strategy_engine.indicators.implementations.candle_shape import (
+    candle_body_atr,
+    candle_close_position,
+    validate_candle_body_atr_feature,
+    validate_candle_close_position_feature,
+)
 from strategy_engine.indicators.implementations.ema import validate_ema_feature
 from strategy_engine.indicators.implementations.frame_ops import (
     align_completed_to_base,
@@ -155,6 +161,12 @@ def _compute_feature(
         values = _atr_values(feature_frame, feature)
     elif feature.kind == "atr_wilder":
         values = _atr_wilder_values(feature_frame, feature)
+    elif feature.kind == "candle_body_atr":
+        validate_candle_body_atr_feature(feature)
+        values = candle_body_atr(feature_frame, period=_feature_period(feature))
+    elif feature.kind == "candle_close_position":
+        validate_candle_close_position_feature(feature)
+        values = candle_close_position(feature_frame)
     elif feature.kind == "atr_distance":
         validate_atr_distance_feature(feature)
         dependency_id = feature.dependencies[0]

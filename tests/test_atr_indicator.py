@@ -50,6 +50,8 @@ def test_registry_exposes_atr_schema() -> None:
         "di_plus",
         "di_minus",
         "atr_wilder",
+        "candle_body_atr",
+        "candle_close_position",
     ]
     assert registry.get_schema("atr")["compatibility_profile"] == "bbb_v1"
 

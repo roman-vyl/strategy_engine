@@ -6318,6 +6318,59 @@
     "supports_incremental": false,
     "supports_managed_replay": true,
     "title": "Wilder Average True Range"
+   },
+   {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "candle_body_atr",
+    "inputs": [
+     "open",
+     "high",
+     "low",
+     "close"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "const": "close"
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Candle body over the Wilder ATR of the previous candle"
+   },
+   {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "candle_close_position",
+    "inputs": [
+     "high",
+     "low",
+     "close"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "source": {
+      "const": "close"
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Candle close position in its range"
    }
   ],
   "feature_identities": {
@@ -6440,6 +6493,59 @@
     "supports_incremental": false,
     "supports_managed_replay": true,
     "title": "Wilder Average True Range"
+   },
+   "candle_body_atr": {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "candle_body_atr",
+    "inputs": [
+     "open",
+     "high",
+     "low",
+     "close"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "const": "close"
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Candle body over the Wilder ATR of the previous candle"
+   },
+   "candle_close_position": {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "candle_close_position",
+    "inputs": [
+     "high",
+     "low",
+     "close"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "source": {
+      "const": "close"
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Candle close position in its range"
    },
    "di_minus": {
     "calculation_group": "adx_dmi",
