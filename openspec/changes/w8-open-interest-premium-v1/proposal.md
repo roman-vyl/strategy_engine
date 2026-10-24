@@ -14,12 +14,15 @@ The Engine reads only OHLCV candles from MDS (`MarketFrame`); MDS stores and str
 
 ## What Changes (proposed)
 
-1. **Market series input.** The evaluation MAY read named extra series next to the candles:
-   `open_interest` (15m points) and `premium_index` (5m closes), each as `(time_ms, value)` pairs. A spec that reads none of them
-   needs none; a spec that reads one fails closed without it.
-2. **As-of alignment to base bars** (no look-ahead):
-   - OI: at the close of 5m bar `x` the value is the last OI point whose 15-minute bucket has closed (`ts + 15m ≤ x + 5m`).
-   - premium: the premium bar with the same open as the candle, not older than 15 minutes.
+1. **Market data input (MDS contract, owner 2026-10-24 08:01).** No separate series endpoint: MDS stores OI and premium in the 5m
+   candle row next to `volume`: `open_interest` (Bybit OI, `intervalTime=5min`, at the bar open) and `premium_close` (close of the
+   5m premium bar with the same open), served by `/v1/candles` and `/v1/historical-candles`, `null` when not loaded;
+   `market_data_hash` stays OHLCV-only, an `extras_hash` covers the two fields. Draft: market_data_service branch
+   `claude/project-thread-vt9bk5` (95f8944), OpenSpec `mds-candle-open-interest-premium-v1`. The Engine's market frame and MDS client
+   SHALL carry the two optional fields; a spec that reads none of them needs none, a spec that reads one fails closed without it.
+2. **Timing.** The fields are written right after the candle commit, so live the Engine SHALL briefly wait/re-read when the last bar
+   has no fields yet. Research used 15m OI with an as-of lag (`ts + 15m ≤ x + 5m`); the MDS thread checks that the 5m values equal the
+   research 15m points at :00/:15/:30/:45 before the as-of rule for the Engine is fixed.
 3. **Atomic operands** over the aligned series and the wave points `S*` (impulse start), `P` (peak), `t` (entry), `g` side sign:
    - `series_window_share {series, window_days, at: t|P}`: value at `t` (or `P`) ÷ max over the last `window_days` (W8_30, W8_14,
      W8p); `series_window_rank`: (value − min) ÷ (max − min) (W8r). Missing until a full window of history.
@@ -31,14 +34,6 @@ The Engine reads only OHLCV candles from MDS (`MarketFrame`); MDS stores and str
      W1r = `ratio(kR, kI)` only when kI > 0; W1d = kR − kI; W2d = O1 − O1p. The Engine has `ratio` but no difference and no nested
      ratio, so this change adds a `difference` operand and allows one level of nesting, or adds `kI`/`kR` as operands (to decide
      in design).
-4. **Reading the series.** The Engine reads its candles from MDS itself (`adapters/market_data_service/client.py`), in live and in
-   research runs; Research Service and Runtime do not pass candles. The Engine's MDS client SHALL read the new series the same way,
-   from the MDS contract drafted in market_data_service (branch `claude/project-thread-vt9bk5`, OpenSpec
-   `mds-open-interest-premium-series-v1`): `GET /v1/series?ticker=&series=open_interest_15m|premium_index_5m&from_ms=&to_ms=` and
-   `GET /v1/series-streams/{ticker}/{series}/bounds`. An OI point is stamped with the start of its 15-minute bucket, a premium point
-   with the open of its 5m bar; the as-of rule above stays in the Engine. Storing and downloading the series is MDS work, in its own
-   thread.
-
 ## Research references
 
 `/mnt/project-files/ema200_calib/review/`: `oi/w8/var/w8var.py` (W8_30, W8_14, W8r), `oi/w8/w8.py` (W8p), `oi/oi_filters.py` (O1, O2),
