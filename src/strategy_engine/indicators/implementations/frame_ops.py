@@ -22,7 +22,7 @@ def pandas_frequency(timeframe: str) -> str:
         return f"{int(timeframe[:-1])}D"
     if timeframe.endswith("w"):
         # Weeks start on Monday 00:00 UTC, as exchange weekly candles
-        # (OpenSpec `completed-candle-v1`); a plain "W" bins from Sunday.
+        # (OpenSpec `htf-candle-shape-v1`); a plain "W" bins from Sunday.
         return f"{int(timeframe[:-1])}W-MON"
     raise InvalidRequestError("unsupported indicator timeframe", timeframe=timeframe)
 
