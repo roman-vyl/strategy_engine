@@ -290,6 +290,7 @@ class Operand:
     forming_candle: FormingCandle | None = None
     leg_efficiency: LegEfficiency | None = None
     leg_change: LegChange | None = None
+    absolute: Operand | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -393,6 +394,8 @@ def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
         return (operand.forming_candle.atr,)
     if operand.ratio is not None:
         return (*operand_features(operand.ratio.left), *operand_features(operand.ratio.right))
+    if operand.absolute is not None:
+        return operand_features(operand.absolute)
     return ()
 
 
@@ -416,6 +419,8 @@ def operand_needs_episode(operand: Operand) -> bool:
         or operand.leg_change is not None
     ):
         return True
+    if operand.absolute is not None:
+        return operand_needs_episode(operand.absolute)
     return operand.ratio is not None and (
         operand_needs_episode(operand.ratio.left) or operand_needs_episode(operand.ratio.right)
     )
@@ -475,7 +480,7 @@ def _feature(raw: object, path: str) -> PlannedFeature:
 _OPERAND_KEYS = (
     "feature, episode, segment, candle, leg_mean, leg_sum, leg_top_mean, anchor_follow, "
     "pullback_depth, leg_speed, impulse_atr, leg_bars, forming_candle, leg_efficiency, "
-    "leg_change, ratio, price or const"
+    "leg_change, abs, ratio, price or const"
 )
 _SEGMENT_FIELDS = {
     "episode",
@@ -893,6 +898,16 @@ def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio
     return Ratio(left, right, floor)
 
 
+def _absolute(raw: object, path: str, episode_refs: frozenset[str] | None) -> Operand:
+    """The inner operand of an `abs` (`ki-abs-operand-v1`, D1): not a
+    constant, an `abs` or a `ratio`, so `abs` adds no way to nest a ratio."""
+
+    inner = _operand(raw, path, episode_refs)
+    if inner.const is not None or inner.absolute is not None or inner.ratio is not None:
+        raise InvalidRequestError(f"{path} must not be a constant, an abs or a ratio")
+    return inner
+
+
 def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Operand:
     payload = _mapping(raw, path)
     if len(payload) != 1:
@@ -936,6 +951,8 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         return Operand(impulse_atr=_impulse_atr(value, f"{path}.impulse_atr", episode_refs))
     if key == "ratio":
         return Operand(ratio=_ratio(value, f"{path}.ratio", episode_refs))
+    if key == "abs":
+        return Operand(absolute=_absolute(value, f"{path}.abs", episode_refs))
     if key == "price":
         if value not in _PRICE_FIELDS:
             raise InvalidRequestError(f"{path}.price must be open, high, low or close")
@@ -1289,6 +1306,14 @@ def _values(
                 _ratio_operand, operand.ratio, frame, context, identity, side, bundle, path
             ),
         )
+    if operand.absolute is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _absolute_operand, operand.absolute, frame, context, identity, side, bundle, path
+            ),
+        )
     assert operand.feature is not None
     return _feature_array(operand.feature, frame, context, identity)
 
@@ -1581,6 +1606,24 @@ def _ratio_operand(
     valid = np.isfinite(left) & np.isfinite(right) & (right > ratio.right_floor)
     out = np.full(length, math.nan)
     np.divide(left, right, out=out, where=valid)
+    out.flags.writeable = False
+    return out
+
+
+def _absolute_operand(
+    inner: Operand,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+    path: str,
+) -> np.ndarray:
+    length = len(frame.time_ms)
+    values = np.broadcast_to(
+        _values(inner, frame, context, identity, side, bundle, f"{path}.abs"), (length,)
+    )
+    out = np.abs(np.asarray(values, dtype=np.float64))
     out.flags.writeable = False
     return out
 
@@ -1882,6 +1925,7 @@ def _has_value(operand: Operand) -> bool:
         or operand.forming_candle is not None
         or operand.leg_efficiency is not None
         or operand.leg_change is not None
+        or operand.absolute is not None
     )
 
 
@@ -2121,6 +2165,8 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("forming_candle",)
     if operand.ratio is not None:
         return ("ratio",)
+    if operand.absolute is not None:
+        return ("abs",)
     return ("feature",)
 
 
@@ -2543,6 +2589,26 @@ def _resolve_operand(
         )
         operand_ids[path] = node
         return node, [node, *consumed]
+    if operand.absolute is not None:
+        inner_node, inner_consumed = _resolve_operand(
+            operand.absolute,
+            f"{path}.abs",
+            feature_ids,
+            side,
+            contexts,
+            column_ids,
+            episode_ids,
+            operand_ids,
+        )
+        node = node_spec(
+            "predicate.abs",
+            version=PREDICATE_NODE_VERSION,
+            params={"operand": _operand_param(operand.absolute)},
+            upstream={} if inner_node is None else {"operand": inner_node},
+            side=side if operand_needs_episode(operand) else None,
+        )
+        operand_ids[path] = node
+        return node, [node, *inner_consumed]
     return None, []
 
 
