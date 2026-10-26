@@ -967,7 +967,7 @@ SHALL stay a value.
 
 A leg mean reference SHALL be `{"leg_mean": {"episode", "leg", "field"}}`; all three are required and no other field is allowed.
 `episode` SHALL name an episode declared in `raw_spec.ema_stack_episode`, `leg` SHALL be `impulse` or `pullback` and `field` SHALL be
-`volume`, `force_with` or `force_against`. It SHALL be accepted as a side of a `ratio`, as the operand of a `range` and of a
+`volume`, `open_interest`, `force_with` or `force_against`. It SHALL be accepted as a side of a `ratio`, as the operand of a `range` and of a
 `compare`, and rejected as the operand of a `change`.
 
 #### Scenario: Malformed leg mean
@@ -991,6 +991,11 @@ field. Bars after `t` SHALL NOT be read.
 
 - **WHEN** a wave has origin 10, peak 14 and `t` = 20
 - **THEN** the impulse mean SHALL average bars 10 to 14 and the pullback mean bars 15 to 20.
+
+#### Scenario: Bar without open interest
+
+- **WHEN** the field is `open_interest` and a bar of the leg has no open interest
+- **THEN** the leg mean, leg sum and leg top mean of that leg SHALL be missing.
 
 ### Requirement: Volume ratio filter
 
@@ -1121,7 +1126,7 @@ not less than `max` (both inclusive), each bound optional. A missing value SHALL
 
 A leg sum reference SHALL be `{"leg_sum": {"episode", "leg", "field"}}`; all three are required and no other field is allowed.
 `episode` SHALL name an episode declared in `raw_spec.ema_stack_episode`, `leg` SHALL be `impulse` or `pullback` and `field` SHALL be
-`volume`. It SHALL be accepted as a side of a `ratio`, as the operand of a `range`, of a `compare` and of a weighted vote input, and
+`volume` or `open_interest`. It SHALL be accepted as a side of a `ratio`, as the operand of a `range`, of a `compare` and of a weighted vote input, and
 rejected as the operand of a `change`.
 
 #### Scenario: Malformed leg sum
@@ -1201,7 +1206,7 @@ than the ratio's `right_floor` (default 0) or either sum is missing. A pullback 
 ### Requirement: Leg top mean operand shape
 
 A leg top mean reference SHALL be `{"leg_top_mean": {"episode", "leg", "field", "share"}}`; all four are required and no other field
-is allowed. `episode` SHALL name a declared episode, `leg` SHALL be `impulse` or `pullback`, `field` SHALL be `volume` and `share` a
+is allowed. `episode` SHALL name a declared episode, `leg` SHALL be `impulse` or `pullback`, `field` SHALL be `volume` or `open_interest` and `share` a
 finite number greater than 0 and at most 1. It SHALL be accepted where a leg sum is accepted and rejected as the operand of a `change`.
 
 #### Scenario: Malformed leg top mean

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from decimal import Decimal
+
 import httpx
 import pytest
 
@@ -197,3 +200,78 @@ def test_mds_client_rejects_inverted_bounds_as_upstream_contract_error() -> None
     )
     with pytest.raises(UpstreamContractError, match="inverted stream bounds"):
         adapter.load_bounds(MarketStream("BTCUSDT.P", "1m"))
+
+
+def _historical_client_for(payload: dict[str, object]) -> MarketDataServiceClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/historical-candles"
+        return httpx.Response(200, json=payload)
+
+    client = httpx.Client(base_url="http://mds", transport=httpx.MockTransport(handler))
+    return MarketDataServiceClient("http://mds", client=client)
+
+
+def _range_payload(open_interest: list[object]) -> dict[str, object]:
+    candles: list[dict[str, object]] = []
+    for index, value in enumerate(open_interest):
+        candle: dict[str, object] = {
+            "open_time_ms": index * 60_000,
+            "open": "1",
+            "high": "2",
+            "low": "1",
+            "close": "1.5",
+            "volume": "10",
+        }
+        if value is not _ABSENT:
+            candle["open_interest"] = value
+        candles.append(candle)
+    return {
+        "ticker": "BTCUSDT.P",
+        "timeframe": "1m",
+        "from_ms": 0,
+        "to_ms": len(candles) * 60_000,
+        "market_data_hash": "mds-hash",
+        "candles": candles,
+    }
+
+
+_ABSENT = object()
+
+
+def _load(payload: dict[str, object], *, historical: bool):  # type: ignore[no-untyped-def]
+    time_range = TimeRange(0, int(str(payload["to_ms"])))
+    market = MarketStream("BTCUSDT.P", "1m")
+    if historical:
+        return _historical_client_for(payload).load_range(
+            market, time_range, expected_market_data_hash="mds-hash"
+        )
+    return client_for(payload).load_range(market, time_range)
+
+
+@pytest.mark.parametrize("historical", [False, True])
+def test_mds_client_carries_optional_open_interest_on_the_bars(
+    historical: bool,
+) -> None:
+    without = _load(_range_payload([_ABSENT, _ABSENT, _ABSENT]), historical=historical)
+    with_oi = _load(_range_payload(["123456.789", None, _ABSENT]), historical=historical)
+    assert [bar.open_interest for bar in with_oi.bars] == [Decimal("123456.789"), None, None]
+    assert all(bar.open_interest is None for bar in without.bars)
+    assert [replace(bar, open_interest=None) for bar in with_oi.bars] == list(without.bars)
+    assert with_oi.market_data_hash == without.market_data_hash == "mds-hash"
+    assert with_oi.requested_range == without.requested_range
+
+
+@pytest.mark.parametrize("historical", [False, True])
+@pytest.mark.parametrize("value", [123.4, 5, True, {"v": "1"}, "abc", "NaN", "Infinity", ""])
+def test_mds_client_rejects_malformed_open_interest(historical: bool, value: object) -> None:
+    with pytest.raises(UpstreamContractError):
+        _load(_range_payload(["1", value]), historical=historical)
+
+
+def test_mds_client_still_rejects_other_unknown_candle_fields() -> None:
+    payload = _range_payload(["1"])
+    candles = payload["candles"]
+    assert isinstance(candles, list)
+    candles[0]["turnover"] = "5"
+    with pytest.raises(UpstreamContractError):
+        _load(payload, historical=False)

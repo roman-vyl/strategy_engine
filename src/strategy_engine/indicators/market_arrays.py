@@ -29,6 +29,7 @@ nodes or candidates.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -40,10 +41,14 @@ if TYPE_CHECKING:
     from strategy_engine.indicators.contracts import FeatureFrameLike
 
 OHLCV_FIELDS: tuple[str, ...] = ("open", "high", "low", "close", "volume")
+# Optional market field: served by `values`/`array` and as a column of the
+# indicator DataFrame (NaN where a bar has none), never in the OHLCV columns.
+OPEN_INTEREST_FIELD = "open_interest"
 
 
 class MarketArrays:
-    """Float64 OHLCV / `DatetimeIndex` / `time_ms` for one range's bars."""
+    """Float64 OHLCV and open interest / `DatetimeIndex` / `time_ms` for
+    one range's bars."""
 
     __slots__ = ("_bars", "_time_ms", "_index", "_values", "_arrays")
 
@@ -80,13 +85,20 @@ class MarketArrays:
         return index
 
     def values(self, field: str) -> tuple[float, ...]:
-        """Per-bar `float(bar.<field>)` as a tuple of Python floats."""
+        """Per-bar `float(bar.<field>)` as a tuple of Python floats
+        (NaN for a bar without open interest)."""
 
         values = self._values.get(field)
         if values is None:
-            if field not in OHLCV_FIELDS:
+            if field == OPEN_INTEREST_FIELD:
+                values = tuple(
+                    math.nan if bar.open_interest is None else float(bar.open_interest)
+                    for bar in self._bars
+                )
+            elif field in OHLCV_FIELDS:
+                values = tuple(float(getattr(bar, field)) for bar in self._bars)
+            else:
                 raise KeyError(field)
-            values = tuple(float(getattr(bar, field)) for bar in self._bars)
             self._values[field] = values
         return values
 
@@ -107,9 +119,12 @@ class MarketArrays:
         return {field: self.array(field) for field in OHLCV_FIELDS}
 
     def dataframe(self) -> pd.DataFrame:
-        """A fresh float64 OHLCV DataFrame indexed by `index()`."""
+        """A fresh float64 DataFrame of the OHLCV columns and `open_interest`
+        (NaN where a bar has none), indexed by `index()`."""
 
-        return pd.DataFrame(self.ohlcv_columns(), index=self.index())
+        columns = self.ohlcv_columns()
+        columns[OPEN_INTEREST_FIELD] = self.array(OPEN_INTEREST_FIELD)
+        return pd.DataFrame(columns, index=self.index())
 
 
 def frame_market_arrays(frame: FeatureFrameLike) -> MarketArrays:

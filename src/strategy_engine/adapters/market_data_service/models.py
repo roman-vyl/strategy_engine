@@ -14,6 +14,8 @@ class CandlePayload(BaseModel):
     low: StrictStr
     close: StrictStr
     volume: StrictStr
+    # Optional: None where MDS has no open interest for the bar.
+    open_interest: StrictStr | None = None
 
 
 class CandleRangePayload(BaseModel):
