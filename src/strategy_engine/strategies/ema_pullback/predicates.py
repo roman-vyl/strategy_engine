@@ -44,6 +44,7 @@ from strategy_engine.strategies.ema_pullback.impulse_atr import (
     IMPULSE_ATR_KIND,
     impulse_atr_values,
 )
+from strategy_engine.strategies.ema_pullback.leg_change import LEG_CHANGE_FIELDS, leg_change_values
 from strategy_engine.strategies.ema_pullback.leg_efficiency import leg_efficiency_values
 from strategy_engine.strategies.ema_pullback.leg_means import (
     FORCE_FIELDS,
@@ -236,6 +237,18 @@ class LegBars:
 
 
 @dataclass(frozen=True, slots=True)
+class LegChange:
+    """The percent change of a base-bar field between the two ends of the
+    impulse `[S*, P]` or the pullback `[P, t]` of the current touch, or of the
+    impulse of the previous touch (`o1-leg-change-v1`, D1)."""
+
+    episode: str
+    leg: str
+    field: str
+    touch: str = "current"
+
+
+@dataclass(frozen=True, slots=True)
 class PullbackDepth:
     """The share of the impulse height `|P - S*|` that the pullback `[P, t]`
     of the current touch gave back, by its extreme price
@@ -276,6 +289,7 @@ class Operand:
     leg_bars: LegBars | None = None
     forming_candle: FormingCandle | None = None
     leg_efficiency: LegEfficiency | None = None
+    leg_change: LegChange | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -399,6 +413,7 @@ def operand_needs_episode(operand: Operand) -> bool:
         or operand.leg_bars is not None
         or operand.forming_candle is not None
         or operand.leg_efficiency is not None
+        or operand.leg_change is not None
     ):
         return True
     return operand.ratio is not None and (
@@ -460,7 +475,7 @@ def _feature(raw: object, path: str) -> PlannedFeature:
 _OPERAND_KEYS = (
     "feature, episode, segment, candle, leg_mean, leg_sum, leg_top_mean, anchor_follow, "
     "pullback_depth, leg_speed, impulse_atr, leg_bars, forming_candle, leg_efficiency, "
-    "ratio, price or const"
+    "leg_change, ratio, price or const"
 )
 _SEGMENT_FIELDS = {
     "episode",
@@ -795,6 +810,26 @@ def _leg_bars(raw: object, path: str, episode_refs: frozenset[str] | None) -> Le
     return LegBars(speed.episode, speed.leg)
 
 
+def _leg_change(raw: object, path: str, episode_refs: frozenset[str] | None) -> LegChange:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "leg", "field", "touch"}, path)
+    if "field" not in payload:
+        raise InvalidRequestError(f"{path}.field is required")
+    wave = {key: payload[key] for key in ("episode", "leg") if key in payload}
+    speed = _leg_speed(wave, path, episode_refs)
+    market_field = payload["field"]
+    if market_field not in LEG_CHANGE_FIELDS:
+        raise InvalidRequestError(
+            f"{path}.field must be one of {', '.join(LEG_CHANGE_FIELDS)}", field=market_field
+        )
+    touch = payload.get("touch", "current")
+    if touch not in ("current", "previous"):
+        raise InvalidRequestError(f"{path}.touch must be current or previous", touch=touch)
+    if touch == "previous" and speed.leg != "impulse":
+        raise InvalidRequestError(f"{path}.touch previous is only allowed with leg impulse")
+    return LegChange(speed.episode, speed.leg, str(market_field), str(touch))
+
+
 def _impulse_atr(raw: object, path: str, episode_refs: frozenset[str] | None) -> ImpulseAtr:
     payload = _mapping(raw, path)
     _only_fields(payload, {"episode", IMPULSE_ATR_FIELD}, path)
@@ -891,6 +926,8 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         )
     if key == "leg_bars":
         return Operand(leg_bars=_leg_bars(value, f"{path}.leg_bars", episode_refs))
+    if key == "leg_change":
+        return Operand(leg_change=_leg_change(value, f"{path}.leg_change", episode_refs))
     if key == "forming_candle":
         return Operand(
             forming_candle=_forming_candle(value, f"{path}.forming_candle", episode_refs)
@@ -1198,6 +1235,12 @@ def _values(
             node,
             functools.partial(_leg_bars_operand, operand.leg_bars, side, bundle),
         )
+    if operand.leg_change is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(_leg_change_operand, operand.leg_change, frame, side, bundle),
+        )
     if operand.forming_candle is not None:
         return compute_through(
             context,
@@ -1449,6 +1492,23 @@ def _leg_bars_operand(leg_bars: LegBars, side: str, bundle: ContextBundle | None
             "leg_bars operand has no evaluated episode", episode_ref=leg_bars.episode
         )
     return leg_bars_values(episodes.side(leg_bars.episode, side), leg_bars.leg)
+
+
+def _leg_change_operand(
+    leg_change: LegChange,
+    frame: FeatureFrameLike,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "leg_change operand has no evaluated episode", episode_ref=leg_change.episode
+        )
+    series = frame_market_arrays(frame).array(leg_change.field)
+    return leg_change_values(
+        episodes.side(leg_change.episode, side), series, leg_change.leg, leg_change.touch
+    )
 
 
 def _forming_candle_operand(
@@ -1821,6 +1881,7 @@ def _has_value(operand: Operand) -> bool:
         or operand.leg_bars is not None
         or operand.forming_candle is not None
         or operand.leg_efficiency is not None
+        or operand.leg_change is not None
     )
 
 
@@ -2054,6 +2115,8 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("impulse_atr",)
     if operand.leg_bars is not None:
         return ("leg_bars",)
+    if operand.leg_change is not None:
+        return ("leg_change",)
     if operand.forming_candle is not None:
         return ("forming_candle",)
     if operand.ratio is not None:
@@ -2344,6 +2407,22 @@ def _resolve_operand(
             "predicate.leg_bars",
             version=PREDICATE_NODE_VERSION,
             params={"leg": leg_bars.leg},
+            upstream={"episode": episode},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node]
+    if operand.leg_change is not None:
+        leg_change = operand.leg_change
+        episode = (contexts or {}).get(episode_identity_key(leg_change.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "leg_change episode is not declared", episode_ref=leg_change.episode
+            )
+        node = node_spec(
+            "predicate.leg_change",
+            version=PREDICATE_NODE_VERSION,
+            params={"leg": leg_change.leg, "field": leg_change.field, "touch": leg_change.touch},
             upstream={"episode": episode},
             side=side,
         )
