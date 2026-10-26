@@ -27,7 +27,7 @@ from strategy_engine.domain.ranges import timeframe_duration_ms
 from strategy_engine.indicators.contracts import FeatureFrameLike, PlannedFeature
 from strategy_engine.indicators.evaluation_context import EvaluationContext, compute_through
 from strategy_engine.indicators.feature_kinds import plan_feature_request
-from strategy_engine.indicators.market_arrays import frame_market_arrays
+from strategy_engine.indicators.market_arrays import OPEN_INTEREST_FIELD, frame_market_arrays
 from strategy_engine.strategies.ema_pullback.anchor_follow import anchor_follow_values
 from strategy_engine.strategies.ema_pullback.candles import (
     CANDLE_ATR_FIELD,
@@ -74,7 +74,8 @@ if TYPE_CHECKING:
 
 PREDICATE_NODE_VERSION = 1
 
-_PRICE_FIELDS = frozenset({"open", "high", "low", "close"})
+# `open_interest` is a base-bar field like the prices (`w8-rolling-extreme-v1`, D2).
+_PRICE_FIELDS = frozenset({"open", "high", "low", "close", OPEN_INTEREST_FIELD})
 _COMPARE_OPS: dict[str, Callable[[Any, Any], np.ndarray]] = {
     ">": np.greater,
     ">=": np.greater_equal,

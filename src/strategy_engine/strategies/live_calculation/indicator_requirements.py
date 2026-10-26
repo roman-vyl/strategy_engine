@@ -23,7 +23,7 @@ from strategy_engine.strategies.live_calculation.contracts import HistoryRequire
 _CALIBRATED_EMA_CONVERGENCE_TOLERANCE = 1e-4
 _CALIBRATED_ADX_DMI_CONVERGENCE_TOLERANCE = 1e-4
 
-_FINITE_KINDS = {"rsi", "atr"}
+_FINITE_KINDS = {"rsi", "atr", "rolling_max", "rolling_min"}
 # htf-candle-shape-v1: the close position reads only its own candle.
 _SINGLE_CANDLE_KINDS = {"candle_close_position"}
 _EMA_KINDS = {"ema"}

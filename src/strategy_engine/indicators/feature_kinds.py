@@ -29,6 +29,9 @@ from strategy_engine.indicators.implementations.candle_shape import (
     validate_candle_close_position_feature,
 )
 from strategy_engine.indicators.implementations.ema import validate_ema_feature
+from strategy_engine.indicators.implementations.rolling_extreme import (
+    validate_rolling_extreme_feature,
+)
 from strategy_engine.indicators.implementations.rsi import validate_rsi_feature
 
 _EMA_SCHEMA: dict[str, Any] = {
@@ -137,6 +140,25 @@ _CANDLE_BODY_ATR_SCHEMA: dict[str, Any] = {
     "inputs": ["open", "high", "low", "close"],
 }
 
+
+def _rolling_extreme_schema(kind: str, title: str) -> dict[str, Any]:
+    return {
+        "indicator_id": kind,
+        "title": title,
+        "inputs": ["open", "high", "low", "close", "open_interest"],
+        "parameters": {
+            "period": {"type": "integer", "minimum": 1},
+            "source": {"enum": ["open", "high", "low", "close", "open_interest"]},
+            "timeframe": {"type": "string"},
+        },
+        "outputs": ["value"],
+        "supports_batch": True,
+        "supports_managed_replay": True,
+        "supports_incremental": False,
+        "compatibility_profile": "bbb_v1",
+    }
+
+
 _CANDLE_CLOSE_POSITION_SCHEMA: dict[str, Any] = {
     "indicator_id": "candle_close_position",
     "title": "Candle close position in its range",
@@ -206,6 +228,17 @@ def _close_position_label(
     return f"candle_close_position_{timeframe}"
 
 
+def _source_period_label(kind: str) -> Label:
+    # Source-aware, unlike the legacy kinds: the same window over close and
+    # over open interest must not share a column.
+    def label(
+        timeframe: str, source: str | None, params: Mapping[str, Any], _: tuple[str, ...]
+    ) -> str:
+        return f"{kind}_{source}_{timeframe}_{params['period']}"
+
+    return label
+
+
 def _no_identity(feature: PlannedFeature) -> dict[str, Any]:
     return {}
 
@@ -251,9 +284,7 @@ _CONTRACTS: dict[str, FeatureKindContract] = {
         _period_kind("di_plus", _DI_PLUS_SCHEMA, validate_adx_dmi_feature),
         _period_kind("di_minus", _DI_MINUS_SCHEMA, validate_adx_dmi_feature),
         _period_kind("atr_wilder", _ATR_WILDER_SCHEMA, validate_atr_feature),
-        _period_kind(
-            "candle_body_atr", _CANDLE_BODY_ATR_SCHEMA, validate_candle_body_atr_feature
-        ),
+        _period_kind("candle_body_atr", _CANDLE_BODY_ATR_SCHEMA, validate_candle_body_atr_feature),
         FeatureKindContract(
             kind="candle_close_position",
             schema=_CANDLE_CLOSE_POSITION_SCHEMA,
@@ -261,6 +292,20 @@ _CONTRACTS: dict[str, FeatureKindContract] = {
             validate=validate_candle_close_position_feature,
             label=_close_position_label,
             identity_params=_no_identity,
+        ),
+        *(
+            FeatureKindContract(
+                kind=kind,
+                schema=_rolling_extreme_schema(kind, title),
+                default_source="close",
+                validate=validate_rolling_extreme_feature,
+                label=_source_period_label(kind),
+                identity_params=_period_identity,
+            )
+            for kind, title in (
+                ("rolling_max", "Rolling maximum over the last period candles"),
+                ("rolling_min", "Rolling minimum over the last period candles"),
+            )
         ),
     )
 }

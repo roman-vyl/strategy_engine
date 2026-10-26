@@ -45,6 +45,11 @@ from strategy_engine.indicators.implementations.frame_ops import (
     resample_ohlcv,
     serialize_value,
 )
+from strategy_engine.indicators.implementations.rolling_extreme import (
+    ROLLING_EXTREME_KINDS,
+    rolling_extreme,
+    validate_rolling_extreme_feature,
+)
 from strategy_engine.indicators.implementations.rsi import (
     rsi_rolling_mean,
     validate_rsi_feature,
@@ -167,6 +172,15 @@ def _compute_feature(
     elif feature.kind == "candle_close_position":
         validate_candle_close_position_feature(feature)
         values = candle_close_position(feature_frame)
+    elif feature.kind in ROLLING_EXTREME_KINDS:
+        validate_rolling_extreme_feature(feature)
+        assert feature.source is not None
+        values = rolling_extreme(
+            feature_frame,
+            kind=feature.kind,
+            source=feature.source,
+            period=_feature_period(feature),
+        )
     elif feature.kind == "atr_distance":
         validate_atr_distance_feature(feature)
         dependency_id = feature.dependencies[0]

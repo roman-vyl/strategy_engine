@@ -56,6 +56,8 @@ def test_registry_exposes_rsi_schema() -> None:
         "atr_wilder",
         "candle_body_atr",
         "candle_close_position",
+        "rolling_max",
+        "rolling_min",
     ]
     assert registry.get_schema("rsi")["compatibility_profile"] == "bbb_v1"
 

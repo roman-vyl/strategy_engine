@@ -6371,6 +6371,78 @@
     "supports_incremental": false,
     "supports_managed_replay": true,
     "title": "Candle close position in its range"
+   },
+   {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "rolling_max",
+    "inputs": [
+     "open",
+     "high",
+     "low",
+     "close",
+     "open_interest"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "enum": [
+       "open",
+       "high",
+       "low",
+       "close",
+       "open_interest"
+      ]
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Rolling maximum over the last period candles"
+   },
+   {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "rolling_min",
+    "inputs": [
+     "open",
+     "high",
+     "low",
+     "close",
+     "open_interest"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "enum": [
+       "open",
+       "high",
+       "low",
+       "close",
+       "open_interest"
+      ]
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Rolling minimum over the last period candles"
    }
   ],
   "feature_identities": {
@@ -6638,6 +6710,78 @@
     "supports_incremental": false,
     "supports_managed_replay": true,
     "title": "Exponential Moving Average"
+   },
+   "rolling_max": {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "rolling_max",
+    "inputs": [
+     "open",
+     "high",
+     "low",
+     "close",
+     "open_interest"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "enum": [
+       "open",
+       "high",
+       "low",
+       "close",
+       "open_interest"
+      ]
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Rolling maximum over the last period candles"
+   },
+   "rolling_min": {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "rolling_min",
+    "inputs": [
+     "open",
+     "high",
+     "low",
+     "close",
+     "open_interest"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "enum": [
+       "open",
+       "high",
+       "low",
+       "close",
+       "open_interest"
+      ]
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Rolling minimum over the last period candles"
    },
    "rsi": {
     "compatibility_profile": "bbb_v1",
