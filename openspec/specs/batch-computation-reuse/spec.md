@@ -651,7 +651,11 @@ SHALL have the same node set and results as before this change.
 
 ### Requirement: Open interest in the shared market arrays
 
-The shared market arrays of one evaluation or range batch SHALL serve `open_interest` through the same lazily converted, cached `values` and `array` reads as the OHLCV fields: one float per bar, converted from the bar's Decimal, and NaN where the bar has no open interest. A missing value SHALL NOT be filled from another bar or replaced by zero. The OHLCV field set, the OHLCV columns and the indicator DataFrame SHALL NOT include open interest.
+The shared market arrays of one evaluation or range batch SHALL serve `open_interest` through the same lazily converted, cached `values` and `array` reads as the OHLCV fields: one float per bar, converted from the bar's Decimal, and NaN where the bar has no open interest. A missing value SHALL NOT be filled from another bar or replaced by zero. The OHLCV field set and the OHLCV columns SHALL NOT include open interest. The indicator DataFrame SHALL carry it as a last float64 column `open_interest` with the same values, and a higher-timeframe candle SHALL take the value of its last base bar, NaN when that bar has none, never a sum or an earlier bar's value.
+
+#### Scenario: Open interest on a higher timeframe
+- **WHEN** a 1h candle is built from twelve 5m bars and its last bar has no open interest
+- **THEN** its `open_interest` is NaN, even when earlier bars of the candle have values
 
 #### Scenario: Open interest with gaps
 - **WHEN** a range has open interest on some bars and none on others
@@ -660,4 +664,4 @@ The shared market arrays of one evaluation or range batch SHALL serve `open_inte
 
 #### Scenario: Existing computations are unchanged
 - **WHEN** any strategy that does not read open interest is evaluated on bars that carry open interest
-- **THEN** its indicator frames, intermediate results and output are bit-identical to the evaluation of the same bars without open interest.
+- **THEN** its OHLCV columns, feature values, intermediate results and output are bit-identical to the evaluation of the same bars without open interest.

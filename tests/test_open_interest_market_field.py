@@ -15,6 +15,7 @@ from parity.corpus import all_cases
 
 from strategy_engine.domain.market import MarketBar, MarketStream
 from strategy_engine.domain.ranges import TimeRange
+from strategy_engine.indicators.implementations.frame_ops import resample_ohlcv
 from strategy_engine.indicators.market_arrays import OHLCV_FIELDS, MarketArrays
 
 
@@ -48,14 +49,16 @@ def test_open_interest_array_has_own_values_and_nan_without_fill() -> None:
     assert arrays.values("open_interest") is values
 
 
-def test_all_none_open_interest_is_all_nan_and_ohlcv_views_are_unchanged() -> None:
+def test_all_none_open_interest_is_all_nan_and_ohlcv_columns_are_unchanged() -> None:
     bars = tuple(_bar(index, None) for index in range(3))
     arrays = MarketArrays(tuple(bar.open_time_ms for bar in bars), bars)
 
     assert np.isnan(arrays.array("open_interest")).all()
     assert OHLCV_FIELDS == ("open", "high", "low", "close", "volume")
     assert list(arrays.ohlcv_columns()) == list(OHLCV_FIELDS)
-    assert list(arrays.dataframe().columns) == list(OHLCV_FIELDS)
+    frame = arrays.dataframe()
+    assert list(frame.columns) == [*OHLCV_FIELDS, "open_interest"]
+    assert frame["open_interest"].isna().all()
     with pytest.raises(KeyError):
         arrays.values("turnover")
 
@@ -98,3 +101,43 @@ def test_strategies_give_identical_results_with_and_without_open_interest(
     assert len(without) == len(cases)
     for case, before, after in zip(cases, without, with_oi, strict=True):
         assert after == before, case.name
+
+
+def test_indicator_frame_carries_open_interest_like_volume() -> None:
+    bars = (_bar(0, Decimal("100.5")), _bar(1, None), _bar(2, Decimal("101.25")))
+    arrays = MarketArrays(tuple(bar.open_time_ms for bar in bars), bars)
+    frame = arrays.dataframe()
+
+    assert frame["open_interest"].dtype == np.float64
+    assert frame["open_interest"].to_numpy().tobytes() == arrays.array("open_interest").tobytes()
+    assert not np.shares_memory(frame["open_interest"].to_numpy(), arrays.array("open_interest"))
+
+
+def test_higher_timeframe_open_interest_is_the_last_bar_value_never_a_sum() -> None:
+    # 1h candles of twelve 5m bars: the first has every value, the second
+    # lacks open interest on its last bar only, the third on an inner bar.
+    values: list[Decimal | None] = [Decimal(1000 + index) for index in range(36)]
+    values[23] = None
+    values[30] = None
+    bars = tuple(_bar(index, value) for index, value in enumerate(values))
+    frame = MarketArrays(tuple(bar.open_time_ms for bar in bars), bars).dataframe()
+
+    hourly = resample_ohlcv(frame, "1h")
+    assert list(hourly.columns) == [*OHLCV_FIELDS, "open_interest"]
+    oi = hourly["open_interest"].tolist()
+    assert oi[0] == 1011.0
+    assert math.isnan(oi[1])
+    assert oi[2] == 1035.0
+    assert hourly["volume"].tolist() == [120.0, 120.0, 120.0]
+
+
+def test_higher_timeframe_ohlcv_is_unchanged_by_the_open_interest_column() -> None:
+    bars = tuple(_bar(index, Decimal(index)) for index in range(30))
+    frame = MarketArrays(tuple(bar.open_time_ms for bar in bars), bars).dataframe()
+
+    with_oi = resample_ohlcv(frame, "1h")
+    without_oi = resample_ohlcv(frame.drop(columns="open_interest"), "1h")
+    assert list(without_oi.columns) == list(OHLCV_FIELDS)
+    for field in OHLCV_FIELDS:
+        assert with_oi[field].to_numpy().tobytes() == without_oi[field].to_numpy().tobytes()
+    assert with_oi.index.equals(without_oi.index)

@@ -128,6 +128,16 @@ def _awkward_market_frame() -> MarketFrame:
     return MarketFrame(MarketStream("BTCUSDT.P", "5m"), TimeRange(0, 24 * 300_000), bars, "h")
 
 
+def _ohlcv_part(frame: pd.DataFrame) -> pd.DataFrame:
+    """The indicator frame without its trailing `open_interest` column, which
+    the legacy oracle predates; these fixtures carry no open interest."""
+
+    assert list(frame.columns)[-1] == "open_interest"
+    assert frame["open_interest"].dtype == np.float64
+    assert frame["open_interest"].isna().all()
+    return frame.drop(columns="open_interest")
+
+
 def _assert_frames_bit_identical(actual: pd.DataFrame, expected: pd.DataFrame) -> None:
     assert list(actual.columns) == list(expected.columns)
     assert list(actual.dtypes) == list(expected.dtypes)
@@ -150,8 +160,8 @@ def test_shared_dataframe_is_bit_identical_to_legacy_conversion(builder: object)
     market_frame = builder()  # type: ignore[operator]
     arrays = MarketArrays.from_market_frame(market_frame)
     expected = _legacy_market_frame_to_dataframe(market_frame)
-    _assert_frames_bit_identical(arrays.dataframe(), expected)
-    _assert_frames_bit_identical(market_frame_to_dataframe(market_frame), expected)
+    _assert_frames_bit_identical(_ohlcv_part(arrays.dataframe()), expected)
+    _assert_frames_bit_identical(_ohlcv_part(market_frame_to_dataframe(market_frame)), expected)
     assert arrays.time_ms == tuple(bar.open_time_ms for bar in market_frame.bars)
 
 
@@ -214,7 +224,7 @@ def test_exit_policy_frame_matches_legacy_with_and_without_attached_arrays() -> 
 def test_empty_range_keeps_legacy_frame_shape() -> None:
     market_frame = MarketFrame(MarketStream("BTCUSDT.P", "5m"), TimeRange(0, 0), (), "h")
     _assert_frames_bit_identical(
-        MarketArrays.from_market_frame(market_frame).dataframe(),
+        _ohlcv_part(MarketArrays.from_market_frame(market_frame).dataframe()),
         _legacy_market_frame_to_dataframe(market_frame),
     )
 
