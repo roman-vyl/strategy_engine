@@ -10,8 +10,9 @@ missing piece is the absolute value: the impulse price change is negative on the
 ## What Changes
 
 - **New operand `abs`** `{"abs": <operand>}`: the absolute value of another operand, bar by bar. Missing where the inner operand is missing.
-- **kI** is `ratio(leg_change {impulse, open_interest}, abs(leg_change {impulse, close}))`. Research's guard `rI > 0.05` is the
-  ratio's existing `right_floor` in the config. The Engine holds no number.
+- **kI** is `ratio(leg_change {impulse, open_interest}, abs(leg_change {impulse, close}))` with `right_floor` 0, so the
+  denominator only has to be greater than zero. The owner dropped research's `0.05` guard on 2026-10-26 at 20:00: on vote v7 under
+  the Engine rule the result is the same to the dollar (11.7 / 9.1 / 8.4k). The Engine holds no number.
 - **Cost**: one vectorised `abs` per bar; a spec without the operand pays nothing.
 
 Not in this change: kR, W1, W2d, W8, nested ratios, the voting module, catalog and manifest bindings, deploy.

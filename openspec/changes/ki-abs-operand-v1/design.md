@@ -20,8 +20,13 @@ research takes the plain absolute value of both legs.
 Own node family `predicate.abs`. Its upstream is the inner operand's node, and its side is set when the inner operand reads the
 episode. Two specs with the same inner operand share the node.
 
-### D3. Known difference from research
+### D3. Guard and known difference from research
 
-Research computes kI and kR in one expression. kI is therefore also missing where the pullback price move `rR <= 0.05` or the
-entry bar has no OI. These are 9 / 16 / 3 entries of BTC / ETH / SOL out of about 2300 per coin. The atomic operand depends on
-the impulse only, and parity reports these entries separately.
+Research guards both price moves with `> 0.05` and computes kI and kR in one expression. kI is therefore missing there also where
+the pullback move is small or the entry bar has no OI. The owner removed the `0.05` guard (2026-10-26 20:00, checked on vote v7:
+no change). The config uses `right_floor` 0, and the atomic operand depends on the impulse only.
+
+The parity reference is `O1 / rI` where `rI > 0`, computed from the agreed-rule O1 and the closes. Entries where research's own
+`kI` is missing for the pullback or entry reasons are reported separately.
+
+The W1r condition `kI > 0.05` is not a guard but meaning, and it stays. It belongs to the W1r change, not here.

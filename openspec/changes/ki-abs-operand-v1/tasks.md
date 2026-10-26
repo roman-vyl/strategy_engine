@@ -5,12 +5,12 @@
 
 ## 2. kI
 
-- [ ] 2.1 `ratio(leg_change OI impulse, abs(leg_change close impulse), right_floor 0.05)` through the pipeline on the BTC fixture equals the loop (on `close` for both legs where the fixture has no OI). Verify: e2e test.
+- [ ] 2.1 `ratio(leg_change OI impulse, abs(leg_change close impulse), right_floor 0)` through the pipeline on the BTC fixture equals the loop (on `close` for both legs where the fixture has no OI). Verify: e2e test.
 - [ ] 2.2 Candidates differing only in a level share the nodes; a spec without `abs` has no such node. Verify: batch test.
 
 ## 3. Parity with research on EMA200 (cloud)
 
-- [ ] 3.1 kI on all EMA200 entries of BTC, ETH and SOL against `kI` in `oi5m_rule/oi5m_ref_<coin>.csv.gz` (1e-9 relative, NaN equal except D3), with run time. Report in `/mnt/project-files/engine-tasks/ema200/parity_ki/`.
+- [ ] 3.1 kI on all EMA200 entries of BTC, ETH and SOL against `O1 / rI` (`rI > 0`) built from `oi5m_rule/oi5m_ref_<coin>.csv.gz` O1 and the closes (1e-9 relative, NaN equal), entries with research `kI` missing for the D3 reasons reported, with run time. Report in `/mnt/project-files/engine-tasks/ema200/parity_ki/`.
 
 ## 4. Gate
 
