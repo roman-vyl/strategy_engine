@@ -14,6 +14,8 @@ class CandlePayload(BaseModel):
     low: StrictStr
     close: StrictStr
     volume: StrictStr
+    # Optional: validated by the client, not used by strategy evaluation yet.
+    open_interest: StrictStr | None = None
 
 
 class CandleRangePayload(BaseModel):

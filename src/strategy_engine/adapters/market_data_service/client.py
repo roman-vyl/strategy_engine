@@ -138,6 +138,14 @@ class MarketDataServiceClient:
                     expected_open_time_ms=expected,
                     actual_open_time_ms=candle.open_time_ms,
                 )
+            if candle.open_interest is not None:
+                try:
+                    parse_decimal_text(candle.open_interest)
+                except Exception as exc:
+                    raise UpstreamContractError(
+                        "Market Data Service returned an invalid open interest value",
+                        open_time_ms=candle.open_time_ms,
+                    ) from exc
             bars.append(
                 MarketBar(
                     open_time_ms=candle.open_time_ms,
