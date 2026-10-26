@@ -41,8 +41,8 @@ if TYPE_CHECKING:
     from strategy_engine.indicators.contracts import FeatureFrameLike
 
 OHLCV_FIELDS: tuple[str, ...] = ("open", "high", "low", "close", "volume")
-# Optional market field: served by `values`/`array` (NaN where a bar has
-# none) but never part of the OHLCV columns or the indicator DataFrame.
+# Optional market field: served by `values`/`array` and as a column of the
+# indicator DataFrame (NaN where a bar has none), never in the OHLCV columns.
 OPEN_INTEREST_FIELD = "open_interest"
 
 
@@ -119,9 +119,12 @@ class MarketArrays:
         return {field: self.array(field) for field in OHLCV_FIELDS}
 
     def dataframe(self) -> pd.DataFrame:
-        """A fresh float64 OHLCV DataFrame indexed by `index()`."""
+        """A fresh float64 DataFrame of the OHLCV columns and `open_interest`
+        (NaN where a bar has none), indexed by `index()`."""
 
-        return pd.DataFrame(self.ohlcv_columns(), index=self.index())
+        columns = self.ohlcv_columns()
+        columns[OPEN_INTEREST_FIELD] = self.array(OPEN_INTEREST_FIELD)
+        return pd.DataFrame(columns, index=self.index())
 
 
 def frame_market_arrays(frame: FeatureFrameLike) -> MarketArrays:

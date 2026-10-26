@@ -9,7 +9,7 @@ import pandas as pd
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.market import MarketFrame
 from strategy_engine.domain.values import normalized_decimal_text
-from strategy_engine.indicators.market_arrays import MarketArrays
+from strategy_engine.indicators.market_arrays import OPEN_INTEREST_FIELD, MarketArrays
 
 
 def pandas_frequency(timeframe: str) -> str:
@@ -29,7 +29,7 @@ def feature_timeframe(feature_timeframe: str, base_timeframe: str) -> str:
 
 
 def market_frame_to_dataframe(market_frame: MarketFrame) -> pd.DataFrame:
-    """Standalone float64 OHLCV frame for one `MarketFrame`, through the
+    """Standalone float64 OHLCV and open interest frame for one `MarketFrame`, through the
     shared `MarketArrays` conversion. Evaluation paths build `MarketArrays`
     once and call `.dataframe()` on it instead of converting per call."""
 
@@ -37,19 +37,21 @@ def market_frame_to_dataframe(market_frame: MarketFrame) -> pd.DataFrame:
 
 
 def resample_ohlcv(frame: pd.DataFrame, timeframe: str) -> pd.DataFrame:
-    return (
-        frame.resample(pandas_frequency(timeframe), label="left", closed="left")
-        .agg(
-            {
-                "open": "first",
-                "high": "max",
-                "low": "min",
-                "close": "last",
-                "volume": "sum",
-            }
-        )
-        .dropna(subset=["open", "high", "low", "close"])
+    resampler = frame.resample(pandas_frequency(timeframe), label="left", closed="left")
+    resampled = resampler.agg(
+        {
+            "open": "first",
+            "high": "max",
+            "low": "min",
+            "close": "last",
+            "volume": "sum",
+        }
     )
+    if OPEN_INTEREST_FIELD in frame.columns:
+        # A level, not a flow: the value of the candle's last base bar, NaN
+        # when that bar has none (never an earlier bar's value).
+        resampled[OPEN_INTEREST_FIELD] = resampler[OPEN_INTEREST_FIELD].last(skipna=False)
+    return resampled.dropna(subset=["open", "high", "low", "close"])
 
 
 def align_completed_to_base(

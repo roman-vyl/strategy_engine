@@ -10,13 +10,14 @@ import math
 
 import numpy as np
 
+from strategy_engine.indicators.market_arrays import OPEN_INTEREST_FIELD
 from strategy_engine.strategies.ema_pullback.candles import touch_points
 from strategy_engine.strategies.ema_pullback.stack_episode import SideEpisode
 
 FORCE_FIELDS = ("force_with", "force_against")
-LEG_MEAN_FIELDS = ("volume", *FORCE_FIELDS)
+LEG_MEAN_FIELDS = ("volume", OPEN_INTEREST_FIELD, *FORCE_FIELDS)
 OWN_COLOR_VOLUME = "own_color_volume"
-LEG_SUM_FIELDS = ("volume", OWN_COLOR_VOLUME)
+LEG_SUM_FIELDS = ("volume", OPEN_INTEREST_FIELD, OWN_COLOR_VOLUME)
 
 
 def force_series(close: np.ndarray, volume: np.ndarray, field: str, side: str) -> np.ndarray:
@@ -116,7 +117,7 @@ def leg_sum_values(episode: SideEpisode, series: np.ndarray, leg: str) -> np.nda
     return out
 
 
-LEG_TOP_MEAN_FIELDS = ("volume",)
+LEG_TOP_MEAN_FIELDS = ("volume", OPEN_INTEREST_FIELD)
 
 
 def _top_mean(ordered: list[float], share: float) -> float:
