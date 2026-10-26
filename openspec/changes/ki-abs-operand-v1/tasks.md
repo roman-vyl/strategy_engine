@@ -1,0 +1,18 @@
+## 1. Operand
+
+- [ ] 1.1 Parse and validate `abs`: exactly one inner operand; constant, `abs` and `ratio` inside rejected; accepted in `ratio`, `range`, `compare` and vote inputs; rejected in `change`. Own node family. Verify: tests.
+- [ ] 1.2 Values equal `np.abs` of the inner operand, missing kept, on both sides. Verify: tests.
+
+## 2. kI
+
+- [ ] 2.1 `ratio(leg_change OI impulse, abs(leg_change close impulse), right_floor 0.05)` through the pipeline on the BTC fixture equals the loop (on `close` for both legs where the fixture has no OI). Verify: e2e test.
+- [ ] 2.2 Candidates differing only in a level share the nodes; a spec without `abs` has no such node. Verify: batch test.
+
+## 3. Parity with research on EMA200 (cloud)
+
+- [ ] 3.1 kI on all EMA200 entries of BTC, ETH and SOL against `kI` in `oi5m_rule/oi5m_ref_<coin>.csv.gz` (1e-9 relative, NaN equal except D3), with run time. Report in `/mnt/project-files/engine-tasks/ema200/parity_ki/`.
+
+## 4. Gate
+
+- [ ] 4.1 ruff, mypy, affected tests; never `tests/parity/test_all_families_memo.py`.
+- [ ] 4.2 `openspec validate ki-abs-operand-v1 --strict`.
