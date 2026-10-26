@@ -19,13 +19,14 @@ Strategy Engine SHALL use the MDS historical endpoint when an audited expected h
 
 ### Requirement: Accept optional open interest on historical candles
 
-Each candle of the response MAY carry an `open_interest` field whose value is finite decimal text or `null`; an absent field and `null` SHALL mean the same. Strategy Engine SHALL validate a present non-null value and SHALL otherwise ignore it: the value SHALL NOT change the parsed OHLCV bars, the FeatureFrame, any strategy result, or the propagated hash. Any other unknown field SHALL still make the response malformed.
+A candle MAY carry `open_interest`: finite decimal text, or `null`, which means the same as an absent field. Strategy Engine SHALL validate a present value and carry it on the market bar as a Decimal, or none. It SHALL NOT change the OHLCV values, the propagated hash, or the result of a strategy that does not read open interest. Any other unknown field SHALL still make the response malformed.
 
 #### Scenario: Candles carry open interest
 
 - **WHEN** the historical response carries `open_interest` as decimal text on some candles and `null` or no field on others
 - **THEN** Strategy Engine SHALL accept the response
-- **AND** the bars, the FeatureFrame, the results and the propagated `market_data_hash` SHALL be the same as for the same response without `open_interest`.
+- **AND** each bar SHALL carry the Decimal value of its own candle, or none where the candle has `null` or no field
+- **AND** the OHLCV values, the results of strategies that do not read open interest and the propagated `market_data_hash` SHALL be the same as for the same response without `open_interest`.
 
 #### Scenario: Open interest value is malformed
 
