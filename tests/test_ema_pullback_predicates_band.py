@@ -337,10 +337,12 @@ def test_ratio_parsing() -> None:
     segment = {"segment": _segment()}
     ok = parse_predicate(_seg_range({"ratio": {"left": segment, "right": segment}}), "p")
     assert len(ok.features()) == 4
+    # w1r-nested-ratio-v1: a side of a ratio may be a ratio.
+    nested = {"left": {"ratio": {"left": segment, "right": segment}}, "right": segment}
+    assert parse_predicate(_seg_range({"ratio": nested}), "p").long.operand.ratio.left.ratio
     for ratio in (
         {"left": segment},
         {"left": {"const": 1}, "right": {"const": 2}},
-        {"left": {"ratio": {"left": segment, "right": segment}}, "right": segment},
         {"left": segment, "right": segment, "extra": 1},
     ):
         with pytest.raises(InvalidRequestError):

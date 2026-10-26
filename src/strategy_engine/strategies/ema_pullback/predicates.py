@@ -891,8 +891,6 @@ def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio
         floor = _number(payload["right_floor"], f"{path}.right_floor")
     left = _operand(payload.get("left"), f"{path}.left", episode_refs)
     right = _operand(payload.get("right"), f"{path}.right", episode_refs)
-    if left.ratio is not None or right.ratio is not None:
-        raise InvalidRequestError(f"{path} must not nest a ratio")
     if left.const is not None and right.const is not None:
         raise InvalidRequestError(f"{path} must have at least one non-constant side")
     return Ratio(left, right, floor)
