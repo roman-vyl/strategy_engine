@@ -37,6 +37,8 @@ class MarketBar:
     low: Decimal
     close: Decimal
     volume: Decimal
+    # None where MDS has no open interest for the bar.
+    open_interest: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)

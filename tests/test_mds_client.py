@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from decimal import Decimal
+
 import httpx
 import pytest
 
@@ -246,12 +249,14 @@ def _load(payload: dict[str, object], *, historical: bool):  # type: ignore[no-u
 
 
 @pytest.mark.parametrize("historical", [False, True])
-def test_mds_client_accepts_optional_open_interest_without_changing_the_frame(
+def test_mds_client_carries_optional_open_interest_on_the_bars(
     historical: bool,
 ) -> None:
     without = _load(_range_payload([_ABSENT, _ABSENT, _ABSENT]), historical=historical)
     with_oi = _load(_range_payload(["123456.789", None, _ABSENT]), historical=historical)
-    assert with_oi.bars == without.bars
+    assert [bar.open_interest for bar in with_oi.bars] == [Decimal("123456.789"), None, None]
+    assert all(bar.open_interest is None for bar in without.bars)
+    assert [replace(bar, open_interest=None) for bar in with_oi.bars] == list(without.bars)
     assert with_oi.market_data_hash == without.market_data_hash == "mds-hash"
     assert with_oi.requested_range == without.requested_range
 

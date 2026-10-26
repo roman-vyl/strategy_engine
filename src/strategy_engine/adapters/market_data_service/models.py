@@ -14,7 +14,7 @@ class CandlePayload(BaseModel):
     low: StrictStr
     close: StrictStr
     volume: StrictStr
-    # Optional: validated by the client, not used by strategy evaluation yet.
+    # Optional: None where MDS has no open interest for the bar.
     open_interest: StrictStr | None = None
 
 
