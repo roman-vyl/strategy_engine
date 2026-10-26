@@ -267,6 +267,14 @@ class Ratio:
 
 
 @dataclass(frozen=True, slots=True)
+class Difference:
+    """`left - right` bar by bar (`w1d-difference-operand-v1`, D1)."""
+
+    left: Operand
+    right: Operand
+
+
+@dataclass(frozen=True, slots=True)
 class Operand:
     """Exactly one of a canonical feature request, an EMA stack episode
     reference, a segment aggregate, a ratio, a base-bar price field or a
@@ -291,6 +299,7 @@ class Operand:
     leg_efficiency: LegEfficiency | None = None
     leg_change: LegChange | None = None
     absolute: Operand | None = None
+    difference: Difference | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -396,6 +405,11 @@ def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
         return (*operand_features(operand.ratio.left), *operand_features(operand.ratio.right))
     if operand.absolute is not None:
         return operand_features(operand.absolute)
+    if operand.difference is not None:
+        return (
+            *operand_features(operand.difference.left),
+            *operand_features(operand.difference.right),
+        )
     return ()
 
 
@@ -421,6 +435,10 @@ def operand_needs_episode(operand: Operand) -> bool:
         return True
     if operand.absolute is not None:
         return operand_needs_episode(operand.absolute)
+    if operand.difference is not None:
+        return operand_needs_episode(operand.difference.left) or operand_needs_episode(
+            operand.difference.right
+        )
     return operand.ratio is not None and (
         operand_needs_episode(operand.ratio.left) or operand_needs_episode(operand.ratio.right)
     )
@@ -480,7 +498,7 @@ def _feature(raw: object, path: str) -> PlannedFeature:
 _OPERAND_KEYS = (
     "feature, episode, segment, candle, leg_mean, leg_sum, leg_top_mean, anchor_follow, "
     "pullback_depth, leg_speed, impulse_atr, leg_bars, forming_candle, leg_efficiency, "
-    "leg_change, abs, ratio, price or const"
+    "leg_change, abs, difference, ratio, price or const"
 )
 _SEGMENT_FIELDS = {
     "episode",
@@ -896,6 +914,19 @@ def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio
     return Ratio(left, right, floor)
 
 
+def _difference(raw: object, path: str, episode_refs: frozenset[str] | None) -> Difference:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"left", "right"}, path)
+    for key in ("left", "right"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    left = _operand(payload["left"], f"{path}.left", episode_refs)
+    right = _operand(payload["right"], f"{path}.right", episode_refs)
+    if left.const is not None and right.const is not None:
+        raise InvalidRequestError(f"{path} must have at least one non-constant side")
+    return Difference(left, right)
+
+
 def _absolute(raw: object, path: str, episode_refs: frozenset[str] | None) -> Operand:
     """The inner operand of an `abs` (`ki-abs-operand-v1`, D1): not a
     constant, an `abs` or a `ratio`, so `abs` adds no way to nest a ratio."""
@@ -951,6 +982,8 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         return Operand(ratio=_ratio(value, f"{path}.ratio", episode_refs))
     if key == "abs":
         return Operand(absolute=_absolute(value, f"{path}.abs", episode_refs))
+    if key == "difference":
+        return Operand(difference=_difference(value, f"{path}.difference", episode_refs))
     if key == "price":
         if value not in _PRICE_FIELDS:
             raise InvalidRequestError(f"{path}.price must be open, high, low or close")
@@ -1312,6 +1345,21 @@ def _values(
                 _absolute_operand, operand.absolute, frame, context, identity, side, bundle, path
             ),
         )
+    if operand.difference is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _difference_operand,
+                operand.difference,
+                frame,
+                context,
+                identity,
+                side,
+                bundle,
+                path,
+            ),
+        )
     assert operand.feature is not None
     return _feature_array(operand.feature, frame, context, identity)
 
@@ -1604,6 +1652,31 @@ def _ratio_operand(
     valid = np.isfinite(left) & np.isfinite(right) & (right > ratio.right_floor)
     out = np.full(length, math.nan)
     np.divide(left, right, out=out, where=valid)
+    out.flags.writeable = False
+    return out
+
+
+def _difference_operand(
+    difference: Difference,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+    path: str,
+) -> np.ndarray:
+    length = len(frame.time_ms)
+    left = np.broadcast_to(
+        _values(difference.left, frame, context, identity, side, bundle, f"{path}.left"),
+        (length,),
+    )
+    right = np.broadcast_to(
+        _values(difference.right, frame, context, identity, side, bundle, f"{path}.right"),
+        (length,),
+    )
+    valid = np.isfinite(left) & np.isfinite(right)
+    out = np.full(length, math.nan)
+    np.subtract(left, right, out=out, where=valid)
     out.flags.writeable = False
     return out
 
@@ -1924,6 +1997,7 @@ def _has_value(operand: Operand) -> bool:
         or operand.leg_efficiency is not None
         or operand.leg_change is not None
         or operand.absolute is not None
+        or operand.difference is not None
     )
 
 
@@ -2165,6 +2239,8 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("ratio",)
     if operand.absolute is not None:
         return ("abs",)
+    if operand.difference is not None:
+        return ("difference",)
     return ("feature",)
 
 
@@ -2607,6 +2683,36 @@ def _resolve_operand(
         )
         operand_ids[path] = node
         return node, [node, *inner_consumed]
+    if operand.difference is not None:
+        difference = operand.difference
+        upstream = {}
+        consumed = []
+        for role, child in (("left", difference.left), ("right", difference.right)):
+            child_node, child_consumed = _resolve_operand(
+                child,
+                f"{path}.{role}",
+                feature_ids,
+                side,
+                contexts,
+                column_ids,
+                episode_ids,
+                operand_ids,
+            )
+            if child_node is not None:
+                upstream[role] = child_node
+                consumed.extend(child_consumed)
+        node = node_spec(
+            "predicate.difference",
+            version=PREDICATE_NODE_VERSION,
+            params={
+                "left": _operand_param(difference.left),
+                "right": _operand_param(difference.right),
+            },
+            upstream=upstream,
+            side=side if operand_needs_episode(operand) else None,
+        )
+        operand_ids[path] = node
+        return node, [node, *consumed]
     return None, []
 
 
