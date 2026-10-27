@@ -290,6 +290,25 @@ class WindowChange:
 
 
 @dataclass(frozen=True, slots=True)
+class Signed:
+    """`center + g * (x - center)`, `g` +1 long and -1 short: the inner
+    value our way (`signed-only-if-operands-v1`, D1)."""
+
+    operand: Operand
+    center: float
+
+
+@dataclass(frozen=True, slots=True)
+class OnlyIf:
+    """The inner value where every requirement holds, missing otherwise
+    (`signed-only-if-operands-v1`, D2). A requirement is a range without
+    `empty`: its operand finite and inside its bounds."""
+
+    operand: Operand
+    require: tuple[Range, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class AtPoint:
     """The inner operand's value on a wave point of the current touch, `peak`
     = P or `origin` = S* (`w8p-at-point-v1`, D1)."""
@@ -327,6 +346,8 @@ class Operand:
     difference: Difference | None = None
     at_point: AtPoint | None = None
     window_change: WindowChange | None = None
+    signed: Signed | None = None
+    only_if: OnlyIf | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -441,6 +462,13 @@ def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
         return operand_features(operand.at_point.operand)
     if operand.window_change is not None:
         return (operand.window_change.series,)
+    if operand.signed is not None:
+        return operand_features(operand.signed.operand)
+    if operand.only_if is not None:
+        return (
+            *operand_features(operand.only_if.operand),
+            *(f for item in operand.only_if.require for f in operand_features(item.operand)),
+        )
     return ()
 
 
@@ -464,6 +492,8 @@ def operand_needs_episode(operand: Operand) -> bool:
         or operand.leg_change is not None
         or operand.at_point is not None
         or operand.window_change is not None
+        or operand.signed is not None
+        or operand.only_if is not None
     ):
         return True
     if operand.absolute is not None:
@@ -531,7 +561,7 @@ def _feature(raw: object, path: str) -> PlannedFeature:
 _OPERAND_KEYS = (
     "feature, episode, segment, candle, leg_mean, leg_sum, leg_top_mean, anchor_follow, "
     "pullback_depth, leg_speed, impulse_atr, leg_bars, forming_candle, leg_efficiency, "
-    "leg_change, abs, difference, at_point, window_change, ratio, price or const"
+    "leg_change, abs, difference, at_point, window_change, signed, only_if, ratio, price or const"
 )
 AT_POINTS = ("peak", "origin")
 WINDOW_CHANGE_FORMS = ("change", "slope")
@@ -1015,6 +1045,39 @@ def _window_change(raw: object, path: str, episode_refs: frozenset[str] | None) 
     return WindowChange(ref, series, last_n, str(form))
 
 
+def _signed(raw: object, path: str, episode_refs: frozenset[str] | None) -> Signed:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"operand", "center"}, path)
+    for key in ("operand", "center"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    inner = _operand(payload["operand"], f"{path}.operand", episode_refs)
+    if inner.const is not None:
+        raise InvalidRequestError(f"{path}.operand must not be a constant")
+    return Signed(inner, _number(payload["center"], f"{path}.center"))
+
+
+def _only_if(raw: object, path: str, episode_refs: frozenset[str] | None) -> OnlyIf:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"operand", "require"}, path)
+    for key in ("operand", "require"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    inner = _operand(payload["operand"], f"{path}.operand", episode_refs)
+    if inner.const is not None:
+        raise InvalidRequestError(f"{path}.operand must not be a constant")
+    items = payload["require"]
+    if not isinstance(items, list) or not items:
+        raise InvalidRequestError(f"{path}.require must be a non-empty list")
+    require = []
+    for index, item in enumerate(items):
+        item_path = f"{path}.require[{index}]"
+        item = _mapping(item, item_path)
+        _only_fields(item, {"operand", "min", "max", "bounds"}, item_path)
+        require.append(_range(item, item_path, episode_refs))
+    return OnlyIf(inner, tuple(require))
+
+
 def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Operand:
     payload = _mapping(raw, path)
     if len(payload) != 1:
@@ -1064,6 +1127,10 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         return Operand(difference=_difference(value, f"{path}.difference", episode_refs))
     if key == "at_point":
         return Operand(at_point=_at_point(value, f"{path}.at_point", episode_refs))
+    if key == "signed":
+        return Operand(signed=_signed(value, f"{path}.signed", episode_refs))
+    if key == "only_if":
+        return Operand(only_if=_only_if(value, f"{path}.only_if", episode_refs))
     if key == "window_change":
         return Operand(window_change=_window_change(value, f"{path}.window_change", episode_refs))
     if key == "price":
@@ -1450,6 +1517,22 @@ def _values(
                 _at_point_operand, operand.at_point, frame, context, identity, side, bundle, path
             ),
         )
+    if operand.signed is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _signed_operand, operand.signed, frame, context, identity, side, bundle, path
+            ),
+        )
+    if operand.only_if is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _only_if_operand, operand.only_if, frame, context, identity, side, bundle, path
+            ),
+        )
     if operand.window_change is not None:
         return compute_through(
             context,
@@ -1832,6 +1915,69 @@ def _at_point_operand(
     return out
 
 
+def _signed_operand(
+    signed: Signed,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+    path: str,
+) -> np.ndarray:
+    length = len(frame.time_ms)
+    inner = np.broadcast_to(
+        np.asarray(
+            _values(signed.operand, frame, context, identity, side, bundle, f"{path}.operand"),
+            dtype=np.float64,
+        ),
+        (length,),
+    )
+    out = inner.copy() if side == "long" else signed.center - (inner - signed.center)
+    out[~np.isfinite(out)] = math.nan
+    out.flags.writeable = False
+    return out
+
+
+def _only_if_operand(
+    only_if: OnlyIf,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+    path: str,
+) -> np.ndarray:
+    length = len(frame.time_ms)
+    held = np.ones(length, dtype=bool)
+    for index, item in enumerate(only_if.require):
+        value = np.broadcast_to(
+            np.asarray(
+                _values(
+                    item.operand, frame, context, identity, side, bundle, f"{path}.require[{index}]"
+                ),
+                dtype=np.float64,
+            ),
+            (length,),
+        )
+        ok = np.isfinite(value)
+        with np.errstate(invalid="ignore"):
+            if item.min is not None:
+                ok &= value > item.min if item.bounds == "exclusive" else value >= item.min
+            if item.max is not None:
+                ok &= value < item.max if item.bounds == "exclusive" else value <= item.max
+        held &= ok
+    inner = np.broadcast_to(
+        np.asarray(
+            _values(only_if.operand, frame, context, identity, side, bundle, f"{path}.operand"),
+            dtype=np.float64,
+        ),
+        (length,),
+    )
+    out = np.where(held & np.isfinite(inner), inner, math.nan)
+    out.flags.writeable = False
+    return out
+
+
 def _window_change_operand(
     window_change: WindowChange,
     frame: FeatureFrameLike,
@@ -2178,6 +2324,8 @@ def _has_value(operand: Operand) -> bool:
         or operand.difference is not None
         or operand.at_point is not None
         or operand.window_change is not None
+        or operand.signed is not None
+        or operand.only_if is not None
     )
 
 
@@ -2425,6 +2573,10 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("at_point",)
     if operand.window_change is not None:
         return ("window_change",)
+    if operand.signed is not None:
+        return ("signed",)
+    if operand.only_if is not None:
+        return ("only_if",)
     return ("feature",)
 
 
@@ -2943,6 +3095,65 @@ def _resolve_operand(
         )
         operand_ids[path] = node
         return node, [node, column]
+    if operand.signed is not None:
+        signed = operand.signed
+        inner_node, inner_consumed = _resolve_operand(
+            signed.operand,
+            f"{path}.operand",
+            feature_ids,
+            side,
+            contexts,
+            column_ids,
+            episode_ids,
+            operand_ids,
+        )
+        node = node_spec(
+            "predicate.signed",
+            version=PREDICATE_NODE_VERSION,
+            params={"center": signed.center, "operand": _operand_param(signed.operand)},
+            upstream={} if inner_node is None else {"operand": inner_node},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node, *inner_consumed]
+    if operand.only_if is not None:
+        only_if = operand.only_if
+        upstream = {}
+        consumed = []
+        children = [("operand", f"{path}.operand", only_if.operand)]
+        children += [
+            (f"require{index}", f"{path}.require[{index}]", item.operand)
+            for index, item in enumerate(only_if.require)
+        ]
+        for role, child_path, child in children:
+            child_node, child_consumed = _resolve_operand(
+                child,
+                child_path,
+                feature_ids,
+                side,
+                contexts,
+                column_ids,
+                episode_ids,
+                operand_ids,
+            )
+            if child_node is not None:
+                upstream[role] = child_node
+                consumed.extend(child_consumed)
+        node = node_spec(
+            "predicate.only_if",
+            version=PREDICATE_NODE_VERSION,
+            params={
+                "operand": _operand_param(only_if.operand),
+                "require": tuple(
+                    (_operand_param(item.operand), item.min, item.max, item.bounds)
+                    for item in only_if.require
+                ),
+            },
+            upstream=upstream,
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node, *consumed]
     return None, []
 
 
