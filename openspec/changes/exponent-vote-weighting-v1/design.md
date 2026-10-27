@@ -76,7 +76,7 @@ Curve tails stay as they are, even where only 1-3 entries per coin are cut (owne
 | W2d | 0.6 | 16 | `oi_curves_engine5m.json` |
 | D1v (`only_if` operand on teko29 7c684da) | 0.2 | 8 | `review/oi/w8/research/excess.json` `D1v` |
 | Wk (`signed` operand on teko29 7c684da) | 0.2 | 10 | `review/oi/w8/research/excess.json` `Wk` |
-| vol1h low, vol1h high | 0.3 | 8 | `review/volspot/excess_vol.json` (slot, volume source pending) |
+| vol1h low, vol1h high (one operand: `rolling_sum` volume 12 ÷ (`rolling_sum` volume 5760 lag 12 ÷ 480), teko29 df26588) | 0.3 | 8 | `review/volspot/excess_vol.json` |
 | OR(three EMA slopes, window ending at the evaluated bar) | 0.3 | 16 | `engine_curves/slope_curves_engine_bar.json` |
 
 `review/` = `/mnt/project-files/ema200_calib/review/`. Premium PS_R excluded. Missing value → weight 0 for every voter (research
