@@ -1,35 +1,37 @@
 ## Context
 
-`_touch_anchor` (triggers.py) gives `trigger = touch & close_ok` on one bar. `_untouched_anchor` (setups.py) opens a
-3-bar window after the first touch. `_project_side` (potential_entries.py) today emits a plan on every bar with
-`pre_trigger_allowed & close_ok` at `entry = anchor[i]`: a plan for the *next* bar, placed before the touch happens.
-`live_entry.py::_plan_for_side` reads PotentialEntry at the target index (= the last committed bar).
+Engine live-entry chain (`docs/22_live_projections_architecture.md`): HTTP → `EvaluateLiveEntryProjection` →
+`LoadLiveFeatureFrame` → registry → `EmaPullbackLiveEntryProjectionAdapter` → `evaluate_ema_pullback_frame`
+(contexts → consumption → direction/blockers → setups → triggers → risk/entries → exit policy → potential entries) →
+`_plan_for_side` at the target index → `_normalize_desired_entry` → HTTP.
+Only the last stage of the pipeline, `project_potential_entries`, changes. Owner's chain page:
+https://claude.ai/artifact/S1krVonVHN8v86GLGvWRKn
 
 ## Decisions
 
-### D1. Mode lives on the trigger, default keeps today
+### D1. The mode lives on the touch trigger, default keeps today
 `components.trigger.entry_price ∈ {"anchor", "signal_close"}`, default `"anchor"`. Allowed only with
-`component_id: "touch_anchor"`; any other value, or the key on another trigger, is a validation error (no silent
-fallback). Rationale: the price is a property of how the touch trigger is turned into an order.
+`component_id: "touch_anchor"`. Any other value, or the key on another trigger, is a typed validation error, never a
+silent fallback. Without the key every result is byte-identical to today.
 
-### D2. `signal_close` emits a plan only on the signal bar
-Plan on bar `i` iff `entry_allowed[i]` of the side (`pre_trigger_allowed & touch & close_ok`, then the risk mask). No
-plan on armed-but-untouched bars, so no order sits in advance and nothing is computed on bar `i−1`.
-`entry = close[i]`; stop/take from the exit-policy distances on bar `i` (R = k × ATR on the touch bar, unchanged);
-partial takes from the same entry. The existing geometry check stays (`stop < entry < take` long, mirrored short).
+### D2. `signal_close` uses the final entry mask
+The plan exists on bar `i` iff `entries[side].entry_allowed[i]` (the same mask research enters on). This already contains
+`pre_trigger_allowed` (setups, vote, blockers), the touch trigger (`touch & close_ok`) and the risk mask, so no filter is
+re-implemented in the projection.
 
-### D3. Order kind travels with the plan
-`LiveEntryPlan` / `DesiredEntry` get `entry_order: "post_only_limit" | None`. `None` is serialized as an absent key
-(same pattern as `partial_takes`). Engine does not know exchanges; the value says "rest at this price as maker, never
-take", ABI maps it to Bybit. Lifetime (one bar after the signal bar) is implied by `source_plan_bar_open_time_ms` and is
-enforced by Runtime's existing per-bar reconciliation (no plan on the next bar → Cancel; a new signal → Replace).
+### D3. Price and protection from the signal bar
+`entry = close[i]`. Stop/take use the exit-policy distances of bar `i` (R = k × ATR on the touch bar), exactly the
+formula used today with `anchor[i]`. The existing positivity and geometry checks stay
+(`stop < entry < take` long, mirrored short); a bar that fails them has no plan.
 
-### D4. One bar of validity is not a new Engine field
-Runtime already asks Engine on every committed bar. A `signal_close` plan exists only for its own signal bar, so the
-next bar returns `null` (or a new plan) and Runtime cancels/replaces. No `valid_until` is added here.
+### D4. Same contract shape
+`_plan_for_side` and the HTTP response do not change. `source_plan_bar_open_time_ms` = the signal bar. Runtime sees a plan
+only on the signal bar and `null` on the next bar (unless it is itself a signal bar), which today's reconciliation turns
+into Apply / Cancel / Replace.
 
-## Risks
-
-- Fill at the level: the simulation counts a fill when the next bar reaches the close. With "must trade through by one
-  tick" the SOL controls fall almost by half (13.1 / 9.4 / 10.0 / 16.4 / 11.9k). Measured on demo after deploy, not here.
-- A post-only order is rejected when the market has already crossed the price at placement; handled in ABI/Runtime.
+## Risks / checks
+- Open-trade management starts after the bar Runtime records as the entry (the fill bar), while research manages from the
+  bar after the signal bar. This change does not touch open-trade; the possible one-bar shift is measured in the parity
+  task and reported, and handled in the Runtime stage if real.
+- Both sides on one bar: possible only when close == anchor and both sides are allowed, the same as today; the existing
+  `evaluation_invariant_broken` stays.

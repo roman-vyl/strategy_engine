@@ -1,22 +1,21 @@
 ## ADDED Requirements
 
-### Requirement: Entry order kind in the desired entry
-A `DesiredEntry` projected from a `signal_close` plan SHALL contain `entry_order: "post_only_limit"`. A `DesiredEntry`
-projected from an `anchor` plan SHALL NOT contain the `entry_order` key. `post_only_limit` SHALL mean: rest a limit order
-at `planned_entry_price` that never takes liquidity, valid for the bar that opens right after
-`source_plan_bar_open_time_ms`.
+### Requirement: Signal-close desired entry
+For a spec with `components.trigger.entry_price: "signal_close"`, live-entry SHALL return a non-null `desired_entry` for a
+target bar only when that bar is a signal bar of one side (that side's entry is allowed on the target bar), with
+`planned_entry_price` equal to the target bar close and `source_plan_bar_open_time_ms` equal to the target bar. The
+response shape SHALL be the same as for `anchor` plans.
 
-#### Scenario: Signal-close plan
-- **WHEN** the target bar is a long signal bar of a `signal_close` spec with close 100.5
-- **THEN** `desired_entry.planned_entry_price` SHALL be `"100.5"`
-- **AND** `desired_entry.entry_order` SHALL be `"post_only_limit"`
-- **AND** `source_plan_bar_open_time_ms` SHALL equal the target bar
+#### Scenario: Signal bar
+- **WHEN** the target bar is a long signal bar with close 100.5, stop distance 1.2 and take distance 6
+- **THEN** `desired_entry` SHALL have `planned_entry_price` `"100.5"`, `initial_stop_price` `"99.3"` and
+  `initial_take_price` `"106.5"`
+- **AND** SHALL contain no field that an `anchor` plan does not contain
 
 #### Scenario: Bar after the signal
 - **WHEN** the target bar follows a signal bar and is not itself a signal bar
 - **THEN** `desired_entry` SHALL be `null`
 
 #### Scenario: Anchor plan unchanged
-- **WHEN** a spec without `entry_price` produces a plan
-- **THEN** the response SHALL NOT contain `entry_order`
-- **AND** SHALL be byte-identical to the response before this change
+- **WHEN** a spec has no `entry_price`
+- **THEN** the live-entry response SHALL be byte-identical to the response before this change
