@@ -32,12 +32,27 @@ from strategy_engine.indicators.implementations.atr import (
 from strategy_engine.indicators.implementations.atr_distance import (
     validate_atr_distance_feature,
 )
+from strategy_engine.indicators.implementations.candle_shape import (
+    candle_body_atr,
+    candle_close_position,
+    validate_candle_body_atr_feature,
+    validate_candle_close_position_feature,
+)
 from strategy_engine.indicators.implementations.ema import validate_ema_feature
 from strategy_engine.indicators.implementations.frame_ops import (
     align_completed_to_base,
     feature_timeframe,
     resample_ohlcv,
     serialize_value,
+)
+from strategy_engine.indicators.implementations.rolling_extreme import (
+    ROLLING_EXTREME_KINDS,
+    ROLLING_SUM_KIND,
+    rolling_extreme,
+    rolling_sum,
+    rolling_sum_lag,
+    validate_rolling_extreme_feature,
+    validate_rolling_sum_feature,
 )
 from strategy_engine.indicators.implementations.rsi import (
     rsi_rolling_mean,
@@ -155,6 +170,30 @@ def _compute_feature(
         values = _atr_values(feature_frame, feature)
     elif feature.kind == "atr_wilder":
         values = _atr_wilder_values(feature_frame, feature)
+    elif feature.kind == "candle_body_atr":
+        validate_candle_body_atr_feature(feature)
+        values = candle_body_atr(feature_frame, period=_feature_period(feature))
+    elif feature.kind == "candle_close_position":
+        validate_candle_close_position_feature(feature)
+        values = candle_close_position(feature_frame)
+    elif feature.kind == ROLLING_SUM_KIND:
+        validate_rolling_sum_feature(feature)
+        assert feature.source is not None
+        values = rolling_sum(
+            feature_frame,
+            source=feature.source,
+            period=_feature_period(feature),
+            lag=rolling_sum_lag(feature),
+        )
+    elif feature.kind in ROLLING_EXTREME_KINDS:
+        validate_rolling_extreme_feature(feature)
+        assert feature.source is not None
+        values = rolling_extreme(
+            feature_frame,
+            kind=feature.kind,
+            source=feature.source,
+            period=_feature_period(feature),
+        )
     elif feature.kind == "atr_distance":
         validate_atr_distance_feature(feature)
         dependency_id = feature.dependencies[0]

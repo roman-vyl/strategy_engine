@@ -34,6 +34,11 @@ def test_existing_kinds_in_public_order() -> None:
         "di_plus",
         "di_minus",
         "atr_wilder",
+        "candle_body_atr",
+        "candle_close_position",
+        "rolling_max",
+        "rolling_min",
+        "rolling_sum",
     ]
     assert [c.kind for c in feature_kinds() if c.requestable] == [
         "ema",
@@ -43,6 +48,11 @@ def test_existing_kinds_in_public_order() -> None:
         "di_plus",
         "di_minus",
         "atr_wilder",
+        "candle_body_atr",
+        "candle_close_position",
+        "rolling_max",
+        "rolling_min",
+        "rolling_sum",
     ]
 
 

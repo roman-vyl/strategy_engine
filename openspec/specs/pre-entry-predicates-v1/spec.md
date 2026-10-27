@@ -4,9 +4,7 @@
 An internal boolean layer turns canonical Strategy Engine features and
 context into pre-entry conditions on the base timeline. The layer
 computes no indicator and performs no alignment of its own.
-
 ## Requirements
-
 ### Requirement: Predicate is an internal layer, not a strategy role
 
 `PreEntryPredicate` SHALL be an internal evaluation contract. It SHALL
@@ -543,7 +541,7 @@ when any `x` it reads is non-finite, and its cost SHALL NOT depend on leg length
 
 ### Requirement: Ratio operand
 
-A ratio SHALL have the shape `{"ratio": {"left", "right"}}`, each side an operand of the layer other than a ratio, and not
+A ratio SHALL have the shape `{"ratio": {"left", "right"}}`, each side an operand of the layer, a ratio included, and not
 both constants. Its value SHALL be `left / right`, and SHALL be missing when either side is missing or non-finite or when
 `right ≤ 0`.
 
@@ -552,10 +550,10 @@ both constants. Its value SHALL be `left / right`, and SHALL be missing when eit
 - **WHEN** the right side is 0 on a bar
 - **THEN** the ratio SHALL be missing on that bar.
 
-#### Scenario: Nested ratio is rejected
+#### Scenario: Ratio of two ratios
 
-- **WHEN** a side of a ratio is itself a ratio
-- **THEN** static validation SHALL reject the spec.
+- **WHEN** a ratio has a ratio on each side, the right side 0.04 on one bar and 0.2 on another, and `right_floor` 0.05
+- **THEN** the outer ratio SHALL be missing on the first bar and `left / 0.2` on the second.
 
 ### Requirement: Range bounds
 
@@ -1433,3 +1431,240 @@ when `z ≤ a`, when the sum is 0, or when a close of `[a, z]` is not finite. Ba
 
 - **WHEN** the evaluated bar is the peak bar
 - **THEN** the pullback value SHALL be missing.
+
+### Requirement: Leg change operand shape
+
+A leg change reference SHALL be `{"leg_change": {"episode", "leg", "field", "touch"}}`; `episode` (a declared episode), `leg`
+(`impulse` | `pullback`) and `field` (`close` | `open_interest`) are required, `touch` (`current` | `previous`) defaults to
+`current` and `previous` SHALL be allowed only with `impulse`. No other field is allowed.
+
+#### Scenario: Malformed leg change
+
+- **WHEN** `field` is `volume`, or `touch` is `previous` with `leg` `pullback`, or the operand has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Leg change placement
+
+A leg change SHALL be accepted where a leg sum is accepted and rejected as the operand of a `change`.
+
+#### Scenario: Leg change inside change
+
+- **WHEN** a `change` operand is a leg change
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Leg change value
+
+On a bar `t` the value SHALL be `100 * (x[end] / x[begin] - 1)` of the base-bar field `x`, with `(begin, end)` `(S*, P)` of the
+current touch for `impulse`, `(P, t)` for `pullback`, and `(S*, P)` of the previous touch of the same episode for `impulse` with
+`touch` `previous`. It SHALL be missing when there is no valid wave or no previous touch, when either value is not finite, or when
+`x[begin] <= 0`. Bars after `t` SHALL NOT be read.
+
+#### Scenario: Open interest falls over the impulse
+
+- **WHEN** the open interest is 1000 at `S*` and 940 at `P`
+- **THEN** the impulse value over `open_interest` SHALL be −6 on every bar of that touch.
+
+#### Scenario: Missing open interest at the peak
+
+- **WHEN** the bar `P` has no open interest
+- **THEN** the impulse value over `open_interest` SHALL be missing.
+
+### Requirement: Absolute value operand shape
+
+An absolute value reference SHALL be `{"abs": <operand>}` with exactly one inner operand. The inner operand SHALL NOT be a
+constant, an `abs` or a `ratio`.
+
+#### Scenario: Malformed absolute value
+
+- **WHEN** the inner operand is a constant, an `abs` or a `ratio`
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Absolute value placement
+
+An absolute value SHALL be accepted wherever its inner operand is accepted, including as a side of a `ratio`. It SHALL be rejected
+as the operand of a `change`.
+
+#### Scenario: Absolute value inside change
+
+- **WHEN** a `change` operand is an absolute value
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Absolute value result
+
+On every bar the value SHALL be the absolute value of the inner operand on that bar. It SHALL be missing where the inner operand
+is missing.
+
+#### Scenario: Short impulse
+
+- **WHEN** the close changes by −2.5% over the impulse of a short touch
+- **THEN** `abs(leg_change {impulse, close})` SHALL be 2.5 on every bar of that touch.
+
+### Requirement: Difference operand shape
+
+A difference SHALL have the shape `{"difference": {"left", "right"}}`. Both sides are required, each an operand of the layer (a
+ratio or a difference included), and no other field is allowed. Two constant sides SHALL be rejected.
+
+#### Scenario: Malformed difference
+
+- **WHEN** a side is missing, both sides are constants, or the operand has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Difference placement
+
+A difference SHALL be accepted wherever a ratio is accepted, including as a side of a ratio and inside `abs`. It SHALL be
+rejected as the operand of a `change`.
+
+#### Scenario: Difference inside change
+
+- **WHEN** a `change` operand is a difference
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Difference value
+
+On every bar the value SHALL be `left − right`. It SHALL be missing where either side is missing or non-finite.
+
+#### Scenario: Pullback against impulse
+
+- **WHEN** the left side is −1.5 and the right side 0.8 on a bar
+- **THEN** the difference SHALL be −2.3 on that bar.
+
+### Requirement: Open interest as a base-bar field
+
+The base-bar `price` operand SHALL also accept `open_interest`. Its value SHALL be the bar's own open interest, read from the shared
+market arrays, and missing where the bar has none.
+
+#### Scenario: Current open interest over its maximum
+
+- **WHEN** a ratio has left `{price: open_interest}` = 90 000 and right `rolling_max open_interest 8640` = 120 000 on a bar
+- **THEN** the ratio SHALL be 0.75 on that bar.
+
+### Requirement: At-point operand shape
+
+An at-point operand SHALL have the shape `{"at_point": {"episode", "point", "operand"}}`. All three fields are required and no
+other field is allowed. `point` SHALL be `peak` or `origin`. The inner operand SHALL be an operand of the layer other than a
+constant or another at-point operand.
+
+#### Scenario: Malformed at-point
+
+- **WHEN** a field is missing, `point` is another value, the inner operand is a constant or an at-point operand, or the operand has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: At-point placement
+
+An at-point operand SHALL be accepted wherever a ratio is accepted, including as a side of a ratio or a difference and inside
+`abs`. It SHALL be rejected as the operand of a `change`.
+
+#### Scenario: At-point inside change
+
+- **WHEN** a `change` operand is an at-point operand
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: At-point value
+
+On every bar where the current touch of the episode is valid, the value SHALL be the inner operand's value on that touch's point
+(`peak` = P, `origin` = S*). It SHALL be missing where the touch is not valid or the inner value at the point is missing or
+non-finite. The point SHALL never be later than the bar.
+
+#### Scenario: Ratio read at the peak
+
+- **WHEN** the current touch has its peak on bar 100 and the inner ratio is 0.8 on bar 100 and 0.6 on bar 120
+- **THEN** the at-point value with `point: peak` SHALL be 0.8 on bar 120.
+
+### Requirement: Window change operand shape
+
+A window change SHALL have the shape `{"window_change": {"episode", "of", "last_n", "form"}}`. All four fields are required and
+no other field is allowed. `of` SHALL be a feature on the base timeframe, `last_n` a positive integer and `form` either `change`
+or `slope`.
+
+#### Scenario: Malformed window change
+
+- **WHEN** a field is missing, `last_n` is not a positive integer, `form` is another value, `of` is on a higher timeframe, or the operand has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Window change placement
+
+A window change SHALL be accepted wherever a ratio is accepted, including as a side of a ratio or a difference and inside `abs`
+or `at_point`. It SHALL be rejected as the operand of a `change`.
+
+#### Scenario: Window change inside change
+
+- **WHEN** a `change` operand is a window change
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Window change value
+
+On bar t where the current touch of the episode is valid, with P its peak, the window SHALL be `s0 = max(P, t − last_n)` and
+`s1 = t`, and `g` SHALL be +1 on the long side and −1 on the short side. With `form: change` the value SHALL be
+`g · (x[s1] − x[s0])`; with `form: slope` it SHALL be `g · (x[s1] − x[s0]) / x[s0] / (s1 − s0) · 10⁴`.
+
+#### Scenario: Window clipped at the peak
+
+- **WHEN** `last_n` is 24, P is 10 bars before t, the series rises by 2.0 over those 10 bars and `x[P]` is 100 on the long side
+- **THEN** the `slope` value SHALL be `2.0 / 100 / 10 · 10⁴ = 20`, and the `change` value SHALL be 2.0.
+
+#### Scenario: Short side
+
+- **WHEN** the same series is read on the short side
+- **THEN** the values SHALL be −20 and −2.0.
+
+### Requirement: Window change missing values
+
+The window change SHALL be missing where the touch is not valid, `s1 ≤ s0`, `x[s0]` or `x[s1]` is not finite, or, with `slope`,
+`x[s0]` is 0. No bar after t SHALL be read.
+
+#### Scenario: Evaluated bar is the peak
+
+- **WHEN** t equals P
+- **THEN** the window change SHALL be missing on that bar.
+
+### Requirement: Signed operand
+
+A signed operand SHALL have the shape `{"signed": {"operand", "center"}}`. Both fields are required and no other field is allowed. `center`
+SHALL be a finite number and the inner operand SHALL NOT be a constant. On every bar the value SHALL be `center + g · (x − center)`, with
+`g` = +1 on the long side and −1 on the short side and `x` the inner value. It SHALL be missing where the inner value is missing.
+
+#### Scenario: Weekly body our way
+
+- **WHEN** the inner value is 0.6 and `center` is 0
+- **THEN** the value SHALL be 0.6 on the long side and −0.6 on the short side.
+
+#### Scenario: Close position our way
+
+- **WHEN** the inner value is 0.1 and `center` is 0.5
+- **THEN** the value SHALL be 0.1 on the long side and 0.9 on the short side.
+
+### Requirement: Only-if operand shape
+
+An only-if operand SHALL have the shape `{"only_if": {"operand", "require"}}`. Both fields are required and no other field is allowed. The
+inner operand SHALL NOT be a constant. `require` SHALL be a non-empty list of `{"operand", "min", "max", "bounds"?}`. Its fields have the
+meaning, defaults and validation of a `range`, and `empty` is not accepted.
+
+#### Scenario: Malformed only-if
+
+- **WHEN** `require` is empty, an item carries `empty`, an item operand is a constant, or the operand has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Only-if value
+
+On every bar the value SHALL be the inner value when every requirement holds. It SHALL be missing otherwise. A requirement holds when its
+operand value is finite and inside its bounds.
+
+#### Scenario: Weak yesterday candle
+
+- **WHEN** D1v requires yesterday's body our way ≥ 1 and the body our way is 0.7 on a bar
+- **THEN** the value SHALL be missing on that bar whatever today's candle.
+
+#### Scenario: Missing requirement value
+
+- **WHEN** a requirement operand is missing on a bar
+- **THEN** the value SHALL be missing on that bar.
+
+### Requirement: Signed and only-if placement
+
+Signed and only-if operands SHALL be accepted wherever a ratio is accepted. They SHALL be rejected as the operand of a `change`.
+
+#### Scenario: Signed inside change
+
+- **WHEN** a `change` operand is a signed operand
+- **THEN** static validation SHALL reject the spec.
+
