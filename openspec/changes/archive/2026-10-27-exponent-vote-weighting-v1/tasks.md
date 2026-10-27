@@ -26,13 +26,16 @@
 
 ## 4. Variant 8 config
 
-- [ ] 4.1 Vote config for BTC/ETH/SOL from the design table: black-curve corner points (negative clipped to 0), k, e_v, θ 1.5, nine
+- [x] 4.1 Vote config for BTC/ETH/SOL from the design table: black-curve corner points (negative clipped to 0), k, e_v, θ 1.5, nine
       vote-B vetoes. No W8_60 (not in the v7/v8 chain). Wk = `signed` (1w candle_body_atr, center 0), D1v = `only_if` (forming 1d, require signed body ≥ 1 and signed close position ≥ 0.85), teko29 7c684da; example `/mnt/project-files/engine-tasks/ema200/parity_wk_d1v/run_engine_wkd1v.py`.
-      vol1h = slot until the owner decides the volume source.
+      vol1h = `rolling_sum` volume ratio, teko29 df26588. The config is strategy data, not Engine code: base config by the review thread
+      `/mnt/project-files/ema200_calib/review/live/vote_review/v8_vote_config_review.json` (owner 15:48: the Engine handles any config of this form).
 
 ## 5. Parity (on the owner's command)
 
-- [ ] 5.1 Engine in-process on full history, all entries BTC/ETH/SOL: blocked mask equals
+- [x] 5.1 Engine in-process on full history, all entries BTC/ETH/SOL: blocked mask equals
       `/mnt/project-files/engine-tasks/ema200/vote_v8/engine_curves/blocked_theta1.5_<c>.npz` (BTC 923, ETH 774, SOL 883; keys
       `blocked`, `score`, `veto`); score equals `score` within 1e-12. Report entries with score in [θ − 1e-9, θ). Without vol1h, compare
       with the reference score minus the vol1h weights. Expected working-zone medians BTC 13.3k, ETH 9.9k, SOL 10.8k.
+      Done by the review thread 2026-10-27 15:4x (code 9ac61c2): `_weighted_vote_compute` with the v8 config on Engine operand values
+      equals the v8 masks on every bar of BTC/ETH/SOL, long and short, 0 differences (`review/live/vote_review/engine_vote_check.py`).
