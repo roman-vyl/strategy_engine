@@ -38,6 +38,9 @@ from strategy_engine.strategies.ema_pullback.live_calculation_requirements impor
     EmaPullbackLiveCalculationRequirements,
 )
 from strategy_engine.strategies.live_calculation.plan_window import PlanLiveHistoryStart
+from strategy_engine.strategies.live_projections.defaults import (
+    build_live_entry_projection_registry,
+)
 
 
 @dataclass(slots=True)
@@ -125,7 +128,10 @@ def build_services(settings: Settings) -> ApplicationServices:
         ),
         build_strategy_feature_plan=build_strategy_feature_plan,
         load_live_feature_frame=live_frame_loader,
-        evaluate_live_entry_projection=EvaluateLiveEntryProjection(live_frame_loader),
+        evaluate_live_entry_projection=EvaluateLiveEntryProjection(
+            live_frame_loader,
+            build_live_entry_projection_registry(settings.live_entry_mode),
+        ),
         evaluate_open_trade_projection=EvaluateOpenTradeProjection(live_frame_loader),
         query_episode_history=QueryEpisodeHistory(
             market_data_client,
