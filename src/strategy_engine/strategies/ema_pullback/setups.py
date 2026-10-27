@@ -6,6 +6,7 @@ import functools
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
+from fractions import Fraction
 from math import isfinite
 from typing import Any
 
@@ -60,6 +61,7 @@ from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
 from strategy_engine.strategies.ema_pullback.weighted_vote_spec import (
     WEIGHT_SCALE,
     WEIGHTED_VOTE_SETUP,
+    Exponent,
     VoteInput,
     WeightedVoteSpec,
     parse_weighted_vote_setup,
@@ -778,11 +780,11 @@ def _vote_input_crossings(
     identities: tuple[PredicateIdentity, ...] | None,
     bundle: ContextBundle | None,
     evidence: bool = True,
-) -> tuple[tuple[object, ...] | None, tuple[np.ndarray, ...]]:
-    """`(value trace, crossed mask per step)` of one vote input (design
-    D2, D6): an operand value against its levels, or the number of True
-    predicates of `count.of` against integer levels. The value trace is
-    None when `evidence` is off."""
+) -> tuple[tuple[object, ...] | None, tuple[np.ndarray, ...], np.ndarray | None]:
+    """`(value trace, crossed mask per step, operand values)` of one vote
+    input (design D2, D6): an operand value against its levels, or the number
+    of True predicates of `count.of` against integer levels. The value trace
+    is None when `evidence` is off; the operand values are None for a count."""
 
     if vote_input.operand_predicate is not None:
         values = range_operand_values(
@@ -794,19 +796,22 @@ def _vote_input_crossings(
             bundle=bundle,
         )
         finite = np.isfinite(values)
-        at_most = vote_input.direction == "at_most"
-        with np.errstate(invalid="ignore"):
-            crossed = tuple(
-                finite & ((values <= step.level) if at_most else (values >= step.level))
-                for step in vote_input.steps
-            )
+        if vote_input.linear:
+            crossed: tuple[np.ndarray, ...] = ()
+        else:
+            at_most = vote_input.direction == "at_most"
+            with np.errstate(invalid="ignore"):
+                crossed = tuple(
+                    finite & ((values <= step.level) if at_most else (values >= step.level))
+                    for step in vote_input.steps
+                )
         if not evidence:
-            return None, crossed
+            return None, crossed, values
         trace = tuple(
             float(item) if ok else None
             for item, ok in zip(values.tolist(), finite.tolist(), strict=True)
         )
-        return trace, crossed
+        return trace, crossed, values
     length = len(frame.time_ms)
     count = np.zeros(length, dtype=np.int64)
     for index, raw in enumerate(vote_input.count_of):
@@ -824,13 +829,43 @@ def _vote_input_crossings(
             )
         count += mask
     crossed = tuple(count >= step.level for step in vote_input.steps)
-    return (tuple(count.tolist()) if evidence else None), crossed
+    return (tuple(count.tolist()) if evidence else None), crossed, None
+
+
+def _linear_ladder(vote_input: VoteInput, values: np.ndarray) -> np.ndarray:
+    """Ladder value of a linear input: the points (level, weight) sorted by
+    level joined by straight lines, end values outside, 0 where missing
+    (design D2; `numpy.interp`, as the research black curve)."""
+
+    points = sorted((float(step.level), step.weight or 0) for step in vote_input.steps)
+    levels = np.array([level for level, _ in points], dtype=np.float64)
+    weights = np.array([weight / WEIGHT_SCALE for _, weight in points], dtype=np.float64)
+    finite = np.isfinite(values)
+    return np.where(finite, np.interp(np.where(finite, values, levels[0]), levels, weights), 0.0)
+
+
+def exponent_weight(values: np.ndarray, exponent: Exponent) -> np.ndarray:
+    """`(exp(k x) - 1) / (exp(k e_v) - 1)` in float64, in this form (not
+    expm1) to equal research bit for bit (design D1)."""
+
+    weights = (np.exp(exponent.k * values) - 1.0) / (np.exp(exponent.k * exponent.e_v) - 1.0)
+    return np.asarray(weights, dtype=np.float64)
 
 
 def _scaled_trace(values: np.ndarray) -> tuple[float, ...]:
     # int64 below 2**53 converts exactly, so this division is correctly
     # rounded: the nearest float of the exact decimal (design D6).
     return tuple((values.astype(np.float64) / float(WEIGHT_SCALE)).tolist())
+
+
+def _exact(weight: int | float, scaled: bool) -> Fraction:
+    return Fraction(int(weight), WEIGHT_SCALE) if scaled else Fraction(float(weight))
+
+
+# Bars whose float score is this close to the threshold are decided again in
+# exact rational arithmetic (design D3); float error of a sum of a few dozen
+# weights is many orders of magnitude below it.
+_EXACT_BAND = 1e-6
 
 
 def _weighted_vote_compute(
@@ -846,6 +881,10 @@ def _weighted_vote_compute(
     integer arithmetic (units of 10**-9). The memoized value carries the
     labels: they are part of the vote node identity (design D8).
 
+    With exponent or linear inputs (exponent-vote-weighting-v1) weights are
+    floats: the score is summed in float64 and every bar near the threshold
+    is decided again exactly over rationals (design D3).
+
     In a context without evidence (execution projection) the per-bar
     trace is not built and the evidence dict is empty: ~20 inputs times
     three Python tuples over every bar are what dominates memory, and
@@ -853,55 +892,98 @@ def _weighted_vote_compute(
 
     length = len(frame.time_ms)
     evidence = context is None or context.evidence
+    floating = any(item.exponent is not None or item.linear for item in spec.inputs())
     trace: dict[str, tuple[object, ...]] = {}
     voter_weights: list[np.ndarray] = []
     voter_vetoes: list[np.ndarray] = []
+    # Per voter, per input: (weight array, scaled-integer flag) for the exact pass.
+    voter_parts: list[list[tuple[np.ndarray, bool]]] = []
     input_index = 0
     for voter in spec.voters:
-        voter_weight = np.zeros(length, dtype=np.int64)
+        voter_weight = np.zeros(length, dtype=np.float64 if floating else np.int64)
         voter_veto = np.zeros(length, dtype=bool)
+        parts: list[tuple[np.ndarray, bool]] = []
         for vote_input in voter.inputs:
-            value_trace, crossed = _vote_input_crossings(
+            path = f"setup[{spec.instance_id}].{vote_input.input_id}"
+            identities = inputs[input_index] if inputs is not None else None
+            value_trace, crossed, values = _vote_input_crossings(
                 vote_input,
-                f"setup[{spec.instance_id}].{vote_input.input_id}",
+                path,
                 frame,
                 side,
                 context=context,
-                identities=inputs[input_index] if inputs is not None else None,
+                identities=identities,
                 bundle=bundle,
                 evidence=evidence,
             )
             input_index += 1
-            weight = np.zeros(length, dtype=np.int64)
             veto = np.zeros(length, dtype=bool)
-            for step, mask in zip(vote_input.steps, crossed, strict=True):
-                if step.weight is None:
-                    veto |= mask
-                else:
-                    weight = np.where(mask, np.maximum(weight, step.weight), weight)
+            level_value: np.ndarray | None = None
+            if vote_input.linear:
+                assert values is not None
+                level_value = _linear_ladder(vote_input, values)
+                weight: np.ndarray = level_value
+                scaled = False
+            else:
+                weight = np.zeros(length, dtype=np.int64)
+                for step, mask in zip(vote_input.steps, crossed, strict=True):
+                    if step.weight is None:
+                        veto |= mask
+                    else:
+                        weight = np.where(mask, np.maximum(weight, step.weight), weight)
+                scaled = True
+            if vote_input.exponent is not None:
+                if scaled:
+                    level_value = weight.astype(np.float64) / float(WEIGHT_SCALE)
+                assert level_value is not None
+                weight = exponent_weight(level_value, vote_input.exponent)
+                scaled = False
             if value_trace is not None:
                 trace[f"input:{vote_input.input_id}:value"] = value_trace
-                trace[f"input:{vote_input.input_id}:weight"] = _scaled_trace(weight)
+                if vote_input.exponent is not None:
+                    assert level_value is not None
+                    trace[f"input:{vote_input.input_id}:level_value"] = tuple(level_value.tolist())
+                trace[f"input:{vote_input.input_id}:weight"] = (
+                    _scaled_trace(weight) if scaled else tuple(weight.astype(np.float64).tolist())
+                )
                 trace[f"input:{vote_input.input_id}:veto"] = tuple(veto.tolist())
-            voter_weight = np.maximum(voter_weight, weight)
+            parts.append((weight, scaled))
+            as_voter = (
+                weight.astype(np.float64) / float(WEIGHT_SCALE) if floating and scaled else weight
+            )
+            voter_weight = np.maximum(voter_weight, as_voter)
             voter_veto |= veto
         if evidence:
-            trace[f"voter:{voter.voter_id}:weight"] = _scaled_trace(voter_weight)
+            trace[f"voter:{voter.voter_id}:weight"] = (
+                tuple(voter_weight.tolist()) if floating else _scaled_trace(voter_weight)
+            )
             trace[f"voter:{voter.voter_id}:veto"] = tuple(voter_veto.tolist())
         voter_weights.append(voter_weight)
         voter_vetoes.append(voter_veto)
+        voter_parts.append(parts)
     # One row per voter (voters are never empty); a zero-bar frame gives (n, 0).
     score = np.sum(np.stack(voter_weights), axis=0)
     vetoes = np.stack(voter_vetoes)
     any_veto = np.logical_or.reduce(vetoes, axis=0, initial=False)
-    by_score = score >= spec.threshold
+    if floating:
+        threshold = spec.threshold / WEIGHT_SCALE
+        by_score = score >= threshold
+        exact_threshold = Fraction(spec.threshold, WEIGHT_SCALE)
+        for bar in np.flatnonzero(np.abs(score - threshold) <= _EXACT_BAND).tolist():
+            total = sum(
+                (max(_exact(array[bar], flag) for array, flag in parts) for parts in voter_parts),
+                Fraction(0),
+            )
+            by_score[bar] = total >= exact_threshold
+    else:
+        by_score = score >= spec.threshold
     if evidence:
         labels = np.array(
             [f"veto:{voter.voter_id}" for voter in spec.voters] + ["score", None], dtype=object
         )
         count = len(spec.voters)
         reason = np.where(any_veto, np.argmax(vetoes, axis=0), np.where(by_score, count, count + 1))
-        trace["score"] = _scaled_trace(score)
+        trace["score"] = tuple(score.tolist()) if floating else _scaled_trace(score)
         trace["blocked_by"] = tuple(labels[reason].tolist())
     return tuple((~(any_veto | by_score)).tolist()), trace
 
@@ -1236,6 +1318,28 @@ def _vote_step_param(step: Any) -> tuple[object, ...]:
     )
 
 
+def _vote_input_param(vote_input: VoteInput) -> tuple[object, ...]:
+    """Normalized identity params of one input. Inputs without the
+    exponent-vote-weighting-v1 keys keep their former tuple byte for byte
+    (design D6)."""
+
+    base: tuple[object, ...] = (
+        vote_input.input_id,
+        "operand" if vote_input.operand_predicate is not None else "count",
+        vote_input.direction,
+        tuple(_vote_step_param(step) for step in vote_input.steps),
+    )
+    if not vote_input.has_extensions():
+        return base
+    exponent = vote_input.exponent
+    return base + (
+        (
+            ("between", vote_input.between),
+            ("exponent", None if exponent is None else (repr(exponent.k), repr(exponent.e_v))),
+        ),
+    )
+
+
 def _resolve_weighted_vote(
     item: Mapping[str, Any],
     feature_ids: Mapping[str, NodeSpec],
@@ -1270,15 +1374,7 @@ def _resolve_weighted_vote(
         (
             voter.voter_id,
             voter.role,
-            tuple(
-                (
-                    vote_input.input_id,
-                    "operand" if vote_input.operand_predicate is not None else "count",
-                    vote_input.direction,
-                    tuple(_vote_step_param(step) for step in vote_input.steps),
-                )
-                for vote_input in voter.inputs
-            ),
+            tuple(_vote_input_param(vote_input) for vote_input in voter.inputs),
         )
         for voter in spec.voters
     )
@@ -1357,9 +1453,7 @@ def resolve_setups(
     outputs: list[SideSetupIdentity] = []
     for prior in direction_blockers:
         setups = [
-            resolve_setup_identity_for_side(
-                item, plan, feature_ids, gates, prior.side, contexts
-            )
+            resolve_setup_identity_for_side(item, plan, feature_ids, gates, prior.side, contexts)
             for item in setup_items
         ]
         setups_ok = and_masks_node("mask.all", tuple(setup.final for setup in setups))
