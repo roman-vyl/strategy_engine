@@ -41,6 +41,6 @@ with the plan next (order lifetime) and which order ABI places are later stages.
 - `service/settings.py` (config path + TOML read + validation), `service/wiring.py` (pass the mode), `README.md`
   (Environment + config file), example `config/engine.toml.example`.
 - `application/evaluate_live_entry_projection.py` passes the mode to the adapter;
-  `strategies/live_projections` protocol gains the mode argument; `ema_pullback/live_projections/live_entry.py`
+  `strategies/live_projections/defaults.py` passes the mode to the adapter; `ema_pullback/live_projections/live_entry.py`
   builds the `touch_trigger` plan from the evaluation it already runs.
 - No change to `potential_entries.py`, node identities, raw spec validation or HTTP models.

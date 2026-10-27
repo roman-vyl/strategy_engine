@@ -44,7 +44,10 @@ STRATEGY_ENGINE_MDS_BASE_URL
 STRATEGY_ENGINE_MDS_CONNECT_TIMEOUT_SECONDS
 STRATEGY_ENGINE_MDS_READ_TIMEOUT_SECONDS
 STRATEGY_ENGINE_MAX_BATCH_VARIANTS
+STRATEGY_ENGINE_CONFIG_PATH
 ```
+
+`STRATEGY_ENGINE_CONFIG_PATH` names an optional TOML config file, read once at start (see `config/engine.toml.example`). Its only key, `live_entry_mode`, is `ema_anchor` (default) or `touch_trigger` and changes only the live-entry answer to Runtime. A missing file means defaults; an unknown key or value, or a file that does not parse, stops the service at start. Change the file, then restart the Engine.
 
 ## Start here
 

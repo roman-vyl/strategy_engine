@@ -18,7 +18,7 @@ Not an environment variable: Docker fixes environment values at container creati
 old value (owner wants restart, not recreate/deploy).
 
 ### D2. Only the live-entry adapter changes
-The mode is passed from wiring → `EvaluateLiveEntryProjection` → adapter `evaluate(request, bundle, mode)`. The EMA
+The mode is injected at composition: wiring → `build_live_entry_projection_registry(mode)` → the EMA Pullback adapter constructor (the neutral adapter protocol is unchanged). The EMA
 Pullback adapter keeps `_plan_for_side` (reads `potential_entries`) for `ema_anchor`, and for `touch_trigger` builds the
 plan from the same `EmaPullbackEvaluation`:
 - signal: `evaluation.entries[side].entry_allowed[target]` (the mask research enters on; it already contains setups, the

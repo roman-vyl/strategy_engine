@@ -110,8 +110,10 @@ def spec() -> dict[str, object]:
     }
 
 
-def services() -> tuple[EvaluateLiveEntryProjection, EvaluateStrategyRange, LiveStrategySpec]:
-    market_data = FakeMarketData()
+def services(
+    market_data: FakeMarketData | None = None,
+) -> tuple[EvaluateLiveEntryProjection, EvaluateStrategyRange, LiveStrategySpec]:
+    market_data = market_data or FakeMarketData()
     indicators = IndicatorRegistry()
     validate_plan = ValidateIndicatorPlan(indicators)
     indicator_eval = EvaluateIndicatorRange(indicators, market_data, validate_plan)

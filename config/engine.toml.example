@@ -1,0 +1,10 @@
+# Strategy Engine config file (touch-signal-close-entry-v1).
+# The stack mounts ${BBB_DATA_ROOT}/strategy-engine read-only and points
+# STRATEGY_ENGINE_CONFIG_PATH at engine.toml inside it. Read once at start:
+# edit the file, then restart the Engine. No file = all defaults.
+
+# Live-entry answer to Runtime, for every strategy of this Engine:
+#   "ema_anchor"    (default) plan at the EMA on every armed bar, placed in advance
+#   "touch_trigger" plan only on the touch signal bar, at that bar's close
+# Do not set "touch_trigger" on a live stack before ABI supports the entry order.
+live_entry_mode = "ema_anchor"

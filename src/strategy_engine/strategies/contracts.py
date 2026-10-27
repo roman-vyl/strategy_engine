@@ -495,6 +495,14 @@ class LivePartialTake:
     fraction_of_initial: str
 
 
+LiveEntryMode = Literal["ema_anchor", "touch_trigger"]
+"""Engine-wide live-entry mode (`touch-signal-close-entry-v1`): `ema_anchor`
+plans at the anchor on every armed bar; `touch_trigger` plans only on the
+signal bar, at its close."""
+
+LIVE_ENTRY_MODES: tuple[LiveEntryMode, ...] = ("ema_anchor", "touch_trigger")
+
+
 @dataclass(frozen=True, slots=True)
 class LiveEntryPlan:
     side: str
