@@ -27,12 +27,13 @@ from strategy_engine.domain.ranges import timeframe_duration_ms
 from strategy_engine.indicators.contracts import FeatureFrameLike, PlannedFeature
 from strategy_engine.indicators.evaluation_context import EvaluationContext, compute_through
 from strategy_engine.indicators.feature_kinds import plan_feature_request
-from strategy_engine.indicators.market_arrays import frame_market_arrays
+from strategy_engine.indicators.market_arrays import OPEN_INTEREST_FIELD, frame_market_arrays
 from strategy_engine.strategies.ema_pullback.anchor_follow import anchor_follow_values
 from strategy_engine.strategies.ema_pullback.candles import (
     CANDLE_ATR_FIELD,
     CANDLE_ATR_KIND,
     candle_values,
+    touch_points,
 )
 from strategy_engine.strategies.ema_pullback.forming_candle import (
     FORMING_CANDLE_ATR_FIELD,
@@ -44,6 +45,7 @@ from strategy_engine.strategies.ema_pullback.impulse_atr import (
     IMPULSE_ATR_KIND,
     impulse_atr_values,
 )
+from strategy_engine.strategies.ema_pullback.leg_change import LEG_CHANGE_FIELDS, leg_change_values
 from strategy_engine.strategies.ema_pullback.leg_efficiency import leg_efficiency_values
 from strategy_engine.strategies.ema_pullback.leg_means import (
     FORCE_FIELDS,
@@ -73,7 +75,8 @@ if TYPE_CHECKING:
 
 PREDICATE_NODE_VERSION = 1
 
-_PRICE_FIELDS = frozenset({"open", "high", "low", "close"})
+# `open_interest` is a base-bar field like the prices (`w8-rolling-extreme-v1`, D2).
+_PRICE_FIELDS = frozenset({"open", "high", "low", "close", OPEN_INTEREST_FIELD})
 _COMPARE_OPS: dict[str, Callable[[Any, Any], np.ndarray]] = {
     ">": np.greater,
     ">=": np.greater_equal,
@@ -236,6 +239,18 @@ class LegBars:
 
 
 @dataclass(frozen=True, slots=True)
+class LegChange:
+    """The percent change of a base-bar field between the two ends of the
+    impulse `[S*, P]` or the pullback `[P, t]` of the current touch, or of the
+    impulse of the previous touch (`o1-leg-change-v1`, D1)."""
+
+    episode: str
+    leg: str
+    field: str
+    touch: str = "current"
+
+
+@dataclass(frozen=True, slots=True)
 class PullbackDepth:
     """The share of the impulse height `|P - S*|` that the pullback `[P, t]`
     of the current touch gave back, by its extreme price
@@ -251,6 +266,56 @@ class Ratio:
     left: Operand
     right: Operand
     right_floor: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class Difference:
+    """`left - right` bar by bar (`w1d-difference-operand-v1`, D1)."""
+
+    left: Operand
+    right: Operand
+
+
+@dataclass(frozen=True, slots=True)
+class WindowChange:
+    """The change of a base-timeframe feature over the last `last_n` bars of
+    the pullback of the current touch, never earlier than its peak, signed by
+    side; `slope` divides by the start value and the bar count, in bp per bar
+    (`ema-slope-window-change-v1`, D1)."""
+
+    episode: str
+    series: PlannedFeature
+    last_n: int
+    form: str
+
+
+@dataclass(frozen=True, slots=True)
+class Signed:
+    """`center + g * (x - center)`, `g` +1 long and -1 short: the inner
+    value our way (`signed-only-if-operands-v1`, D1)."""
+
+    operand: Operand
+    center: float
+
+
+@dataclass(frozen=True, slots=True)
+class OnlyIf:
+    """The inner value where every requirement holds, missing otherwise
+    (`signed-only-if-operands-v1`, D2). A requirement is a range without
+    `empty`: its operand finite and inside its bounds."""
+
+    operand: Operand
+    require: tuple[Range, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class AtPoint:
+    """The inner operand's value on a wave point of the current touch, `peak`
+    = P or `origin` = S* (`w8p-at-point-v1`, D1)."""
+
+    episode: str
+    point: str
+    operand: Operand
 
 
 @dataclass(frozen=True, slots=True)
@@ -276,6 +341,13 @@ class Operand:
     leg_bars: LegBars | None = None
     forming_candle: FormingCandle | None = None
     leg_efficiency: LegEfficiency | None = None
+    leg_change: LegChange | None = None
+    absolute: Operand | None = None
+    difference: Difference | None = None
+    at_point: AtPoint | None = None
+    window_change: WindowChange | None = None
+    signed: Signed | None = None
+    only_if: OnlyIf | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -379,6 +451,24 @@ def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
         return (operand.forming_candle.atr,)
     if operand.ratio is not None:
         return (*operand_features(operand.ratio.left), *operand_features(operand.ratio.right))
+    if operand.absolute is not None:
+        return operand_features(operand.absolute)
+    if operand.difference is not None:
+        return (
+            *operand_features(operand.difference.left),
+            *operand_features(operand.difference.right),
+        )
+    if operand.at_point is not None:
+        return operand_features(operand.at_point.operand)
+    if operand.window_change is not None:
+        return (operand.window_change.series,)
+    if operand.signed is not None:
+        return operand_features(operand.signed.operand)
+    if operand.only_if is not None:
+        return (
+            *operand_features(operand.only_if.operand),
+            *(f for item in operand.only_if.require for f in operand_features(item.operand)),
+        )
     return ()
 
 
@@ -399,8 +489,19 @@ def operand_needs_episode(operand: Operand) -> bool:
         or operand.leg_bars is not None
         or operand.forming_candle is not None
         or operand.leg_efficiency is not None
+        or operand.leg_change is not None
+        or operand.at_point is not None
+        or operand.window_change is not None
+        or operand.signed is not None
+        or operand.only_if is not None
     ):
         return True
+    if operand.absolute is not None:
+        return operand_needs_episode(operand.absolute)
+    if operand.difference is not None:
+        return operand_needs_episode(operand.difference.left) or operand_needs_episode(
+            operand.difference.right
+        )
     return operand.ratio is not None and (
         operand_needs_episode(operand.ratio.left) or operand_needs_episode(operand.ratio.right)
     )
@@ -460,8 +561,10 @@ def _feature(raw: object, path: str) -> PlannedFeature:
 _OPERAND_KEYS = (
     "feature, episode, segment, candle, leg_mean, leg_sum, leg_top_mean, anchor_follow, "
     "pullback_depth, leg_speed, impulse_atr, leg_bars, forming_candle, leg_efficiency, "
-    "ratio, price or const"
+    "leg_change, abs, difference, at_point, window_change, signed, only_if, ratio, price or const"
 )
+AT_POINTS = ("peak", "origin")
+WINDOW_CHANGE_FORMS = ("change", "slope")
 _SEGMENT_FIELDS = {
     "episode",
     "of",
@@ -795,6 +898,26 @@ def _leg_bars(raw: object, path: str, episode_refs: frozenset[str] | None) -> Le
     return LegBars(speed.episode, speed.leg)
 
 
+def _leg_change(raw: object, path: str, episode_refs: frozenset[str] | None) -> LegChange:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "leg", "field", "touch"}, path)
+    if "field" not in payload:
+        raise InvalidRequestError(f"{path}.field is required")
+    wave = {key: payload[key] for key in ("episode", "leg") if key in payload}
+    speed = _leg_speed(wave, path, episode_refs)
+    market_field = payload["field"]
+    if market_field not in LEG_CHANGE_FIELDS:
+        raise InvalidRequestError(
+            f"{path}.field must be one of {', '.join(LEG_CHANGE_FIELDS)}", field=market_field
+        )
+    touch = payload.get("touch", "current")
+    if touch not in ("current", "previous"):
+        raise InvalidRequestError(f"{path}.touch must be current or previous", touch=touch)
+    if touch == "previous" and speed.leg != "impulse":
+        raise InvalidRequestError(f"{path}.touch previous is only allowed with leg impulse")
+    return LegChange(speed.episode, speed.leg, str(market_field), str(touch))
+
+
 def _impulse_atr(raw: object, path: str, episode_refs: frozenset[str] | None) -> ImpulseAtr:
     payload = _mapping(raw, path)
     _only_fields(payload, {"episode", IMPULSE_ATR_FIELD}, path)
@@ -851,11 +974,108 @@ def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio
         floor = _number(payload["right_floor"], f"{path}.right_floor")
     left = _operand(payload.get("left"), f"{path}.left", episode_refs)
     right = _operand(payload.get("right"), f"{path}.right", episode_refs)
-    if left.ratio is not None or right.ratio is not None:
-        raise InvalidRequestError(f"{path} must not nest a ratio")
     if left.const is not None and right.const is not None:
         raise InvalidRequestError(f"{path} must have at least one non-constant side")
     return Ratio(left, right, floor)
+
+
+def _difference(raw: object, path: str, episode_refs: frozenset[str] | None) -> Difference:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"left", "right"}, path)
+    for key in ("left", "right"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    left = _operand(payload["left"], f"{path}.left", episode_refs)
+    right = _operand(payload["right"], f"{path}.right", episode_refs)
+    if left.const is not None and right.const is not None:
+        raise InvalidRequestError(f"{path} must have at least one non-constant side")
+    return Difference(left, right)
+
+
+def _absolute(raw: object, path: str, episode_refs: frozenset[str] | None) -> Operand:
+    """The inner operand of an `abs` (`ki-abs-operand-v1`, D1): not a
+    constant, an `abs` or a `ratio`, so `abs` adds no way to nest a ratio."""
+
+    inner = _operand(raw, path, episode_refs)
+    if inner.const is not None or inner.absolute is not None or inner.ratio is not None:
+        raise InvalidRequestError(f"{path} must not be a constant, an abs or a ratio")
+    return inner
+
+
+def _at_point(raw: object, path: str, episode_refs: frozenset[str] | None) -> AtPoint:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "point", "operand"}, path)
+    for key in ("episode", "point", "operand"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    point = payload["point"]
+    if point not in AT_POINTS:
+        raise InvalidRequestError(f"{path}.point must be peak or origin", point=point)
+    inner = _operand(payload["operand"], f"{path}.operand", episode_refs)
+    if inner.const is not None or inner.at_point is not None:
+        raise InvalidRequestError(f"{path}.operand must not be a constant or an at_point")
+    return AtPoint(ref, str(point), inner)
+
+
+def _window_change(raw: object, path: str, episode_refs: frozenset[str] | None) -> WindowChange:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "of", "last_n", "form"}, path)
+    for key in ("episode", "of", "last_n", "form"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    series = _feature(payload["of"], f"{path}.of")
+    if series.timeframe != "base":
+        raise InvalidRequestError(
+            f"{path}.of must be on the base timeframe", timeframe=series.timeframe
+        )
+    last_n = _positive_int(payload["last_n"], f"{path}.last_n")
+    form = payload["form"]
+    if form not in WINDOW_CHANGE_FORMS:
+        raise InvalidRequestError(f"{path}.form must be change or slope", form=form)
+    return WindowChange(ref, series, last_n, str(form))
+
+
+def _signed(raw: object, path: str, episode_refs: frozenset[str] | None) -> Signed:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"operand", "center"}, path)
+    for key in ("operand", "center"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    inner = _operand(payload["operand"], f"{path}.operand", episode_refs)
+    if inner.const is not None:
+        raise InvalidRequestError(f"{path}.operand must not be a constant")
+    return Signed(inner, _number(payload["center"], f"{path}.center"))
+
+
+def _only_if(raw: object, path: str, episode_refs: frozenset[str] | None) -> OnlyIf:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"operand", "require"}, path)
+    for key in ("operand", "require"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    inner = _operand(payload["operand"], f"{path}.operand", episode_refs)
+    if inner.const is not None:
+        raise InvalidRequestError(f"{path}.operand must not be a constant")
+    items = payload["require"]
+    if not isinstance(items, list) or not items:
+        raise InvalidRequestError(f"{path}.require must be a non-empty list")
+    require = []
+    for index, item in enumerate(items):
+        item_path = f"{path}.require[{index}]"
+        item = _mapping(item, item_path)
+        _only_fields(item, {"operand", "min", "max", "bounds"}, item_path)
+        require.append(_range(item, item_path, episode_refs))
+    return OnlyIf(inner, tuple(require))
 
 
 def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Operand:
@@ -891,6 +1111,8 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         )
     if key == "leg_bars":
         return Operand(leg_bars=_leg_bars(value, f"{path}.leg_bars", episode_refs))
+    if key == "leg_change":
+        return Operand(leg_change=_leg_change(value, f"{path}.leg_change", episode_refs))
     if key == "forming_candle":
         return Operand(
             forming_candle=_forming_candle(value, f"{path}.forming_candle", episode_refs)
@@ -899,6 +1121,18 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         return Operand(impulse_atr=_impulse_atr(value, f"{path}.impulse_atr", episode_refs))
     if key == "ratio":
         return Operand(ratio=_ratio(value, f"{path}.ratio", episode_refs))
+    if key == "abs":
+        return Operand(absolute=_absolute(value, f"{path}.abs", episode_refs))
+    if key == "difference":
+        return Operand(difference=_difference(value, f"{path}.difference", episode_refs))
+    if key == "at_point":
+        return Operand(at_point=_at_point(value, f"{path}.at_point", episode_refs))
+    if key == "signed":
+        return Operand(signed=_signed(value, f"{path}.signed", episode_refs))
+    if key == "only_if":
+        return Operand(only_if=_only_if(value, f"{path}.only_if", episode_refs))
+    if key == "window_change":
+        return Operand(window_change=_window_change(value, f"{path}.window_change", episode_refs))
     if key == "price":
         if value not in _PRICE_FIELDS:
             raise InvalidRequestError(f"{path}.price must be open, high, low or close")
@@ -1198,6 +1432,12 @@ def _values(
             node,
             functools.partial(_leg_bars_operand, operand.leg_bars, side, bundle),
         )
+    if operand.leg_change is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(_leg_change_operand, operand.leg_change, frame, side, bundle),
+        )
     if operand.forming_candle is not None:
         return compute_through(
             context,
@@ -1244,6 +1484,67 @@ def _values(
             node,
             functools.partial(
                 _ratio_operand, operand.ratio, frame, context, identity, side, bundle, path
+            ),
+        )
+    if operand.absolute is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _absolute_operand, operand.absolute, frame, context, identity, side, bundle, path
+            ),
+        )
+    if operand.difference is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _difference_operand,
+                operand.difference,
+                frame,
+                context,
+                identity,
+                side,
+                bundle,
+                path,
+            ),
+        )
+    if operand.at_point is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _at_point_operand, operand.at_point, frame, context, identity, side, bundle, path
+            ),
+        )
+    if operand.signed is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _signed_operand, operand.signed, frame, context, identity, side, bundle, path
+            ),
+        )
+    if operand.only_if is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _only_if_operand, operand.only_if, frame, context, identity, side, bundle, path
+            ),
+        )
+    if operand.window_change is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _window_change_operand,
+                operand.window_change,
+                frame,
+                context,
+                identity,
+                side,
+                bundle,
             ),
         )
     assert operand.feature is not None
@@ -1451,6 +1752,23 @@ def _leg_bars_operand(leg_bars: LegBars, side: str, bundle: ContextBundle | None
     return leg_bars_values(episodes.side(leg_bars.episode, side), leg_bars.leg)
 
 
+def _leg_change_operand(
+    leg_change: LegChange,
+    frame: FeatureFrameLike,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "leg_change operand has no evaluated episode", episode_ref=leg_change.episode
+        )
+    series = frame_market_arrays(frame).array(leg_change.field)
+    return leg_change_values(
+        episodes.side(leg_change.episode, side), series, leg_change.leg, leg_change.touch
+    )
+
+
 def _forming_candle_operand(
     forming_candle: FormingCandle,
     frame: FeatureFrameLike,
@@ -1521,6 +1839,186 @@ def _ratio_operand(
     valid = np.isfinite(left) & np.isfinite(right) & (right > ratio.right_floor)
     out = np.full(length, math.nan)
     np.divide(left, right, out=out, where=valid)
+    out.flags.writeable = False
+    return out
+
+
+def _difference_operand(
+    difference: Difference,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+    path: str,
+) -> np.ndarray:
+    length = len(frame.time_ms)
+    left = np.broadcast_to(
+        _values(difference.left, frame, context, identity, side, bundle, f"{path}.left"),
+        (length,),
+    )
+    right = np.broadcast_to(
+        _values(difference.right, frame, context, identity, side, bundle, f"{path}.right"),
+        (length,),
+    )
+    valid = np.isfinite(left) & np.isfinite(right)
+    out = np.full(length, math.nan)
+    np.subtract(left, right, out=out, where=valid)
+    out.flags.writeable = False
+    return out
+
+
+def _absolute_operand(
+    inner: Operand,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+    path: str,
+) -> np.ndarray:
+    length = len(frame.time_ms)
+    values = np.broadcast_to(
+        _values(inner, frame, context, identity, side, bundle, f"{path}.abs"), (length,)
+    )
+    out = np.abs(np.asarray(values, dtype=np.float64))
+    out.flags.writeable = False
+    return out
+
+
+def _at_point_operand(
+    at_point: AtPoint,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+    path: str,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "at_point operand has no evaluated episode", episode_ref=at_point.episode
+        )
+    length = len(frame.time_ms)
+    inner = np.broadcast_to(
+        np.asarray(
+            _values(at_point.operand, frame, context, identity, side, bundle, f"{path}.operand"),
+            dtype=np.float64,
+        ),
+        (length,),
+    )
+    valid, origin, peak = touch_points(episodes.side(at_point.episode, side), length)
+    out = _take_rows(inner, peak if at_point.point == "peak" else origin, valid)
+    out[~np.isfinite(out)] = math.nan
+    out.flags.writeable = False
+    return out
+
+
+def _signed_operand(
+    signed: Signed,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+    path: str,
+) -> np.ndarray:
+    length = len(frame.time_ms)
+    inner = np.broadcast_to(
+        np.asarray(
+            _values(signed.operand, frame, context, identity, side, bundle, f"{path}.operand"),
+            dtype=np.float64,
+        ),
+        (length,),
+    )
+    out = inner.copy() if side == "long" else signed.center - (inner - signed.center)
+    out[~np.isfinite(out)] = math.nan
+    out.flags.writeable = False
+    return out
+
+
+def _only_if_operand(
+    only_if: OnlyIf,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+    path: str,
+) -> np.ndarray:
+    length = len(frame.time_ms)
+    held = np.ones(length, dtype=bool)
+    for index, item in enumerate(only_if.require):
+        value = np.broadcast_to(
+            np.asarray(
+                _values(
+                    item.operand, frame, context, identity, side, bundle, f"{path}.require[{index}]"
+                ),
+                dtype=np.float64,
+            ),
+            (length,),
+        )
+        ok = np.isfinite(value)
+        with np.errstate(invalid="ignore"):
+            if item.min is not None:
+                ok &= value > item.min if item.bounds == "exclusive" else value >= item.min
+            if item.max is not None:
+                ok &= value < item.max if item.bounds == "exclusive" else value <= item.max
+        held &= ok
+    inner = np.broadcast_to(
+        np.asarray(
+            _values(only_if.operand, frame, context, identity, side, bundle, f"{path}.operand"),
+            dtype=np.float64,
+        ),
+        (length,),
+    )
+    out = np.where(held & np.isfinite(inner), inner, math.nan)
+    out.flags.writeable = False
+    return out
+
+
+def _window_change_operand(
+    window_change: WindowChange,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "window_change operand has no evaluated episode", episode_ref=window_change.episode
+        )
+    series = np.asarray(
+        _feature_array(window_change.series, frame, context, identity), dtype=np.float64
+    )
+    return window_change_values(
+        episodes.side(window_change.episode, side), series, window_change.last_n, window_change.form
+    )
+
+
+def window_change_values(
+    episode: SideEpisode, series: np.ndarray, last_n: int, form: str
+) -> np.ndarray:
+    """D1 of `ema-slope-window-change-v1` on every bar as a read-only array:
+    `s0 = max(P, t - last_n)`, `s1 = t`; missing unless the touch is valid,
+    `s1 > s0` and both ends are finite (and `x[s0] != 0` for `slope`)."""
+
+    size = len(series)
+    valid, _, peak = touch_points(episode, size)
+    t = np.arange(size, dtype=np.int64)
+    start = np.maximum(peak, t - last_n)
+    ok = valid & (t > start)
+    begin = np.where(ok, series[np.where(ok, start, 0)], math.nan)
+    end = np.where(ok, series, math.nan)
+    g = 1.0 if episode.side == "long" else -1.0
+    with np.errstate(invalid="ignore", divide="ignore"):
+        change = g * (end - begin)
+        if form == "slope":
+            change = np.where(begin != 0.0, change / begin / (t - start) * 1e4, math.nan)
+    out = np.where(np.isfinite(change), change, math.nan)
     out.flags.writeable = False
     return out
 
@@ -1821,6 +2319,13 @@ def _has_value(operand: Operand) -> bool:
         or operand.leg_bars is not None
         or operand.forming_candle is not None
         or operand.leg_efficiency is not None
+        or operand.leg_change is not None
+        or operand.absolute is not None
+        or operand.difference is not None
+        or operand.at_point is not None
+        or operand.window_change is not None
+        or operand.signed is not None
+        or operand.only_if is not None
     )
 
 
@@ -2054,10 +2559,24 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("impulse_atr",)
     if operand.leg_bars is not None:
         return ("leg_bars",)
+    if operand.leg_change is not None:
+        return ("leg_change",)
     if operand.forming_candle is not None:
         return ("forming_candle",)
     if operand.ratio is not None:
         return ("ratio",)
+    if operand.absolute is not None:
+        return ("abs",)
+    if operand.difference is not None:
+        return ("difference",)
+    if operand.at_point is not None:
+        return ("at_point",)
+    if operand.window_change is not None:
+        return ("window_change",)
+    if operand.signed is not None:
+        return ("signed",)
+    if operand.only_if is not None:
+        return ("only_if",)
     return ("feature",)
 
 
@@ -2349,6 +2868,22 @@ def _resolve_operand(
         )
         operand_ids[path] = node
         return node, [node]
+    if operand.leg_change is not None:
+        leg_change = operand.leg_change
+        episode = (contexts or {}).get(episode_identity_key(leg_change.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "leg_change episode is not declared", episode_ref=leg_change.episode
+            )
+        node = node_spec(
+            "predicate.leg_change",
+            version=PREDICATE_NODE_VERSION,
+            params={"leg": leg_change.leg, "field": leg_change.field, "touch": leg_change.touch},
+            upstream={"episode": episode},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node]
     if operand.forming_candle is not None:
         forming_candle = operand.forming_candle
         episode = (contexts or {}).get(episode_identity_key(forming_candle.episode, side))
@@ -2461,6 +2996,161 @@ def _resolve_operand(
             params=ratio_params,
             upstream=upstream,
             side=side if operand_needs_episode(operand) else None,
+        )
+        operand_ids[path] = node
+        return node, [node, *consumed]
+    if operand.absolute is not None:
+        inner_node, inner_consumed = _resolve_operand(
+            operand.absolute,
+            f"{path}.abs",
+            feature_ids,
+            side,
+            contexts,
+            column_ids,
+            episode_ids,
+            operand_ids,
+        )
+        node = node_spec(
+            "predicate.abs",
+            version=PREDICATE_NODE_VERSION,
+            params={"operand": _operand_param(operand.absolute)},
+            upstream={} if inner_node is None else {"operand": inner_node},
+            side=side if operand_needs_episode(operand) else None,
+        )
+        operand_ids[path] = node
+        return node, [node, *inner_consumed]
+    if operand.difference is not None:
+        difference = operand.difference
+        upstream = {}
+        consumed = []
+        for role, child in (("left", difference.left), ("right", difference.right)):
+            child_node, child_consumed = _resolve_operand(
+                child,
+                f"{path}.{role}",
+                feature_ids,
+                side,
+                contexts,
+                column_ids,
+                episode_ids,
+                operand_ids,
+            )
+            if child_node is not None:
+                upstream[role] = child_node
+                consumed.extend(child_consumed)
+        node = node_spec(
+            "predicate.difference",
+            version=PREDICATE_NODE_VERSION,
+            params={
+                "left": _operand_param(difference.left),
+                "right": _operand_param(difference.right),
+            },
+            upstream=upstream,
+            side=side if operand_needs_episode(operand) else None,
+        )
+        operand_ids[path] = node
+        return node, [node, *consumed]
+    if operand.at_point is not None:
+        at_point = operand.at_point
+        episode = (contexts or {}).get(episode_identity_key(at_point.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "at_point episode is not declared", episode_ref=at_point.episode
+            )
+        inner_node, inner_consumed = _resolve_operand(
+            at_point.operand,
+            f"{path}.operand",
+            feature_ids,
+            side,
+            contexts,
+            column_ids,
+            episode_ids,
+            operand_ids,
+        )
+        at_upstream = {"episode": episode}
+        if inner_node is not None:
+            at_upstream["operand"] = inner_node
+        node = node_spec(
+            "predicate.at_point",
+            version=PREDICATE_NODE_VERSION,
+            params={"point": at_point.point, "operand": _operand_param(at_point.operand)},
+            upstream=at_upstream,
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node, *inner_consumed]
+    if operand.window_change is not None:
+        window_change = operand.window_change
+        episode = (contexts or {}).get(episode_identity_key(window_change.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "window_change episode is not declared", episode_ref=window_change.episode
+            )
+        column = _column_identity(window_change.series, feature_ids, column_ids)
+        node = node_spec(
+            "predicate.window_change",
+            version=PREDICATE_NODE_VERSION,
+            params={"last_n": window_change.last_n, "form": window_change.form},
+            upstream={"episode": episode, "series": column},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node, column]
+    if operand.signed is not None:
+        signed = operand.signed
+        inner_node, inner_consumed = _resolve_operand(
+            signed.operand,
+            f"{path}.operand",
+            feature_ids,
+            side,
+            contexts,
+            column_ids,
+            episode_ids,
+            operand_ids,
+        )
+        node = node_spec(
+            "predicate.signed",
+            version=PREDICATE_NODE_VERSION,
+            params={"center": signed.center, "operand": _operand_param(signed.operand)},
+            upstream={} if inner_node is None else {"operand": inner_node},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node, *inner_consumed]
+    if operand.only_if is not None:
+        only_if = operand.only_if
+        upstream = {}
+        consumed = []
+        children = [("operand", f"{path}.operand", only_if.operand)]
+        children += [
+            (f"require{index}", f"{path}.require[{index}]", item.operand)
+            for index, item in enumerate(only_if.require)
+        ]
+        for role, child_path, child in children:
+            child_node, child_consumed = _resolve_operand(
+                child,
+                child_path,
+                feature_ids,
+                side,
+                contexts,
+                column_ids,
+                episode_ids,
+                operand_ids,
+            )
+            if child_node is not None:
+                upstream[role] = child_node
+                consumed.extend(child_consumed)
+        node = node_spec(
+            "predicate.only_if",
+            version=PREDICATE_NODE_VERSION,
+            params={
+                "operand": _operand_param(only_if.operand),
+                "require": tuple(
+                    (_operand_param(item.operand), item.min, item.max, item.bounds)
+                    for item in only_if.require
+                ),
+            },
+            upstream=upstream,
+            side=side,
         )
         operand_ids[path] = node
         return node, [node, *consumed]

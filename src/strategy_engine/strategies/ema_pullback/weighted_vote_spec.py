@@ -12,6 +12,11 @@ operand exactly as it does for a `range` child (design D2).
 Weights and the threshold are exact decimals held as integers in units of
 10**-9 (design D6): sums and the threshold comparison are exact and never
 depend on voter order or on binary floating point.
+
+OpenSpec `exponent-vote-weighting-v1` adds per input: `between: linear`
+(the ladder read as points joined by straight lines), `weighting.exponent`
+(the ladder value turned into `(exp(k x) - 1) / (exp(k e_v) - 1)`). The
+vote knows no trade side: a filter's operand gives its value "our way".
 """
 
 from __future__ import annotations
@@ -34,6 +39,10 @@ WEIGHT_MAX = 10**6
 
 _ROLES = frozenset({"vote", "veto"})
 _DIRECTIONS = frozenset({"at_most", "at_least"})
+_BETWEEN = frozenset({"step", "linear"})
+# exp(709.78) is the largest finite float64; the guard keeps every exponent
+# weight finite (design D1).
+EXPONENT_MAX = 700.0
 _ID_SEPARATOR = "/"
 
 
@@ -49,6 +58,12 @@ class VoteStep:
 
 
 @dataclass(frozen=True, slots=True)
+class Exponent:
+    k: float
+    e_v: float
+
+
+@dataclass(frozen=True, slots=True)
 class VoteInput:
     input_id: str
     steps: tuple[VoteStep, ...]
@@ -57,6 +72,12 @@ class VoteInput:
     operand_predicate: Mapping[str, Any] | None
     direction: str | None
     count_of: tuple[Mapping[str, Any], ...] = ()
+    between: str = "step"
+    exponent: Exponent | None = None
+
+    @property
+    def linear(self) -> bool:
+        return self.between == "linear"
 
     def predicates(self) -> tuple[Mapping[str, Any], ...]:
         """The raw predicate items this input reads, in declared order."""
@@ -64,6 +85,9 @@ class VoteInput:
         if self.operand_predicate is not None:
             return (self.operand_predicate,)
         return self.count_of
+
+    def has_extensions(self) -> bool:
+        return self.linear or self.exponent is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +105,10 @@ class WeightedVoteSpec:
 
     def inputs(self) -> tuple[VoteInput, ...]:
         return tuple(item for voter in self.voters for item in voter.inputs)
+
+    @property
+    def has_exponent(self) -> bool:
+        return any(item.exponent is not None for item in self.inputs())
 
 
 def operand_range_item(operand: object) -> dict[str, Any]:
@@ -191,30 +219,92 @@ def _step(raw: object, path: str, *, count_of: int | None) -> VoteStep:
     return VoteStep(level, weight)
 
 
+def _positive(value: object, path: str) -> float:
+    number = float(_real(value, path))
+    if number <= 0:
+        raise InvalidRequestError(f"{path} must be greater than 0", value=value)
+    return number
+
+
+def _exponent(raw: object, path: str) -> Exponent:
+    payload = _mapping(raw, path)
+    _only(payload, {"exponent"}, path)
+    if "exponent" not in payload:
+        raise InvalidRequestError(f"{path} must carry exponent")
+    exponent = _mapping(payload["exponent"], f"{path}.exponent")
+    _only(exponent, {"k", "e_v"}, f"{path}.exponent")
+    for key in ("k", "e_v"):
+        if key not in exponent:
+            raise InvalidRequestError(f"{path}.exponent.{key} is required")
+    return Exponent(
+        _positive(exponent["k"], f"{path}.exponent.k"),
+        _positive(exponent["e_v"], f"{path}.exponent.e_v"),
+    )
+
+
 def _input(raw: object, path: str) -> VoteInput:
     payload = _mapping(raw, path)
-    _only(payload, {"input_id", "steps", "operand", "direction", "count"}, path)
+    _only(
+        payload,
+        {
+            "input_id",
+            "steps",
+            "operand",
+            "direction",
+            "count",
+            "between",
+            "weighting",
+        },
+        path,
+    )
     input_id = _identifier(payload.get("input_id"), f"{path}.input_id")
     has_operand, has_count = "operand" in payload, "count" in payload
     if has_operand == has_count:
         raise InvalidRequestError(
             f"{path} must carry exactly one of operand or count", input_id=input_id
         )
+    between = payload.get("between", "step")
+    if between not in _BETWEEN:
+        raise InvalidRequestError(f"{path}.between must be step or linear", between=between)
     raw_steps = _list(payload.get("steps"), f"{path}.steps")
+    exponent = (
+        _exponent(payload["weighting"], f"{path}.weighting") if "weighting" in payload else None
+    )
     if has_operand:
-        direction = payload.get("direction")
-        if direction not in _DIRECTIONS:
-            raise InvalidRequestError(
-                f"{path}.direction must be at_most or at_least", direction=direction
-            )
         steps = tuple(
             _step(item, f"{path}.steps[{index}]", count_of=None)
             for index, item in enumerate(raw_steps)
         )
-        result = VoteInput(input_id, steps, operand_range_item(payload["operand"]), str(direction))
+        if between == "linear":
+            if "direction" in payload:
+                raise InvalidRequestError(
+                    f"{path}.direction is not allowed with between linear", input_id=input_id
+                )
+            if len(steps) < 2 or any(step.veto for step in steps):
+                raise InvalidRequestError(
+                    f"{path}.steps of a linear input must be at least 2 weight steps",
+                    input_id=input_id,
+                )
+            direction = None
+        else:
+            direction = payload.get("direction")
+            if direction not in _DIRECTIONS:
+                raise InvalidRequestError(
+                    f"{path}.direction must be at_most or at_least", direction=direction
+                )
+        result = VoteInput(
+            input_id,
+            steps,
+            operand_range_item(payload["operand"]),
+            None if direction is None else str(direction),
+            between=str(between),
+            exponent=exponent,
+        )
     else:
         if "direction" in payload:
             raise InvalidRequestError(f"{path}.direction is not allowed with count")
+        if between == "linear":
+            raise InvalidRequestError(f"{path}.between linear is not allowed with count")
         count = _mapping(payload["count"], f"{path}.count")
         _only(count, {"of"}, f"{path}.count")
         of = tuple(
@@ -225,10 +315,25 @@ def _input(raw: object, path: str) -> VoteInput:
             _step(item, f"{path}.steps[{index}]", count_of=len(of))
             for index, item in enumerate(raw_steps)
         )
-        result = VoteInput(input_id, steps, None, None, of)
+        result = VoteInput(input_id, steps, None, None, of, exponent=exponent)
     levels = [float(step.level) for step in steps]
     if len(set(levels)) != len(levels):
         raise InvalidRequestError(f"{path}.steps levels must be unique", input_id=input_id)
+    if exponent is not None:
+        if any(step.veto for step in steps):
+            raise InvalidRequestError(
+                f"{path}: an exponent input must not have veto steps", input_id=input_id
+            )
+        largest = max(scaled_to_float(step.weight or 0) for step in steps)
+        if (
+            exponent.k * max(largest, 0.0) > EXPONENT_MAX
+            or exponent.k * exponent.e_v > EXPONENT_MAX
+        ):
+            raise InvalidRequestError(
+                f"{path}.weighting.exponent overflows: k * weight and k * e_v must be at most "
+                f"{EXPONENT_MAX:g}",
+                input_id=input_id,
+            )
     return result
 
 
@@ -246,6 +351,10 @@ def _voter(raw: object, path: str) -> Voter:
     if role == "veto" and any(not step.veto for item in inputs for step in item.steps):
         raise InvalidRequestError(
             f"{path}: a veto voter must have only veto steps", voter_id=voter_id
+        )
+    if role == "veto" and any(item.exponent is not None for item in inputs):
+        raise InvalidRequestError(
+            f"{path}: a veto voter must not have exponent inputs", voter_id=voter_id
         )
     return Voter(voter_id, str(role), inputs)
 

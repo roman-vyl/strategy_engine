@@ -6318,6 +6318,174 @@
     "supports_incremental": false,
     "supports_managed_replay": true,
     "title": "Wilder Average True Range"
+   },
+   {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "candle_body_atr",
+    "inputs": [
+     "open",
+     "high",
+     "low",
+     "close"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "const": "close"
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Candle body over the Wilder ATR of the previous candle"
+   },
+   {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "candle_close_position",
+    "inputs": [
+     "high",
+     "low",
+     "close"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "source": {
+      "const": "close"
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Candle close position in its range"
+   },
+   {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "rolling_max",
+    "inputs": [
+     "open",
+     "high",
+     "low",
+     "close",
+     "open_interest"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "enum": [
+       "open",
+       "high",
+       "low",
+       "close",
+       "open_interest"
+      ]
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Rolling maximum over the last period candles"
+   },
+   {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "rolling_min",
+    "inputs": [
+     "open",
+     "high",
+     "low",
+     "close",
+     "open_interest"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "enum": [
+       "open",
+       "high",
+       "low",
+       "close",
+       "open_interest"
+      ]
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Rolling minimum over the last period candles"
+   },
+   {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "rolling_sum",
+    "inputs": [
+     "open",
+     "high",
+     "low",
+     "close",
+     "volume",
+     "open_interest"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "lag": {
+      "default": 0,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "enum": [
+       "open",
+       "high",
+       "low",
+       "close",
+       "volume",
+       "open_interest"
+      ]
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Rolling sum over period candles ending lag candles back"
    }
   ],
   "feature_identities": {
@@ -6441,6 +6609,59 @@
     "supports_managed_replay": true,
     "title": "Wilder Average True Range"
    },
+   "candle_body_atr": {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "candle_body_atr",
+    "inputs": [
+     "open",
+     "high",
+     "low",
+     "close"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "const": "close"
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Candle body over the Wilder ATR of the previous candle"
+   },
+   "candle_close_position": {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "candle_close_position",
+    "inputs": [
+     "high",
+     "low",
+     "close"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "source": {
+      "const": "close"
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Candle close position in its range"
+   },
    "di_minus": {
     "calculation_group": "adx_dmi",
     "compatibility_profile": "bbb_v1",
@@ -6532,6 +6753,121 @@
     "supports_incremental": false,
     "supports_managed_replay": true,
     "title": "Exponential Moving Average"
+   },
+   "rolling_max": {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "rolling_max",
+    "inputs": [
+     "open",
+     "high",
+     "low",
+     "close",
+     "open_interest"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "enum": [
+       "open",
+       "high",
+       "low",
+       "close",
+       "open_interest"
+      ]
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Rolling maximum over the last period candles"
+   },
+   "rolling_min": {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "rolling_min",
+    "inputs": [
+     "open",
+     "high",
+     "low",
+     "close",
+     "open_interest"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "enum": [
+       "open",
+       "high",
+       "low",
+       "close",
+       "open_interest"
+      ]
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Rolling minimum over the last period candles"
+   },
+   "rolling_sum": {
+    "compatibility_profile": "bbb_v1",
+    "indicator_id": "rolling_sum",
+    "inputs": [
+     "open",
+     "high",
+     "low",
+     "close",
+     "volume",
+     "open_interest"
+    ],
+    "outputs": [
+     "value"
+    ],
+    "parameters": {
+     "lag": {
+      "default": 0,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "period": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "source": {
+      "enum": [
+       "open",
+       "high",
+       "low",
+       "close",
+       "volume",
+       "open_interest"
+      ]
+     },
+     "timeframe": {
+      "type": "string"
+     }
+    },
+    "supports_batch": true,
+    "supports_incremental": false,
+    "supports_managed_replay": true,
+    "title": "Rolling sum over period candles ending lag candles back"
    },
    "rsi": {
     "compatibility_profile": "bbb_v1",
