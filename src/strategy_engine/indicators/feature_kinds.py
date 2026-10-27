@@ -31,6 +31,7 @@ from strategy_engine.indicators.implementations.candle_shape import (
 from strategy_engine.indicators.implementations.ema import validate_ema_feature
 from strategy_engine.indicators.implementations.rolling_extreme import (
     validate_rolling_extreme_feature,
+    validate_rolling_sum_feature,
 )
 from strategy_engine.indicators.implementations.rsi import validate_rsi_feature
 
@@ -228,6 +229,37 @@ def _close_position_label(
     return f"candle_close_position_{timeframe}"
 
 
+_ROLLING_SUM_SCHEMA: dict[str, Any] = {
+    "indicator_id": "rolling_sum",
+    "title": "Rolling sum over period candles ending lag candles back",
+    "inputs": ["open", "high", "low", "close", "volume", "open_interest"],
+    "parameters": {
+        "period": {"type": "integer", "minimum": 1},
+        "lag": {"type": "integer", "minimum": 0, "default": 0},
+        "source": {"enum": ["open", "high", "low", "close", "volume", "open_interest"]},
+        "timeframe": {"type": "string"},
+    },
+    "outputs": ["value"],
+    "supports_batch": True,
+    "supports_managed_replay": True,
+    "supports_incremental": False,
+    "compatibility_profile": "bbb_v1",
+}
+
+
+def _rolling_sum_label(
+    timeframe: str, source: str | None, params: Mapping[str, Any], _: tuple[str, ...]
+) -> str:
+    return f"rolling_sum_{source}_{timeframe}_{params['period']}_lag{params.get('lag', 0)}"
+
+
+def _rolling_sum_identity(feature: PlannedFeature) -> dict[str, Any]:
+    return {
+        "period": int(feature.parameters["period"]),
+        "lag": int(feature.parameters.get("lag", 0)),
+    }
+
+
 def _source_period_label(kind: str) -> Label:
     # Source-aware, unlike the legacy kinds: the same window over close and
     # over open interest must not share a column.
@@ -306,6 +338,14 @@ _CONTRACTS: dict[str, FeatureKindContract] = {
                 ("rolling_max", "Rolling maximum over the last period candles"),
                 ("rolling_min", "Rolling minimum over the last period candles"),
             )
+        ),
+        FeatureKindContract(
+            kind="rolling_sum",
+            schema=_ROLLING_SUM_SCHEMA,
+            default_source="volume",
+            validate=validate_rolling_sum_feature,
+            label=_rolling_sum_label,
+            identity_params=_rolling_sum_identity,
         ),
     )
 }

@@ -135,6 +135,14 @@ class ResolveIndicatorHistoryRequirements:
                 bars=1,
                 reason=f"{feature.output_id}: {kind} reads its own candle only",
             )
+        if kind == "rolling_sum":
+            period = int(feature.parameters["period"])
+            lag = int(feature.parameters.get("lag", 0))
+            return HistoryRequirement(
+                timeframe=feature.timeframe,
+                bars=period + lag,
+                reason=f"{feature.output_id}: finite rolling_sum(period={period}, lag={lag})",
+            )
         if kind in _FINITE_KINDS:
             period = int(feature.parameters["period"])
             return HistoryRequirement(
