@@ -1,0 +1,18 @@
+## 1. Operands
+
+- [ ] 1.1 Parse and validate `signed` and `only_if`: required fields, unknown fields rejected, constant inner rejected, `require` non-empty with range-shaped items (`empty` rejected), accepted in `range`, `compare`, `ratio`, `difference`, `abs`, `at_point` and vote inputs, rejected in `change`. Own node families. Verify: tests.
+- [ ] 1.2 Values: `signed` long = inner, short = `2·center − x`; `only_if` = inner where all requirements hold, missing elsewhere and where a requirement value is missing. Verify: tests.
+
+## 2. Wk and D1v
+
+- [ ] 2.1 Wk and D1v compositions through the pipeline on the BTC fixture equal the loop. Verify: e2e test.
+- [ ] 2.2 Candidates differing only in a level share the nodes; a spec without the operands has no such node. Verify: batch test.
+
+## 3. Parity with research on EMA200 (cloud)
+
+- [ ] 3.1 Wk and D1v on all EMA200 entries of BTC, ETH and SOL against the D4 reference. Report in `/mnt/project-files/engine-tasks/ema200/parity_wk_d1v/`.
+
+## 4. Gate
+
+- [ ] 4.1 ruff, mypy, affected tests; never `tests/parity/test_all_families_memo.py`.
+- [ ] 4.2 `openspec validate signed-only-if-operands-v1 --strict`.
