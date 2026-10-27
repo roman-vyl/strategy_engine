@@ -277,6 +277,19 @@ class Difference:
 
 
 @dataclass(frozen=True, slots=True)
+class WindowChange:
+    """The change of a base-timeframe feature over the last `last_n` bars of
+    the pullback of the current touch, never earlier than its peak, signed by
+    side; `slope` divides by the start value and the bar count, in bp per bar
+    (`ema-slope-window-change-v1`, D1)."""
+
+    episode: str
+    series: PlannedFeature
+    last_n: int
+    form: str
+
+
+@dataclass(frozen=True, slots=True)
 class AtPoint:
     """The inner operand's value on a wave point of the current touch, `peak`
     = P or `origin` = S* (`w8p-at-point-v1`, D1)."""
@@ -313,6 +326,7 @@ class Operand:
     absolute: Operand | None = None
     difference: Difference | None = None
     at_point: AtPoint | None = None
+    window_change: WindowChange | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -425,6 +439,8 @@ def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
         )
     if operand.at_point is not None:
         return operand_features(operand.at_point.operand)
+    if operand.window_change is not None:
+        return (operand.window_change.series,)
     return ()
 
 
@@ -447,6 +463,7 @@ def operand_needs_episode(operand: Operand) -> bool:
         or operand.leg_efficiency is not None
         or operand.leg_change is not None
         or operand.at_point is not None
+        or operand.window_change is not None
     ):
         return True
     if operand.absolute is not None:
@@ -514,9 +531,10 @@ def _feature(raw: object, path: str) -> PlannedFeature:
 _OPERAND_KEYS = (
     "feature, episode, segment, candle, leg_mean, leg_sum, leg_top_mean, anchor_follow, "
     "pullback_depth, leg_speed, impulse_atr, leg_bars, forming_candle, leg_efficiency, "
-    "leg_change, abs, difference, at_point, ratio, price or const"
+    "leg_change, abs, difference, at_point, window_change, ratio, price or const"
 )
 AT_POINTS = ("peak", "origin")
+WINDOW_CHANGE_FORMS = ("change", "slope")
 _SEGMENT_FIELDS = {
     "episode",
     "of",
@@ -974,6 +992,29 @@ def _at_point(raw: object, path: str, episode_refs: frozenset[str] | None) -> At
     return AtPoint(ref, str(point), inner)
 
 
+def _window_change(raw: object, path: str, episode_refs: frozenset[str] | None) -> WindowChange:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "of", "last_n", "form"}, path)
+    for key in ("episode", "of", "last_n", "form"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    series = _feature(payload["of"], f"{path}.of")
+    if series.timeframe != "base":
+        raise InvalidRequestError(
+            f"{path}.of must be on the base timeframe", timeframe=series.timeframe
+        )
+    last_n = _positive_int(payload["last_n"], f"{path}.last_n")
+    form = payload["form"]
+    if form not in WINDOW_CHANGE_FORMS:
+        raise InvalidRequestError(f"{path}.form must be change or slope", form=form)
+    return WindowChange(ref, series, last_n, str(form))
+
+
 def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Operand:
     payload = _mapping(raw, path)
     if len(payload) != 1:
@@ -1023,6 +1064,8 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         return Operand(difference=_difference(value, f"{path}.difference", episode_refs))
     if key == "at_point":
         return Operand(at_point=_at_point(value, f"{path}.at_point", episode_refs))
+    if key == "window_change":
+        return Operand(window_change=_window_change(value, f"{path}.window_change", episode_refs))
     if key == "price":
         if value not in _PRICE_FIELDS:
             raise InvalidRequestError(f"{path}.price must be open, high, low or close")
@@ -1407,6 +1450,20 @@ def _values(
                 _at_point_operand, operand.at_point, frame, context, identity, side, bundle, path
             ),
         )
+    if operand.window_change is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _window_change_operand,
+                operand.window_change,
+                frame,
+                context,
+                identity,
+                side,
+                bundle,
+            ),
+        )
     assert operand.feature is not None
     return _feature_array(operand.feature, frame, context, identity)
 
@@ -1775,6 +1832,51 @@ def _at_point_operand(
     return out
 
 
+def _window_change_operand(
+    window_change: WindowChange,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "window_change operand has no evaluated episode", episode_ref=window_change.episode
+        )
+    series = np.asarray(
+        _feature_array(window_change.series, frame, context, identity), dtype=np.float64
+    )
+    return window_change_values(
+        episodes.side(window_change.episode, side), series, window_change.last_n, window_change.form
+    )
+
+
+def window_change_values(
+    episode: SideEpisode, series: np.ndarray, last_n: int, form: str
+) -> np.ndarray:
+    """D1 of `ema-slope-window-change-v1` on every bar as a read-only array:
+    `s0 = max(P, t - last_n)`, `s1 = t`; missing unless the touch is valid,
+    `s1 > s0` and both ends are finite (and `x[s0] != 0` for `slope`)."""
+
+    size = len(series)
+    valid, _, peak = touch_points(episode, size)
+    t = np.arange(size, dtype=np.int64)
+    start = np.maximum(peak, t - last_n)
+    ok = valid & (t > start)
+    begin = np.where(ok, series[np.where(ok, start, 0)], math.nan)
+    end = np.where(ok, series, math.nan)
+    g = 1.0 if episode.side == "long" else -1.0
+    with np.errstate(invalid="ignore", divide="ignore"):
+        change = g * (end - begin)
+        if form == "slope":
+            change = np.where(begin != 0.0, change / begin / (t - start) * 1e4, math.nan)
+    out = np.where(np.isfinite(change), change, math.nan)
+    out.flags.writeable = False
+    return out
+
+
 def _take_rows(column: np.ndarray, rows: np.ndarray, mask: np.ndarray) -> np.ndarray:
     out = np.full(len(rows), math.nan)
     out[mask] = column[rows[mask]]
@@ -2075,6 +2177,7 @@ def _has_value(operand: Operand) -> bool:
         or operand.absolute is not None
         or operand.difference is not None
         or operand.at_point is not None
+        or operand.window_change is not None
     )
 
 
@@ -2320,6 +2423,8 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("difference",)
     if operand.at_point is not None:
         return ("at_point",)
+    if operand.window_change is not None:
+        return ("window_change",)
     return ("feature",)
 
 
@@ -2821,6 +2926,23 @@ def _resolve_operand(
         )
         operand_ids[path] = node
         return node, [node, *inner_consumed]
+    if operand.window_change is not None:
+        window_change = operand.window_change
+        episode = (contexts or {}).get(episode_identity_key(window_change.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "window_change episode is not declared", episode_ref=window_change.episode
+            )
+        column = _column_identity(window_change.series, feature_ids, column_ids)
+        node = node_spec(
+            "predicate.window_change",
+            version=PREDICATE_NODE_VERSION,
+            params={"last_n": window_change.last_n, "form": window_change.form},
+            upstream={"episode": episode, "series": column},
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node, column]
     return None, []
 
 
