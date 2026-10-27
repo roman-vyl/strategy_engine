@@ -10,8 +10,10 @@ Each input SHALL have:
   - `operand` together with `direction` (`at_most` or `at_least`);
   - `operand` together with `between: "linear"`, without `direction`;
   - `count` of the shape `{"of": [<predicate>, ...]}`, a non-empty list, without `direction`;
-- optionally `between` (`step` or `linear`, see "Linear ladder value"), `weighting` (see "Exponent weighting parameters"), `short` (see "Short
-  operand") and `when` (see "Input gate").
+- optionally `between` (`step` or `linear`, see "Linear ladder value") and `weighting` (see "Exponent weighting parameters").
+
+The vote SHALL know no trade side: it SHALL read the operand value of the evaluated side as the operand gives it. Giving the value
+"our way" (sign, side-specific gates) is the operand's responsibility.
 
 The `operand` SHALL be any operand the predicate layer accepts as the operand of a `range`, validated by that layer. Each element
 of `count.of` SHALL be a predicate of the layer, validated by that layer.
@@ -20,6 +22,11 @@ of `count.of` SHALL be a predicate of the layer, validated by that layer.
 
 - **WHEN** an input operand is a `change` predicate or names an undeclared episode
 - **THEN** static validation SHALL reject the spec with the predicate layer's error.
+
+#### Scenario: Side keys in the vote
+
+- **WHEN** an input carries `short` or `when`
+- **THEN** static validation SHALL reject the spec as an unknown field.
 
 #### Scenario: Linear ladder with a direction
 
@@ -31,7 +38,6 @@ of `count.of` SHALL be a predicate of the layer, validated by that layer.
 - The ladder value of a step input on `t` SHALL be the largest `weight` among its crossed steps, or 0 when none is crossed; of a linear
   input, its value by "Linear ladder value".
 - The weight of an input SHALL be its ladder value without `weighting`, or the exponent of it by "Exponent weight".
-- An input whose gate is closed on `t` (see "Input gate") SHALL weigh 0 and SHALL NOT veto.
 - An input SHALL veto on `t` when any crossed step is a veto step.
 - The weight of a voter SHALL be the largest weight among its inputs, so a voter with several inputs is their OR.
 - A voter SHALL veto when any of its inputs vetoes.
@@ -96,7 +102,6 @@ The `SetupMask.trace` SHALL contain, per evaluated side, on every bar:
 
 - `input:<input_id>:value`: the operand value of the side, or for a `count` input the count; null where missing;
 - `input:<input_id>:level_value` for an input with `weighting`: the ladder value before weighting;
-- `input:<input_id>:when` for an input with `when`: whether the gate is open;
 - `input:<input_id>:weight` and `input:<input_id>:veto`;
 - `voter:<voter_id>:weight` and `voter:<voter_id>:veto`;
 - `score`;
@@ -107,10 +112,10 @@ The `SetupMask.trace` SHALL contain, per evaluated side, on every bar:
 - **WHEN** a voter has inputs with weights 0.2 and 0.3 on `t`
 - **THEN** the trace SHALL show both input weights and the voter weight 0.3.
 
-#### Scenario: Closed gate in the trace
+#### Scenario: Level value in the trace
 
-- **WHEN** an input's gate is closed on `t` and its operand value is −0.4
-- **THEN** the trace SHALL show value −0.4, `when` false and weight 0.
+- **WHEN** an exponent input has ladder value 8 on `t`, `k` 0.15 and `e_v` 16
+- **THEN** the trace SHALL show `level_value` 8 and the weight (exp(1.2) − 1)/(exp(2.4) − 1).
 
 ## ADDED Requirements
 
@@ -178,37 +183,9 @@ it. A missing or non-finite value SHALL give ladder value 0.
 - **WHEN** the operand value is missing on `t`
 - **THEN** the ladder value and the weight SHALL be 0.
 
-### Requirement: Short operand
-
-An input with `operand` MAY carry `short` of the shape `{"operand": <operand>}`. On the short side the input SHALL read that operand;
-the long side SHALL read `operand`. The short operand SHALL be validated by the predicate layer like `operand`. `short` SHALL NOT be
-accepted on a `count` input.
-
-#### Scenario: Weekly body our way
-
-- **WHEN** `operand` is the 1w `candle_body_atr` feature and `short.operand` is its `difference` from `const` 0
-- **THEN** on a short the input value SHALL be the negated body and on a long the body.
-
-### Requirement: Input gate
-
-An input MAY carry `when`, a non-empty list of predicates of the predicate layer, validated by that layer (each with its own optional
-`short` override). On bar `t` of a side the gate SHALL be open when every predicate is True on `t` for that side. When the gate is
-closed the input SHALL weigh 0 and SHALL NOT veto. A predicate over a missing operand is False by the layer's rules.
-
-#### Scenario: D1v gate closed
-
-- **WHEN** an input over the forming 1d candle has `when` [yesterday body ≥ 1 (short override ≤ −1), yesterday close position ≥ 0.85
-  (short override ≤ 0.15)] and on a long yesterday's body is 0.7, or on a short yesterday's close position is 0.3
-- **THEN** the input SHALL weigh 0 whatever today's value.
-
-#### Scenario: Gate on a veto step
-
-- **WHEN** a step input with a veto step has a closed gate and its value crosses the veto step
-- **THEN** it SHALL NOT veto.
-
 ### Requirement: Specs without the new keys are unchanged
 
-A spec whose vote inputs have no `between`, `weighting`, `short` or `when` SHALL produce the same masks, evidence and node identities
+A spec whose vote inputs have no `between` or `weighting` SHALL produce the same masks, evidence and node identities
 as before this change.
 
 #### Scenario: Vote B config

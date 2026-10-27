@@ -48,20 +48,15 @@ rational), the sum is exact, the block is `score ≥ threshold` exact. Implement
 are decided again over `Fraction`. The evidence `score` is the float64 sum. Research blocks also in [θ − 1e-9, θ); parity counts such entries
 (expected 0); if any, the owner sets θ in config. No tolerance in the Engine.
 
-### D4. Short operand
+### D4. No trade side in the vote
 
-Features have no side. Research reads Wk as `g · body`. An input MAY name the operand of the short side:
-`"short": {"operand": {"difference": {"left": {"const": 0}, "right": <1w candle_body_atr>}}}`. Long reads `operand`. Not on `count`.
+The first draft let an input name a short-side operand (Wk) and a `when` gate (D1v). Removed (owner 10:36): computing the right sign is
+the filter's job. The vote reads the operand value of the side as the operand gives it. Wk and D1v need operands that return their value
+"our way"; until then they cannot join the variant 8 config.
 
-### D5. Gate
+### D5. Identity
 
-D1v = today's forming 1d candle when yesterday's body ≥ 1 ATR our way and yesterday's close position ≥ 0.85 our way; else research
-writes 9, whose curve value is 0 (D1v curve end −1.5 clipped). `when` = list of layer predicates (each with its `short` override);
-gate closed → weight 0 and no veto; a predicate on a missing operand is False (layer rule), as research's `ok`.
-
-### D6. Identity
-
-The normalised setup config including `weighting`, `between`, `short`, `when` is part of the setup node identity. Specs without them keep
+The normalised setup config including `weighting` and `between` is part of the setup node identity. Specs without them keep
 their identities byte for byte.
 
 ## Variant 8 config (numbers in config only)
@@ -76,12 +71,12 @@ v14 ≤ 0.084, b3h ≤ 4.65, c32 ≥ 3.43). All curve inputs: `between: "linear"
 | OR(kI, O1) | 0.3 / 0.6 | 16 / 20 | `excess.json` |
 | OR(W1d, W1r) | 0.3 | 16 | `excess.json` |
 | W2d | 0.6 | 16 | `excess.json` |
-| D1v (`when`: yesterday `candle_body_atr 1d` ≥ 1 and `candle_close_position 1d` ≥ 0.85; short overrides ≤ −1 and ≤ 0.15) | 0.2 | 8 | `excess.json` |
-| Wk (`short`) | 0.2 | 10 | `excess.json` |
+| D1v (operand "our way" with its gate: pending) | 0.2 | 8 | `excess.json` |
+| Wk (operand "our way": pending) | 0.2 | 10 | `excess.json` |
 | vol1h low, vol1h high | 0.3 | 8 | `volspot/excess_vol.json` (slot, volume source pending) |
 | OR(three EMA slopes) | 0.3 | 16 | `emaslope/excess_slope.json` |
 
 Paths under `/mnt/project-files/ema200_calib/review/`. Premium PS_R excluded.
 
-Research's short close position is `(H − C)/(H − L)` = `1 − (C − L)/(H − L)`, so the short gate `≥ 0.85` is `≤ 0.15` on the Engine's
-side-free feature (checked in `parity_cc`, review by the thread «Компоненты голоса Б EMA200 в Engine», 2026-10-27 10:3x).
+D1v gate in research: yesterday body ≥ 1 ATR our way and close position ≥ 0.85 our way (on a short `(H − C)/(H − L)`, i.e. ≤ 0.15 on
+the side-free feature); else 9 → weight 0. Wk = `g · body` of the previous week. Both belong in their operands.

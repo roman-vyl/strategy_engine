@@ -15,8 +15,8 @@ depend on voter order or on binary floating point.
 
 OpenSpec `exponent-vote-weighting-v1` adds per input: `between: linear`
 (the ladder read as points joined by straight lines), `weighting.exponent`
-(the ladder value turned into `(exp(k x) - 1) / (exp(k e_v) - 1)`), a
-`short` operand and a `when` gate.
+(the ladder value turned into `(exp(k x) - 1) / (exp(k e_v) - 1)`). The
+vote knows no trade side: a filter's operand gives its value "our way".
 """
 
 from __future__ import annotations
@@ -74,34 +74,20 @@ class VoteInput:
     count_of: tuple[Mapping[str, Any], ...] = ()
     between: str = "step"
     exponent: Exponent | None = None
-    # The bound-free `range` item over the operand read on the short side.
-    short_predicate: Mapping[str, Any] | None = None
-    when: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def linear(self) -> bool:
         return self.between == "linear"
 
     def predicates(self) -> tuple[Mapping[str, Any], ...]:
-        """The raw predicate items this input reads, in declared order: the
-        operand (then the short operand) or the `count.of` items, then the
-        `when` gate."""
+        """The raw predicate items this input reads, in declared order."""
 
         if self.operand_predicate is not None:
-            head: tuple[Mapping[str, Any], ...] = (self.operand_predicate,)
-            if self.short_predicate is not None:
-                head += (self.short_predicate,)
-        else:
-            head = self.count_of
-        return head + self.when
+            return (self.operand_predicate,)
+        return self.count_of
 
     def has_extensions(self) -> bool:
-        return (
-            self.linear
-            or self.exponent is not None
-            or self.short_predicate is not None
-            or bool(self.when)
-        )
+        return self.linear or self.exponent is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -268,8 +254,6 @@ def _input(raw: object, path: str) -> VoteInput:
             "count",
             "between",
             "weighting",
-            "short",
-            "when",
         },
         path,
     )
@@ -283,23 +267,10 @@ def _input(raw: object, path: str) -> VoteInput:
     if between not in _BETWEEN:
         raise InvalidRequestError(f"{path}.between must be step or linear", between=between)
     raw_steps = _list(payload.get("steps"), f"{path}.steps")
-    when: tuple[Mapping[str, Any], ...] = ()
-    if "when" in payload:
-        when = tuple(
-            _mapping(item, f"{path}.when[{index}]")
-            for index, item in enumerate(_list(payload["when"], f"{path}.when"))
-        )
     exponent = (
         _exponent(payload["weighting"], f"{path}.weighting") if "weighting" in payload else None
     )
     if has_operand:
-        short_predicate = None
-        if "short" in payload:
-            short = _mapping(payload["short"], f"{path}.short")
-            _only(short, {"operand"}, f"{path}.short")
-            if "operand" not in short:
-                raise InvalidRequestError(f"{path}.short.operand is required")
-            short_predicate = operand_range_item(short["operand"])
         steps = tuple(
             _step(item, f"{path}.steps[{index}]", count_of=None)
             for index, item in enumerate(raw_steps)
@@ -328,14 +299,10 @@ def _input(raw: object, path: str) -> VoteInput:
             None if direction is None else str(direction),
             between=str(between),
             exponent=exponent,
-            short_predicate=short_predicate,
-            when=when,
         )
     else:
         if "direction" in payload:
             raise InvalidRequestError(f"{path}.direction is not allowed with count")
-        if "short" in payload:
-            raise InvalidRequestError(f"{path}.short is not allowed with count")
         if between == "linear":
             raise InvalidRequestError(f"{path}.between linear is not allowed with count")
         count = _mapping(payload["count"], f"{path}.count")
@@ -348,7 +315,7 @@ def _input(raw: object, path: str) -> VoteInput:
             _step(item, f"{path}.steps[{index}]", count_of=len(of))
             for index, item in enumerate(raw_steps)
         )
-        result = VoteInput(input_id, steps, None, None, of, exponent=exponent, when=when)
+        result = VoteInput(input_id, steps, None, None, of, exponent=exponent)
     levels = [float(step.level) for step in steps]
     if len(set(levels)) != len(levels):
         raise InvalidRequestError(f"{path}.steps levels must be unique", input_id=input_id)

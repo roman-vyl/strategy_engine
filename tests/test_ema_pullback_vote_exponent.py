@@ -1,5 +1,5 @@
-"""weighted_vote_setup extensions (OpenSpec `exponent-vote-weighting-v1`): `between: linear`,
-`weighting.exponent`, `short` operand and `when` gate. Validation (group 1), evaluation against a
+"""weighted_vote_setup extensions (OpenSpec `exponent-vote-weighting-v1`): `between: linear` and
+`weighting.exponent`; the vote knows no trade side. Validation (group 1), evaluation against a
 per-bar reference in exact rationals (group 2), evidence and identity (group 3), feature plan
 (group 4). The numbers here are arbitrary test numbers."""
 
@@ -22,7 +22,6 @@ from test_ema_pullback_weighted_vote import (
     UP_BAR,
     _compute,
     _frame,
-    _labels,
     _ladder,
     _mask,
     _operand_input,
@@ -47,8 +46,6 @@ from strategy_engine.strategies.ema_pullback.weighted_vote_spec import (
 )
 
 Spec = dict[str, Any]
-
-RSI_LOW = {"kind": "range", "operand": RSI, "min": None, "max": 50}
 
 
 def _curve_input(
@@ -87,18 +84,7 @@ MIXED = _vote(
         _curve_input("a", RSI, [(30, 20.0), (60, 0.0)], 0.3, 16),
         _curve_input("b", CLOSE, [(80, 0.0), (120, 18.0)], 0.6, 20),
     ),
-    _voter(
-        "gated",
-        _curve_input(
-            "g",
-            CLOSE,
-            [(90, 0.0), (110, 8.0)],
-            0.2,
-            8,
-            short={"operand": RSI},
-            when=[UP_BAR],
-        ),
-    ),
+    _voter("third", _curve_input("g", CLOSE, [(90, 0.0), (110, 8.0)], 0.2, 8)),
     _voter("step", _operand_input("s", RSI, "at_least", _ladder((60, 0.25), (70, 0.5)))),
     _voter("hard", _operand_input("v", RSI, "at_least", _ladder((80, None))), role="veto"),
 )
@@ -143,25 +129,8 @@ def _input(params: Spec, voter: int = 0, index: int = 0) -> Spec:
             ),
             id="exponent-on-veto",
         ),
-        pytest.param(lambda p: _input(p).update(short={}), id="empty-short"),
-        pytest.param(lambda p: _input(p).update(short={"operand": RSI, "x": 1}), id="short-key"),
-        pytest.param(lambda p: _input(p).update(short={"operand": UP_BAR}), id="short-predicate"),
-        pytest.param(lambda p: _input(p).update(when=[]), id="empty-when"),
-        pytest.param(lambda p: _input(p).update(when=[{"kind": "compare"}]), id="bad-when"),
-        pytest.param(
-            lambda p: p["voters"].append(
-                _voter(
-                    "c",
-                    {
-                        "input_id": "c",
-                        "count": {"of": [ALWAYS]},
-                        "steps": _ladder((1, 0.1)),
-                        "short": {"operand": RSI},
-                    },
-                )
-            ),
-            id="short-on-count",
-        ),
+        pytest.param(lambda p: _input(p).update(short={"operand": RSI}), id="side-in-the-vote"),
+        pytest.param(lambda p: _input(p).update(when=[UP_BAR]), id="gate-in-the-vote"),
         pytest.param(
             lambda p: p["voters"].append(
                 _voter(
@@ -185,10 +154,9 @@ def test_invalid_extended_vote_is_rejected(mutate: Any) -> None:
 
 def test_parsed_extensions() -> None:
     spec = parse_weighted_vote_setup(MIXED)
-    rsi, a, b, gated, step, hard = spec.inputs()
+    rsi, a, b, third, step, hard = spec.inputs()
     assert rsi.linear and rsi.direction is None and rsi.exponent == Exponent(0.15, 16.0)
-    assert gated.short_predicate is not None and len(gated.when) == 1
-    assert len(gated.predicates()) == 3  # operand, short operand, gate
+    assert len(third.predicates()) == 1
     assert not step.has_extensions() and not hard.has_extensions()
     assert spec.has_exponent
 
@@ -248,7 +216,6 @@ def _reference(item: Spec, frame: Any, trace: Spec, side: str) -> tuple[list[boo
             for vote_input in voter["inputs"]:
                 name = vote_input["input_id"]
                 value = trace[f"input:{name}:value"][t]
-                gate = trace.get(f"input:{name}:when", [True] * (t + 1))[t]
                 weight, veto = Fraction(0), False
                 if vote_input.get("between") == "linear":
                     points = sorted((s["level"], s["weight"]) for s in vote_input["steps"])
@@ -277,8 +244,6 @@ def _reference(item: Spec, frame: Any, trace: Spec, side: str) -> tuple[list[boo
                     weight = Fraction(level_value)
                 else:
                     weight = level_value
-                if not gate:
-                    weight, veto = Fraction(0), False
                 assert trace[f"input:{name}:weight"][t] == float(weight)
                 voter_weight, voter_veto = max(voter_weight, weight), voter_veto or veto
             total += voter_weight
@@ -300,36 +265,6 @@ def test_evaluation_matches_an_exact_reference(side: str) -> None:
     assert list(trace["blocked_by"]) == reasons
     assert {None, "score"} <= set(reasons)
     assert any(str(reason).startswith("veto:") for reason in reasons)
-
-
-def test_short_operand_is_read_on_the_short_side_only() -> None:
-    market = _market_frame(300)
-    frame = _frame(market, MIXED)
-    _, long_trace = _compute(MIXED, frame, "long")
-    _, short_trace = _compute(MIXED, frame, "short")
-    closes = [float(bar.close) for bar in market.bars]
-    assert list(long_trace["input:g:value"]) == closes
-    assert list(short_trace["input:g:value"]) == list(short_trace["input:rsi:value"])
-
-
-def test_closed_gate_weighs_zero_and_does_not_veto() -> None:
-    market = _market_frame(300)
-    up = [float(bar.close) > float(bar.open) for bar in market.bars]
-    vote = _vote(
-        100,
-        _voter("g", _curve_input("g", CLOSE, [(0, 5.0), (1e9, 5.0)], when=[UP_BAR])),
-        _voter(
-            "v",
-            {**_operand_input("v", CLOSE, "at_least", _ladder((0, None))), "when": [UP_BAR]},
-            role="veto",
-        ),
-    )
-    local, trace = _compute(vote, _frame(market, vote))
-    assert list(trace["input:g:when"]) == up
-    assert list(trace["input:g:weight"]) == [5.0 if u else 0.0 for u in up]
-    assert list(trace["input:v:veto"]) == up
-    assert list(local) == [not u for u in up]
-    assert list(trace["input:g:value"]) == [float(bar.close) for bar in market.bars]
 
 
 def test_the_threshold_is_compared_exactly() -> None:
@@ -397,17 +332,3 @@ def test_changing_k_changes_only_the_vote_node() -> None:
     a, b = recorder.captures
     assert _mask(a, "long").local_setup_allowed is not None
     assert _mask(b, "long").local_setup_allowed is not None
-
-
-# -- group 4: feature plan ------------------------------------------------------------------
-
-
-def test_feature_plan_includes_short_and_when_operands() -> None:
-    plain = _vote(1, _voter("c", _curve_input("c", CLOSE, [(0, 1.0), (1, 0.0)])))
-    with_rsi = _vote(
-        1,
-        _voter("c", _curve_input("c", CLOSE, [(0, 1.0), (1, 0.0)], short={"operand": RSI})),
-    )
-    gated = _vote(1, _voter("c", _curve_input("c", CLOSE, [(0, 1.0), (1, 0.0)], when=[RSI_LOW])))
-    assert len(_labels(_spec(with_rsi))) == len(_labels(_spec(plain))) + 1
-    assert _labels(_spec(with_rsi)) == _labels(_spec(gated))

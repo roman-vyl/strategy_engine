@@ -690,7 +690,8 @@ def _composite_core(
                 None
                 if operand_value is None
                 else tuple(
-                    float(item) if math.isfinite(item) else None for item in operand_value.tolist()
+                    float(item) if math.isfinite(item) else None
+                    for item in operand_value.tolist()
                 )
             )
             continue
@@ -752,7 +753,9 @@ def _composite_trace(spec: CompositeSpec, core: CompositeCore) -> dict[str, tupl
     core yet each get their own labels)."""
 
     trace: dict[str, tuple[object, ...]] = {}
-    for child, mask, values in zip(spec.children, core.child_masks, core.child_values, strict=True):
+    for child, mask, values in zip(
+        spec.children, core.child_masks, core.child_values, strict=True
+    ):
         trace[f"child:{child.child_id}"] = mask
         if values is not None:
             trace[f"child:{child.child_id}:value"] = values
@@ -765,33 +768,6 @@ def _composite_trace(spec: CompositeSpec, core: CompositeCore) -> dict[str, tupl
     labels = np.array([item.path_id for item in spec.paths] + [None], dtype=object)
     trace["winning_path"] = tuple(labels[np.asarray(core.winning_index, dtype=np.int64)].tolist())
     return trace
-
-
-def _vote_operand_values(
-    vote_input: VoteInput,
-    path: str,
-    frame: FeatureFrameLike,
-    side: str,
-    *,
-    context: EvaluationContext | None,
-    identities: tuple[PredicateIdentity, ...] | None,
-    bundle: ContextBundle | None,
-) -> np.ndarray:
-    """Operand values of the side: the `short` operand on a short when the
-    input declares one (exponent-vote-weighting-v1, design D4)."""
-
-    use_short = side == "short" and vote_input.short_predicate is not None
-    raw = vote_input.short_predicate if use_short else vote_input.operand_predicate
-    assert raw is not None
-    index = 1 if use_short else 0
-    return range_operand_values(
-        parse_predicate(raw, path),
-        frame,
-        side,
-        context=context,
-        identity=identities[index] if identities is not None else None,
-        bundle=bundle,
-    )
 
 
 def _vote_input_crossings(
@@ -811,8 +787,13 @@ def _vote_input_crossings(
     is None when `evidence` is off; the operand values are None for a count."""
 
     if vote_input.operand_predicate is not None:
-        values = _vote_operand_values(
-            vote_input, path, frame, side, context=context, identities=identities, bundle=bundle
+        values = range_operand_values(
+            parse_predicate(vote_input.operand_predicate, path),
+            frame,
+            side,
+            context=context,
+            identity=identities[0] if identities is not None else None,
+            bundle=bundle,
         )
         finite = np.isfinite(values)
         if vote_input.linear:
@@ -849,40 +830,6 @@ def _vote_input_crossings(
         count += mask
     crossed = tuple(count >= step.level for step in vote_input.steps)
     return (tuple(count.tolist()) if evidence else None), crossed, None
-
-
-def _vote_gate(
-    vote_input: VoteInput,
-    path: str,
-    frame: FeatureFrameLike,
-    side: str,
-    *,
-    context: EvaluationContext | None,
-    identities: tuple[PredicateIdentity, ...] | None,
-    bundle: ContextBundle | None,
-) -> np.ndarray | None:
-    """Open-gate mask of the `when` predicates (AND), None without `when`
-    (exponent-vote-weighting-v1, design D5)."""
-
-    if not vote_input.when:
-        return None
-    offset = len(vote_input.predicates()) - len(vote_input.when)
-    gate = np.ones(len(frame.time_ms), dtype=bool)
-    for index, raw in enumerate(vote_input.when):
-        mask = evaluate_predicate(
-            parse_predicate(raw, f"{path}.when[{index}]"),
-            frame,
-            side,
-            context=context,
-            identity=identities[offset + index] if identities is not None else None,
-            bundle=bundle,
-        )
-        if len(mask) != len(gate):
-            raise InvalidRequestError(
-                "weighted vote predicate mask length mismatch", input_id=vote_input.input_id
-            )
-        gate &= np.asarray(mask, dtype=bool)
-    return gate
 
 
 def _linear_ladder(vote_input: VoteInput, values: np.ndarray) -> np.ndarray:
@@ -969,15 +916,6 @@ def _weighted_vote_compute(
                 bundle=bundle,
                 evidence=evidence,
             )
-            gate = _vote_gate(
-                vote_input,
-                path,
-                frame,
-                side,
-                context=context,
-                identities=identities,
-                bundle=bundle,
-            )
             input_index += 1
             veto = np.zeros(length, dtype=bool)
             level_value: np.ndarray | None = None
@@ -1000,18 +938,11 @@ def _weighted_vote_compute(
                 assert level_value is not None
                 weight = exponent_weight(level_value, vote_input.exponent)
                 scaled = False
-            if gate is not None:
-                weight = np.where(gate, weight, 0)
-                veto &= gate
-                if level_value is not None:
-                    level_value = np.where(gate, level_value, 0.0)
             if value_trace is not None:
                 trace[f"input:{vote_input.input_id}:value"] = value_trace
                 if vote_input.exponent is not None:
                     assert level_value is not None
                     trace[f"input:{vote_input.input_id}:level_value"] = tuple(level_value.tolist())
-                if gate is not None:
-                    trace[f"input:{vote_input.input_id}:when"] = tuple(gate.tolist())
                 trace[f"input:{vote_input.input_id}:weight"] = (
                     _scaled_trace(weight) if scaled else tuple(weight.astype(np.float64).tolist())
                 )
@@ -1405,8 +1336,6 @@ def _vote_input_param(vote_input: VoteInput) -> tuple[object, ...]:
         (
             ("between", vote_input.between),
             ("exponent", None if exponent is None else (repr(exponent.k), repr(exponent.e_v))),
-            ("short", vote_input.short_predicate is not None),
-            ("when", len(vote_input.when)),
         ),
     )
 
@@ -1436,12 +1365,9 @@ def _resolve_weighted_vote(
             for raw in vote_input.predicates()
         )
         inputs.append(identities)
-        # Operand items are read for their values; count and `when` items are
-        # evaluated masks, as composite children.
-        operand_items = len(vote_input.predicates()) - len(vote_input.when)
         for predicate_index, identity in enumerate(identities):
             upstream[f"input_{input_index}_{predicate_index}"] = identity.local
-            if vote_input.operand_predicate is None or predicate_index >= operand_items:
+            if vote_input.operand_predicate is None:
                 consumed.append(identity.local)
             consumed += identity.nested
     voters = tuple(
