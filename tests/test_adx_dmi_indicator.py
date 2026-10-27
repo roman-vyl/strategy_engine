@@ -55,6 +55,11 @@ def test_registry_exposes_adx_and_directional_indices() -> None:
         "di_plus",
         "di_minus",
         "atr_wilder",
+        "candle_body_atr",
+        "candle_close_position",
+        "rolling_max",
+        "rolling_min",
+        "rolling_sum",
     ]
     assert registry.get_schema("adx")["calculation_group"] == "adx_dmi"
 
