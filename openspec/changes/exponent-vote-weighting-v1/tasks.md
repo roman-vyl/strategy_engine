@@ -27,7 +27,7 @@
 ## 4. Variant 8 config
 
 - [ ] 4.1 Vote config for BTC/ETH/SOL from the design table: black-curve corner points (negative clipped to 0), k, e_v, θ 1.5, nine
-      vote-B vetoes. No W8_60 (not in the v7/v8 chain). Wk and D1v join only once their operands give values "our way".
+      vote-B vetoes. No W8_60 (not in the v7/v8 chain). Wk = `signed` (1w candle_body_atr, center 0), D1v = `only_if` (forming 1d, require signed body ≥ 1 and signed close position ≥ 0.85), teko29 7c684da; example `/mnt/project-files/engine-tasks/ema200/parity_wk_d1v/run_engine_wkd1v.py`.
       vol1h = slot until the owner decides the volume source.
 
 ## 5. Parity (on the owner's command)

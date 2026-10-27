@@ -74,8 +74,8 @@ Curve tails stay as they are, even where only 1-3 entries per coin are cut (owne
 | OR(kI, O1) | 0.3 / 0.6 | 16 / 20 | `oi_curves_engine5m.json` |
 | OR(W1d, W1r) | 0.3 | 16 | `oi_curves_engine5m.json` |
 | W2d | 0.6 | 16 | `oi_curves_engine5m.json` |
-| D1v (operand "our way" with its gate: pending) | 0.2 | 8 | `review/oi/w8/research/excess.json` `D1v` |
-| Wk (operand "our way": pending) | 0.2 | 10 | `review/oi/w8/research/excess.json` `Wk` |
+| D1v (`only_if` operand on teko29 7c684da) | 0.2 | 8 | `review/oi/w8/research/excess.json` `D1v` |
+| Wk (`signed` operand on teko29 7c684da) | 0.2 | 10 | `review/oi/w8/research/excess.json` `Wk` |
 | vol1h low, vol1h high | 0.3 | 8 | `review/volspot/excess_vol.json` (slot, volume source pending) |
 | OR(three EMA slopes, window ending at the evaluated bar) | 0.3 | 16 | `engine_curves/slope_curves_engine_bar.json` |
 
