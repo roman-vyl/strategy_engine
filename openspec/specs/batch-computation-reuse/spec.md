@@ -3,9 +3,7 @@
 ## Purpose
 
 Defines the semantic node identity contract and batch-scoped evaluation context that let the Strategy Engine reuse a computation across candidates whenever, and only whenever, it is semantically identical, while guaranteeing one evaluation path (used by single-spec and batch alike) and bit-exact parity of Strategy Engine outputs with the current per-candidate evaluator.
-
 ## Requirements
-
 ### Requirement: Single evaluation path for single-spec and batch
 The system SHALL use exactly one evaluation context implementation and one shared range-input representation for both single-spec range evaluation and range-batch evaluation. A single-spec evaluation SHALL be modeled as an evaluation context with exactly one root; a range-batch evaluation SHALL be modeled as an evaluation context with N roots. The final architecture SHALL NOT contain a permanent, separate preparation or evaluation path for single-spec evaluation; single-spec evaluation is the same mechanism specialized to one root, not a parallel implementation. The system SHALL NOT contain logic that selects a different evaluation path, or a different code branch producing observably different intermediate computations, based on which strategy-spec field(s) vary across the candidates in a batch.
 
@@ -705,3 +703,24 @@ SHALL have the same node set and results as before this change.
 
 - **WHEN** a batch contains candidates that differ only in a level over the same at-point operand
 - **THEN** the at-point operand and its inner operand SHALL each be computed once per batch per side.
+
+### Requirement: Window change identity and cost
+
+A window change SHALL have its own node family whose upstream is its episode and its feature column. A spec without it SHALL have
+the same node set and results as before this change.
+
+#### Scenario: Level candidates share the operand
+
+- **WHEN** a batch contains candidates that differ only in a level over the same window change
+- **THEN** the window change SHALL be computed once per batch per side.
+
+### Requirement: Signed and only-if identity and cost
+
+Signed and only-if operands SHALL each have their own node family. The upstream SHALL be the inner operand's node, plus the requirement
+operands' nodes for only-if. A spec without them SHALL have the same node set and results as before this change.
+
+#### Scenario: Level candidates share the operands
+
+- **WHEN** a batch contains candidates that differ only in a level over the same signed or only-if operand
+- **THEN** that operand and its inputs SHALL each be computed once per batch per side.
+

@@ -4,9 +4,7 @@
 An internal boolean layer turns canonical Strategy Engine features and
 context into pre-entry conditions on the base timeline. The layer
 computes no indicator and performs no alignment of its own.
-
 ## Requirements
-
 ### Requirement: Predicate is an internal layer, not a strategy role
 
 `PreEntryPredicate` SHALL be an internal evaluation contract. It SHALL
@@ -1571,3 +1569,102 @@ non-finite. The point SHALL never be later than the bar.
 
 - **WHEN** the current touch has its peak on bar 100 and the inner ratio is 0.8 on bar 100 and 0.6 on bar 120
 - **THEN** the at-point value with `point: peak` SHALL be 0.8 on bar 120.
+
+### Requirement: Window change operand shape
+
+A window change SHALL have the shape `{"window_change": {"episode", "of", "last_n", "form"}}`. All four fields are required and
+no other field is allowed. `of` SHALL be a feature on the base timeframe, `last_n` a positive integer and `form` either `change`
+or `slope`.
+
+#### Scenario: Malformed window change
+
+- **WHEN** a field is missing, `last_n` is not a positive integer, `form` is another value, `of` is on a higher timeframe, or the operand has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Window change placement
+
+A window change SHALL be accepted wherever a ratio is accepted, including as a side of a ratio or a difference and inside `abs`
+or `at_point`. It SHALL be rejected as the operand of a `change`.
+
+#### Scenario: Window change inside change
+
+- **WHEN** a `change` operand is a window change
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Window change value
+
+On bar t where the current touch of the episode is valid, with P its peak, the window SHALL be `s0 = max(P, t − last_n)` and
+`s1 = t`, and `g` SHALL be +1 on the long side and −1 on the short side. With `form: change` the value SHALL be
+`g · (x[s1] − x[s0])`; with `form: slope` it SHALL be `g · (x[s1] − x[s0]) / x[s0] / (s1 − s0) · 10⁴`.
+
+#### Scenario: Window clipped at the peak
+
+- **WHEN** `last_n` is 24, P is 10 bars before t, the series rises by 2.0 over those 10 bars and `x[P]` is 100 on the long side
+- **THEN** the `slope` value SHALL be `2.0 / 100 / 10 · 10⁴ = 20`, and the `change` value SHALL be 2.0.
+
+#### Scenario: Short side
+
+- **WHEN** the same series is read on the short side
+- **THEN** the values SHALL be −20 and −2.0.
+
+### Requirement: Window change missing values
+
+The window change SHALL be missing where the touch is not valid, `s1 ≤ s0`, `x[s0]` or `x[s1]` is not finite, or, with `slope`,
+`x[s0]` is 0. No bar after t SHALL be read.
+
+#### Scenario: Evaluated bar is the peak
+
+- **WHEN** t equals P
+- **THEN** the window change SHALL be missing on that bar.
+
+### Requirement: Signed operand
+
+A signed operand SHALL have the shape `{"signed": {"operand", "center"}}`. Both fields are required and no other field is allowed. `center`
+SHALL be a finite number and the inner operand SHALL NOT be a constant. On every bar the value SHALL be `center + g · (x − center)`, with
+`g` = +1 on the long side and −1 on the short side and `x` the inner value. It SHALL be missing where the inner value is missing.
+
+#### Scenario: Weekly body our way
+
+- **WHEN** the inner value is 0.6 and `center` is 0
+- **THEN** the value SHALL be 0.6 on the long side and −0.6 on the short side.
+
+#### Scenario: Close position our way
+
+- **WHEN** the inner value is 0.1 and `center` is 0.5
+- **THEN** the value SHALL be 0.1 on the long side and 0.9 on the short side.
+
+### Requirement: Only-if operand shape
+
+An only-if operand SHALL have the shape `{"only_if": {"operand", "require"}}`. Both fields are required and no other field is allowed. The
+inner operand SHALL NOT be a constant. `require` SHALL be a non-empty list of `{"operand", "min", "max", "bounds"?}`. Its fields have the
+meaning, defaults and validation of a `range`, and `empty` is not accepted.
+
+#### Scenario: Malformed only-if
+
+- **WHEN** `require` is empty, an item carries `empty`, an item operand is a constant, or the operand has an unknown field
+- **THEN** static validation SHALL reject the spec.
+
+### Requirement: Only-if value
+
+On every bar the value SHALL be the inner value when every requirement holds. It SHALL be missing otherwise. A requirement holds when its
+operand value is finite and inside its bounds.
+
+#### Scenario: Weak yesterday candle
+
+- **WHEN** D1v requires yesterday's body our way ≥ 1 and the body our way is 0.7 on a bar
+- **THEN** the value SHALL be missing on that bar whatever today's candle.
+
+#### Scenario: Missing requirement value
+
+- **WHEN** a requirement operand is missing on a bar
+- **THEN** the value SHALL be missing on that bar.
+
+### Requirement: Signed and only-if placement
+
+Signed and only-if operands SHALL be accepted wherever a ratio is accepted. They SHALL be rejected as the operand of a `change`.
+
+#### Scenario: Signed inside change
+
+- **WHEN** a `change` operand is a signed operand
+- **THEN** static validation SHALL reject the spec.
+
