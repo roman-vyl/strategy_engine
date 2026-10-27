@@ -43,8 +43,9 @@ corner points are needed: points inside a flat run add nothing (121 → 18-50 po
 
 ### D3. Exact score with float weights
 
-Steps keep 9-digit exact decimals. With an exponent input in the setup, every voter weight is taken exactly (float64 → rational, decimal →
-rational), the sum is exact, the block is `score ≥ threshold` exact. Research blocks also in [θ − 1e-9, θ); parity counts such entries
+Steps keep 9-digit exact decimals. With an exponent or linear input in the setup (their weights are floats), every voter weight is taken exactly (float64 → rational, decimal →
+rational), the sum is exact, the block is `score ≥ threshold` exact. Implementation: float64 sum on every bar; bars within 1e-6 of θ
+are decided again over `Fraction`. The evidence `score` is the float64 sum. Research blocks also in [θ − 1e-9, θ); parity counts such entries
 (expected 0); if any, the owner sets θ in config. No tolerance in the Engine.
 
 ### D4. Short operand
@@ -70,14 +71,17 @@ v14 ≤ 0.084, b3h ≤ 4.65, c32 ≥ 3.43). All curve inputs: `between: "linear"
 
 | Voter (OR = one voter, several inputs) | k | e_v | ladder (black curve) |
 |---|---|---|---|
-| W8_14, W8_30, W8_60, W8r (each a voter) | 0.15 | 16 | `oi/w8/var/excess_var.json` `<name>|low` |
+| W8_14, W8_30, W8r (each a voter; no W8_60: `bexpo.py` sets `FAM = ['W8_14', 'W8_30', 'W8r', 'W8p']`) | 0.15 | 16 | `oi/w8/var/excess_var.json` `<name>|low` |
 | W8p | 0.15 | 16 | `oi/w8/research/excess.json` |
 | OR(kI, O1) | 0.3 / 0.6 | 16 / 20 | `excess.json` |
 | OR(W1d, W1r) | 0.3 | 16 | `excess.json` |
 | W2d | 0.6 | 16 | `excess.json` |
-| D1v (`when`) | 0.2 | 8 | `excess.json` |
+| D1v (`when`: yesterday `candle_body_atr 1d` ≥ 1 and `candle_close_position 1d` ≥ 0.85; short overrides ≤ −1 and ≤ 0.15) | 0.2 | 8 | `excess.json` |
 | Wk (`short`) | 0.2 | 10 | `excess.json` |
 | vol1h low, vol1h high | 0.3 | 8 | `volspot/excess_vol.json` (slot, volume source pending) |
 | OR(three EMA slopes) | 0.3 | 16 | `emaslope/excess_slope.json` |
 
 Paths under `/mnt/project-files/ema200_calib/review/`. Premium PS_R excluded.
+
+Research's short close position is `(H − C)/(H − L)` = `1 − (C − L)/(H − L)`, so the short gate `≥ 0.85` is `≤ 0.15` on the Engine's
+side-free feature (checked in `parity_cc`, review by the thread «Компоненты голоса Б EMA200 в Engine», 2026-10-27 10:3x).

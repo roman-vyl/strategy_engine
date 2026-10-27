@@ -60,13 +60,15 @@ of `count.of` SHALL be a predicate of the layer, validated by that layer.
 
 ### Requirement: Exact score comparison
 
-- Without exponent inputs, sums of weights and the comparison with the threshold SHALL be exact on integers in units of 10⁻⁹.
-- With at least one exponent input in the setup, the score SHALL be the exact rational sum of the voter weights, each exponent weight
-  taken at the exact value of its float64 and each other weight at its exact decimal value; the bar SHALL be blocked when this sum is
-  ≥ `threshold` compared exactly.
+- Without exponent or linear inputs, sums of weights and the comparison with the threshold SHALL be exact on integers in units of
+  10⁻⁹.
+- With at least one exponent or linear input in the setup, the block SHALL be decided on the exact rational sum of the voter weights,
+  each float weight taken at the exact value of its float64 and each step weight at its exact decimal value, compared with
+  `threshold` exactly.
 - In both cases the result SHALL NOT depend on the order of the voters.
 - Levels are compared with operand values in the operands' own floating-point arithmetic.
-- In the evidence, `score` SHALL be the exact sum converted to the nearest float.
+- In the evidence, `score` SHALL be the exact sum converted to the nearest float without exponent or linear inputs, and the float64 sum
+  of the voter weights with them.
 
 #### Scenario: Exact sum on the threshold
 
@@ -77,6 +79,11 @@ of `count.of` SHALL be a predicate of the layer, validated by that layer.
 
 - **WHEN** `threshold` is 0.8 and two voters have weights 0.1 and 0.7
 - **THEN** the bar SHALL be blocked, although the binary floating-point sum 0.1 + 0.7 is 0.7999999999999999.
+
+#### Scenario: Float and decimal weights on the threshold
+
+- **WHEN** `threshold` is 0.8, a step input weighs 0.7 and a linear input 0.1 (float64)
+- **THEN** the bar SHALL be blocked, because the exact sum exceeds 0.8, although the float64 sum is 0.7999999999999999.
 
 #### Scenario: Exponent weights in any order
 
@@ -190,8 +197,8 @@ closed the input SHALL weigh 0 and SHALL NOT veto. A predicate over a missing op
 
 #### Scenario: D1v gate closed
 
-- **WHEN** an input over the forming 1d candle has `when` [yesterday body ≥ 1, yesterday close position ≥ 0.85] and yesterday's body
-  is 0.7
+- **WHEN** an input over the forming 1d candle has `when` [yesterday body ≥ 1 (short override ≤ −1), yesterday close position ≥ 0.85
+  (short override ≤ 0.15)] and on a long yesterday's body is 0.7, or on a short yesterday's close position is 0.3
 - **THEN** the input SHALL weigh 0 whatever today's value.
 
 #### Scenario: Gate on a veto step
