@@ -8,10 +8,14 @@ index → `_normalize_desired_entry` → HTTP.
 
 ## Decisions
 
-### D1. Service setting, not strategy spec (owner 18:37 / 18:41)
-`STRATEGY_ENGINE_LIVE_ENTRY_MODE ∈ {ema_anchor, touch_trigger}`, default `ema_anchor`, parsed in `Settings.from_env()` like
-the other `STRATEGY_ENGINE_*` variables. An unknown value raises at start (fail closed: no silent fallback). Changing it
-means recreating the Engine container with the new value.
+### D1. Engine config file read at start (owner 18:37-18:44, MDS precedent)
+`STRATEGY_ENGINE_CONFIG_PATH` (optional env) names a TOML file; in bbb_stack it is
+`${BBB_DATA_ROOT}/strategy-engine/engine.toml`, the folder mounted read-only like `BBB_data/mds`. `Settings.from_env()`
+reads it once: `live_entry_mode ∈ {ema_anchor, touch_trigger}`. Path unset or file absent → `ema_anchor`. Unknown key,
+unknown value or a parse error → the service fails at start (fail closed, no silent fallback). Switching = edit the file
+and restart the Engine container; a restart re-reads the file because the folder (not the single file) is mounted.
+Not an environment variable: Docker fixes environment values at container creation, so a plain restart would keep the
+old value (owner wants restart, not recreate/deploy).
 
 ### D2. Only the live-entry adapter changes
 The mode is passed from wiring → `EvaluateLiveEntryProjection` → adapter `evaluate(request, bundle, mode)`. The EMA

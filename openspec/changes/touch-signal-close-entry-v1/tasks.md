@@ -1,13 +1,13 @@
 ## 1. Setting
-- [ ] 1.1 `Settings.live_entry_mode` from `STRATEGY_ENGINE_LIVE_ENTRY_MODE` (`ema_anchor` default | `touch_trigger`), invalid value fails at start
-- [ ] 1.2 Wiring passes the mode to `EvaluateLiveEntryProjection`; README Environment
+- [ ] 1.1 `Settings.live_entry_mode` from TOML at `STRATEGY_ENGINE_CONFIG_PATH` (`ema_anchor` when absent | `touch_trigger`); unknown value/key or parse error fails at start
+- [ ] 1.2 Wiring passes the mode to `EvaluateLiveEntryProjection`; README Environment + config file, `config/engine.toml.example`
 
 ## 2. Live entry
 - [ ] 2.1 Live-entry adapter protocol takes the mode; `ema_anchor` path unchanged
 - [ ] 2.2 EMA Pullback `touch_trigger` plan: `entry_allowed[target]`, entry = close, stop/take from exit-policy distances, same checks, profile and partial takes; non-touch trigger → `null`
 
 ## 3. Tests (targeted only, `PYTHONPATH=src:.:tests`; never `tests/parity/test_all_families_memo.py`)
-- [ ] 3.1 Settings: default, both values, invalid value
+- [ ] 3.1 Settings: no path, missing file, both values, invalid value, unknown key, broken TOML
 - [ ] 3.2 Unit: signal bar, armed bar without touch, vote-blocked touch, false break then return, bar after signal, short mirror, other trigger
 - [ ] 3.3 `ema_anchor` live-entry fixtures byte-identical; `/range` identical in both modes
 - [ ] 3.4 Parity on full history BTC/ETH/SOL working-zone cells: `touch_trigger` plan bars = `<side>_trigger` of `/mnt/project-files/ema200_calib/review/live/eng/<coin>_w<W>_lb<LB>.npz`, entry = close; `ema_anchor` = `<side>_entry` bit for bit

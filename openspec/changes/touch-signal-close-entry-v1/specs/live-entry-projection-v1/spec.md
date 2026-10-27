@@ -1,29 +1,33 @@
 ## ADDED Requirements
 
-### Requirement: Engine-wide live-entry mode
-Strategy Engine SHALL read `STRATEGY_ENGINE_LIVE_ENTRY_MODE` once at start, with allowed values `ema_anchor` (default when
-unset) and `touch_trigger`, and SHALL refuse to start for any other value. The mode SHALL affect only the live-entry
-endpoint; `/range`, `/range-batch`, `/managed-replay` and open-trade results SHALL be identical in both modes.
+### Requirement: Engine-wide live-entry mode from the config file
+Strategy Engine SHALL read `live_entry_mode` once at start from the TOML file named by `STRATEGY_ENGINE_CONFIG_PATH`, with
+allowed values `ema_anchor` and `touch_trigger`, and `ema_anchor` when the path is unset, the file is absent or the key is
+absent. It SHALL refuse to start on an unknown value, an unknown key or an unparsable file.
 
-#### Scenario: Unset variable
-- **WHEN** the variable is not set
+#### Scenario: No config file
+- **WHEN** `STRATEGY_ENGINE_CONFIG_PATH` is unset or names a missing file
 - **THEN** every live-entry response SHALL be byte-identical to the response before this change
 
 #### Scenario: Invalid value
-- **WHEN** the variable is `close`
+- **WHEN** the file contains `live_entry_mode = "close"`
 - **THEN** the service SHALL fail at start with an error naming the allowed values
+
+#### Scenario: Switch by restart
+- **WHEN** the file is changed from `ema_anchor` to `touch_trigger` and the Engine is restarted
+- **THEN** live-entry SHALL answer in `touch_trigger` mode
+
+### Requirement: The mode affects only live-entry
+`/range`, `/range-batch`, `/managed-replay` and open-trade results SHALL be identical in both modes.
 
 #### Scenario: Range unaffected
 - **WHEN** the same `/range` request is evaluated with the mode `ema_anchor` and with `touch_trigger`
 - **THEN** both responses SHALL be byte-identical
 
 ### Requirement: Touch-trigger desired entry
-In `touch_trigger` mode, for a `touch_anchor` strategy, live-entry SHALL return a non-null `desired_entry` only when the
-target bar is a signal bar of one side (that side's final entry mask is true on the target bar). Its
-`planned_entry_price` SHALL equal the target bar close, stop and take SHALL be that close minus/plus the exit-policy
-distances of the target bar (short mirrored), `source_plan_bar_open_time_ms` SHALL equal the target bar, and the response
-shape SHALL be the same as in `ema_anchor` mode. For any other target bar, and for a strategy with another trigger,
-`desired_entry` SHALL be `null`.
+In `touch_trigger` mode, for a `touch_anchor` strategy, live-entry SHALL return a plan only for a target bar on which one
+side's final entry mask is true, priced at the target bar close with stop and take from that bar's exit-policy
+distances, in the same response shape; otherwise `desired_entry` SHALL be `null`.
 
 #### Scenario: Signal bar
 - **WHEN** the target bar is a long signal bar with close 100.5, stop distance 1.2 and take distance 6
