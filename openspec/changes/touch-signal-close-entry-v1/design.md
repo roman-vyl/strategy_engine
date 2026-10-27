@@ -1,37 +1,39 @@
 ## Context
 
-Engine live-entry chain (`docs/22_live_projections_architecture.md`): HTTP → `EvaluateLiveEntryProjection` →
-`LoadLiveFeatureFrame` → registry → `EmaPullbackLiveEntryProjectionAdapter` → `evaluate_ema_pullback_frame`
-(contexts → consumption → direction/blockers → setups → triggers → risk/entries → exit policy → potential entries) →
-`_plan_for_side` at the target index → `_normalize_desired_entry` → HTTP.
-Only the last stage of the pipeline, `project_potential_entries`, changes. Owner's chain page:
-https://claude.ai/artifact/S1krVonVHN8v86GLGvWRKn
+Engine live-entry chain (`docs/22_live_projections_architecture.md`, owner page
+https://claude.ai/artifact/S1krVonVHN8v86GLGvWRKn): HTTP → `EvaluateLiveEntryProjection` → `LoadLiveFeatureFrame` →
+registry → `EmaPullbackLiveEntryProjectionAdapter` → `evaluate_ema_pullback_frame` (contexts → consumption →
+direction/blockers → setups → triggers → risk/entries → exit policy → potential entries) → `_plan_for_side` at the target
+index → `_normalize_desired_entry` → HTTP.
 
 ## Decisions
 
-### D1. The mode lives on the touch trigger, default keeps today
-`components.trigger.entry_price ∈ {"anchor", "signal_close"}`, default `"anchor"`. Allowed only with
-`component_id: "touch_anchor"`. Any other value, or the key on another trigger, is a typed validation error, never a
-silent fallback. Without the key every result is byte-identical to today.
+### D1. Service setting, not strategy spec (owner 18:37 / 18:41)
+`STRATEGY_ENGINE_LIVE_ENTRY_MODE ∈ {ema_anchor, touch_trigger}`, default `ema_anchor`, parsed in `Settings.from_env()` like
+the other `STRATEGY_ENGINE_*` variables. An unknown value raises at start (fail closed: no silent fallback). Changing it
+means recreating the Engine container with the new value.
 
-### D2. `signal_close` uses the final entry mask
-The plan exists on bar `i` iff `entries[side].entry_allowed[i]` (the same mask research enters on). This already contains
-`pre_trigger_allowed` (setups, vote, blockers), the touch trigger (`touch & close_ok`) and the risk mask, so no filter is
-re-implemented in the projection.
+### D2. Only the live-entry adapter changes
+The mode is passed from wiring → `EvaluateLiveEntryProjection` → adapter `evaluate(request, bundle, mode)`. The EMA
+Pullback adapter keeps `_plan_for_side` (reads `potential_entries`) for `ema_anchor`, and for `touch_trigger` builds the
+plan from the same `EmaPullbackEvaluation`:
+- signal: `evaluation.entries[side].entry_allowed[target]` (the mask research enters on; it already contains setups, the
+  vote, blockers, the touch trigger and risk);
+- entry: `close[target]` from the frame's market bars;
+- stop / take: `exit_policy.stop_loss_distance_<side>[target]`, `take_profit_distance_<side>[target]`, same formula as
+  `potential_entries` uses with the anchor; the same positivity and geometry checks; the same locked profile and partial
+  takes code.
+`potential_entries.py` is not touched, so `/range` and research output do not change.
 
-### D3. Price and protection from the signal bar
-`entry = close[i]`. Stop/take use the exit-policy distances of bar `i` (R = k × ATR on the touch bar), exactly the
-formula used today with `anchor[i]`. The existing positivity and geometry checks stay
-(`stop < entry < take` long, mirrored short); a bar that fails them has no plan.
+### D3. Trigger other than touch_anchor
+`touch_trigger` builds a plan only for a strategy whose trigger is `touch_anchor`; for any other trigger live-entry returns
+`null`, the same as today (today `potential_entries` is empty for non-touch triggers).
 
 ### D4. Same contract shape
-`_plan_for_side` and the HTTP response do not change. `source_plan_bar_open_time_ms` = the signal bar. Runtime sees a plan
-only on the signal bar and `null` on the next bar (unless it is itself a signal bar), which today's reconciliation turns
-into Apply / Cancel / Replace.
+`source_plan_bar_open_time_ms` = the signal bar; fields unchanged. Runtime gets a plan only on the signal bar and `null` on
+the next bar (unless it is itself a signal bar); today's reconciliation turns that into Apply / Cancel / Replace.
 
 ## Risks / checks
 - Open-trade management starts after the bar Runtime records as the entry (the fill bar), while research manages from the
-  bar after the signal bar. This change does not touch open-trade; the possible one-bar shift is measured in the parity
-  task and reported, and handled in the Runtime stage if real.
-- Both sides on one bar: possible only when close == anchor and both sides are allowed, the same as today; the existing
-  `evaluation_invariant_broken` stays.
+  bar after the signal bar. Not touched here; the possible one-bar shift is measured in the parity task and reported.
+- Both sides on one bar (close == anchor, both allowed): unchanged `evaluation_invariant_broken`.

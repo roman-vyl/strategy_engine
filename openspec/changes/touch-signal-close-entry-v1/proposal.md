@@ -1,42 +1,42 @@
 ## Why
 
 Owner decision 2026-10-27 (thread «Перевести вход на цену закрытия свечи касания», brief
-`/mnt/project-files/engine-tasks/ema200/close_limit_entry/BRIEF.md`). Today `potential_entries` gives a plan on every bar
-where the setup is allowed and the close is on our side, at `entry = anchor[i]` (EMA). Runtime places that plan in
-advance for the next bar, so every filter, the v8 vote included, is read on the bar *before* the touch. Research and the
-simulation enter on the close of the touch bar, with every filter read on that same bar.
+`/mnt/project-files/engine-tasks/ema200/close_limit_entry/BRIEF.md`). Today live-entry returns a plan on every bar where
+the setup is allowed and the close is on our side, at `entry = anchor[i]` (EMA). Runtime places it in advance for the
+next bar, so every filter, the v8 vote included, is read on the bar *before* the touch. Research and the simulation enter
+on the close of the touch bar, with every filter read on that same bar.
 
 Simulation, working-zone medians, v8 θ1.5 (BTC / ETH / SOL / SOL W6 / SOL SL5.5-6.5): entry at the touch close
 14.4 / 10.2 / 11.0 / 32.3 / 19.8k vs today's live scheme 7.2 / 6.9 / 6.0 / 45.7 / 11.3k
 (`/mnt/project-files/ema200_calib/review/live/reclaim/`).
 
-The owner split the work into stages. **This change is stage 1 only: the Engine → Runtime contract.** The Engine learns to
-return the desired entry on the touch signal bar at that bar's close. What Runtime does with it next (order lifetime) and
-which order ABI places are separate later stages.
+The owner split the work into stages. **This change is stage 1 only: the Engine → Runtime contract.** What Runtime does
+with the plan next (order lifetime) and which order ABI places are later stages.
 
 ## What Changes
 
-- New optional key `components.trigger.entry_price` for the `touch_anchor` trigger: `"anchor"` (default, today's
-  behavior) or `"signal_close"`.
-- In `signal_close` mode a side's PotentialEntry exists on bar `i` **only when that side's entry is allowed on bar `i`**
-  (`entry_allowed[i]`: all setups with the vote and blockers allowed, AND touch & close on our side on bar `i`). Then
-  `entry = close[i]`; stop and take are `close[i] ∓ / ± distance[i]` from the exit policy on bar `i`; partial takes are
-  priced from the same entry. On every other bar the side has no plan, so live-entry returns `null`.
-- The live-entry response keeps exactly today's shape (side, source plan bar, planned entry, stop, take, locked profile,
-  optional partial takes). No new field.
-- Unchanged: the touch rule, the setup window (`untouched_anchor.active_bars`, default 3), every filter and the vote,
-  exit distances, open-trade, managed replay, research execution (it already enters on the signal-bar close).
+- New service setting `STRATEGY_ENGINE_LIVE_ENTRY_MODE` (environment variable, read once at start):
+  - `ema_anchor` (default): today's live-entry, byte-identical.
+  - `touch_trigger`: live-entry returns a plan for a target bar **only when that bar is a signal bar** of a side (the
+    side's final entry is allowed on that bar: setups with the vote and blockers, touch with close on our side, risk).
+    `planned_entry_price = close` of that bar; stop and take = `close ∓ / ± distance` from the exit policy on that bar;
+    partial takes priced from the same entry. Any other bar returns `null`.
+  - Any other value: the service refuses to start.
+- The switch is engine-wide (every strategy served by this Engine) and changes **only the live-entry answer to Runtime**.
+  `/range`, `/range-batch`, `/managed-replay`, `/open-trade`, `potential_entries` and research results stay unchanged.
+- The live-entry response keeps exactly today's shape. No new field.
 
 ## Not in this change
 
-- Runtime and ABI. The mode MUST NOT be enabled in a live (demo or real) strategy spec until the ABI stage: ABI places a
-  conditional Market entry today, and with a trigger at the last close it would fire at once as a taker.
+- Runtime, ABI, bbb_stack. The mode MUST NOT be set to `touch_trigger` on a live (demo or real) stack before the ABI
+  stage: ABI places a conditional Market entry today, and with a trigger at the last close it fires at once as a taker.
+  Setting the variable in bbb_stack is a separate change on the owner's word.
 - Order lifetime, order type, post-only, fees.
 
 ## Impact
 
-- `strategies/ema_pullback/potential_entries.py` (mode), `raw_spec_identity.py` / trigger validation (new key),
-  `evaluation.py` (pass the entry mask and closes to the projection); tests.
-- `live_projections/live_entry.py`, HTTP models, Runtime contract: no code change; they read the new values.
-- Node identities: the trigger mask does not depend on `entry_price` and potential entries are outside the node families,
-  so no identity changes. `/range` `potential_entries` in `signal_close` mode return the close-based prices.
+- `service/settings.py` (new setting + validation), `service/wiring.py` (pass the mode), `README.md` Environment.
+- `application/evaluate_live_entry_projection.py` passes the mode to the adapter;
+  `strategies/live_projections` protocol gains the mode argument; `ema_pullback/live_projections/live_entry.py`
+  builds the `touch_trigger` plan from the evaluation it already runs.
+- No change to `potential_entries.py`, node identities, raw spec validation or HTTP models.
