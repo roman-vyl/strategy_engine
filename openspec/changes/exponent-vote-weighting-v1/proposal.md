@@ -7,7 +7,7 @@ Vote W8 **variant 8** for EMA200 (owner 2026-10-27 07:20 «Сохраняй ка
 1. the filter value is turned into a number by a table (the filter's **black curve**: excess of the stop share over the coin base, pp);
 2. the vote turns that number into a weight by an **exponent** `w = (exp(k·x) − 1) / (exp(k·e_v) − 1)`, `k` and `e_v` per filter.
 
-Then OR groups take the max, the sum is compared with θ 1.75, and the nine vote-B vetoes block alone.
+Then OR groups take the max, the sum is compared with θ (1.5 on Engine values, owner 11:13), and the nine vote-B vetoes block alone.
 
 The table of step 1 already exists in `weighted_vote_setup`: the ladder of steps `{level, weight}`. Today the ladder value is the weight
 ("linear" weighting). This change adds a second way to weigh, chosen in the strategy spec per input: **exponent**.

@@ -26,15 +26,13 @@
 
 ## 4. Variant 8 config
 
-- [ ] 4.1 Vote config for BTC/ETH/SOL from the design table: black-curve corner points (negative clipped to 0), k, e_v, θ 1.75, nine
+- [ ] 4.1 Vote config for BTC/ETH/SOL from the design table: black-curve corner points (negative clipped to 0), k, e_v, θ 1.5, nine
       vote-B vetoes. No W8_60 (not in the v7/v8 chain). Wk and D1v join only once their operands give values "our way".
       vol1h = slot until the owner decides the volume source.
 
 ## 5. Parity (on the owner's command)
 
-- [ ] 5.1 Engine in-process on full history, all entries BTC/ETH/SOL: blocked mask equals `review/surf/w8vote/maskwin8_<c>.npz`
-      (1045 / 866 / 898); per-voter weights equal research within 1e-12; without vol1h compare with research's mask rebuilt without
-      vol1h. Report entries with score in [θ − 1e-9, θ).
-      Slope voter: research slope values end the window at bar − 1, the Engine backtest evaluates at the touch bar; the slope voter's
-      mask will differ until the owner decides the live/backtest bar question. Compare also with research's mask rebuilt without the
-      slope voter.
+- [ ] 5.1 Engine in-process on full history, all entries BTC/ETH/SOL: blocked mask equals
+      `/mnt/project-files/engine-tasks/ema200/vote_v8/engine_curves/blocked_theta1.5_<c>.npz` (BTC 923, ETH 774, SOL 883; keys
+      `blocked`, `score`, `veto`); score equals `score` within 1e-12. Report entries with score in [θ − 1e-9, θ). Without vol1h, compare
+      with the reference score minus the vol1h weights. Expected working-zone medians BTC 13.3k, ETH 9.9k, SOL 10.8k.

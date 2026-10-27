@@ -5,7 +5,7 @@ Research source of truth: `/mnt/project-files/ema200_calib/review/surf/w8vote/ma
 
 - Table: `e = np.where(isfinite(x), np.interp(x, grid, np.maximum(pooled, 0)), 0)`.
 - Weight: `w = (np.exp(k * e) - 1) / (np.exp(k * ev) - 1)`.
-- Block: `score >= θ − 1e-9 | vetoes`, θ 1.75.
+- Block: `score >= θ − 1e-9 | vetoes`, θ 1.75 (owner 11:13: θ 1.5 on Engine values, see below).
 
 Brief: `/mnt/project-files/engine-tasks/ema200/vote_v8/BRIEF.md`.
 
@@ -61,22 +61,26 @@ their identities byte for byte.
 
 ## Variant 8 config (numbers in config only)
 
-θ 1.75. Vetoes: the nine vote-B veto voters as now (a1s ≤ −0.0125, c5 ≥ 0.685, a3 ≥ 15.8, v11 ≤ 0.0441, v12 ≤ 0.0422, v13 ≤ 0.0747,
-v14 ≤ 0.084, b3h ≤ 4.65, c32 ≥ 3.43). All curve inputs: `between: "linear"`, `weighting.exponent`.
+Owner 2026-10-27 11:13: v8 is fixed on the Engine's own 5m values. The OI and slope curves were recalibrated on Engine parity values with
+the same method (review thread, `/mnt/project-files/engine-tasks/ema200/vote_v8/engine_curves/`, `build.py`). θ **1.5**. Vetoes: the nine
+vote-B veto voters as now (a1s ≤ −0.0125, c5 ≥ 0.685, a3 ≥ 15.8, v11 ≤ 0.0441, v12 ≤ 0.0422, v13 ≤ 0.0747, v14 ≤ 0.084, b3h ≤ 4.65,
+c32 ≥ 3.43). All curve inputs: `between: "linear"`, `weighting.exponent`, the curve's points as steps with negative values clipped to 0.
+Curve tails stay as they are, even where only 1-3 entries per coin are cut (owner 10:35).
 
 | Voter (OR = one voter, several inputs) | k | e_v | ladder (black curve) |
 |---|---|---|---|
-| W8_14, W8_30, W8r (each a voter; no W8_60: `bexpo.py` sets `FAM = ['W8_14', 'W8_30', 'W8r', 'W8p']`) | 0.15 | 16 | `oi/w8/var/excess_var.json` `<name>|low` |
-| W8p | 0.15 | 16 | `oi/w8/research/excess.json` |
-| OR(kI, O1) | 0.3 / 0.6 | 16 / 20 | `excess.json` |
-| OR(W1d, W1r) | 0.3 | 16 | `excess.json` |
-| W2d | 0.6 | 16 | `excess.json` |
-| D1v (operand "our way" with its gate: pending) | 0.2 | 8 | `excess.json` |
-| Wk (operand "our way": pending) | 0.2 | 10 | `excess.json` |
-| vol1h low, vol1h high | 0.3 | 8 | `volspot/excess_vol.json` (slot, volume source pending) |
-| OR(three EMA slopes) | 0.3 | 16 | `emaslope/excess_slope.json` |
+| W8_14, W8_30, W8r (each a voter; no W8_60) | 0.15 | 16 | `engine_curves/oi_curves_engine5m.json` |
+| W8p | 0.15 | 16 | `oi_curves_engine5m.json` |
+| OR(kI, O1) | 0.3 / 0.6 | 16 / 20 | `oi_curves_engine5m.json` |
+| OR(W1d, W1r) | 0.3 | 16 | `oi_curves_engine5m.json` |
+| W2d | 0.6 | 16 | `oi_curves_engine5m.json` |
+| D1v (operand "our way" with its gate: pending) | 0.2 | 8 | `review/oi/w8/research/excess.json` `D1v` |
+| Wk (operand "our way": pending) | 0.2 | 10 | `review/oi/w8/research/excess.json` `Wk` |
+| vol1h low, vol1h high | 0.3 | 8 | `review/volspot/excess_vol.json` (slot, volume source pending) |
+| OR(three EMA slopes, window ending at the evaluated bar) | 0.3 | 16 | `engine_curves/slope_curves_engine_bar.json` |
 
-Paths under `/mnt/project-files/ema200_calib/review/`. Premium PS_R excluded.
+`review/` = `/mnt/project-files/ema200_calib/review/`. Premium PS_R excluded. Missing value → weight 0 for every voter (research
+`np.where(isfinite(x), …, 0)`).
 
 D1v gate in research: yesterday body ≥ 1 ATR our way and close position ≥ 0.85 our way (on a short `(H − C)/(H − L)`, i.e. ≤ 0.15 on
 the side-free feature); else 9 → weight 0. Wk = `g · body` of the previous week. Both belong in their operands.
