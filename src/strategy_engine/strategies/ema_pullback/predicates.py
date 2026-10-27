@@ -33,6 +33,7 @@ from strategy_engine.strategies.ema_pullback.candles import (
     CANDLE_ATR_FIELD,
     CANDLE_ATR_KIND,
     candle_values,
+    touch_points,
 )
 from strategy_engine.strategies.ema_pullback.forming_candle import (
     FORMING_CANDLE_ATR_FIELD,
@@ -276,6 +277,16 @@ class Difference:
 
 
 @dataclass(frozen=True, slots=True)
+class AtPoint:
+    """The inner operand's value on a wave point of the current touch, `peak`
+    = P or `origin` = S* (`w8p-at-point-v1`, D1)."""
+
+    episode: str
+    point: str
+    operand: Operand
+
+
+@dataclass(frozen=True, slots=True)
 class Operand:
     """Exactly one of a canonical feature request, an EMA stack episode
     reference, a segment aggregate, a ratio, a base-bar price field or a
@@ -301,6 +312,7 @@ class Operand:
     leg_change: LegChange | None = None
     absolute: Operand | None = None
     difference: Difference | None = None
+    at_point: AtPoint | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -411,6 +423,8 @@ def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
             *operand_features(operand.difference.left),
             *operand_features(operand.difference.right),
         )
+    if operand.at_point is not None:
+        return operand_features(operand.at_point.operand)
     return ()
 
 
@@ -432,6 +446,7 @@ def operand_needs_episode(operand: Operand) -> bool:
         or operand.forming_candle is not None
         or operand.leg_efficiency is not None
         or operand.leg_change is not None
+        or operand.at_point is not None
     ):
         return True
     if operand.absolute is not None:
@@ -499,8 +514,9 @@ def _feature(raw: object, path: str) -> PlannedFeature:
 _OPERAND_KEYS = (
     "feature, episode, segment, candle, leg_mean, leg_sum, leg_top_mean, anchor_follow, "
     "pullback_depth, leg_speed, impulse_atr, leg_bars, forming_candle, leg_efficiency, "
-    "leg_change, abs, difference, ratio, price or const"
+    "leg_change, abs, difference, at_point, ratio, price or const"
 )
+AT_POINTS = ("peak", "origin")
 _SEGMENT_FIELDS = {
     "episode",
     "of",
@@ -938,6 +954,26 @@ def _absolute(raw: object, path: str, episode_refs: frozenset[str] | None) -> Op
     return inner
 
 
+def _at_point(raw: object, path: str, episode_refs: frozenset[str] | None) -> AtPoint:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"episode", "point", "operand"}, path)
+    for key in ("episode", "point", "operand"):
+        if key not in payload:
+            raise InvalidRequestError(f"{path}.{key} is required")
+    ref = payload["episode"]
+    if not isinstance(ref, str) or not ref:
+        raise InvalidRequestError(f"{path}.episode must be a non-empty string")
+    if episode_refs is not None and ref not in episode_refs:
+        raise InvalidRequestError(f"{path}.episode is not declared in ema_stack_episode", ref=ref)
+    point = payload["point"]
+    if point not in AT_POINTS:
+        raise InvalidRequestError(f"{path}.point must be peak or origin", point=point)
+    inner = _operand(payload["operand"], f"{path}.operand", episode_refs)
+    if inner.const is not None or inner.at_point is not None:
+        raise InvalidRequestError(f"{path}.operand must not be a constant or an at_point")
+    return AtPoint(ref, str(point), inner)
+
+
 def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Operand:
     payload = _mapping(raw, path)
     if len(payload) != 1:
@@ -985,6 +1021,8 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
         return Operand(absolute=_absolute(value, f"{path}.abs", episode_refs))
     if key == "difference":
         return Operand(difference=_difference(value, f"{path}.difference", episode_refs))
+    if key == "at_point":
+        return Operand(at_point=_at_point(value, f"{path}.at_point", episode_refs))
     if key == "price":
         if value not in _PRICE_FIELDS:
             raise InvalidRequestError(f"{path}.price must be open, high, low or close")
@@ -1361,6 +1399,14 @@ def _values(
                 path,
             ),
         )
+    if operand.at_point is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _at_point_operand, operand.at_point, frame, context, identity, side, bundle, path
+            ),
+        )
     assert operand.feature is not None
     return _feature_array(operand.feature, frame, context, identity)
 
@@ -1700,6 +1746,35 @@ def _absolute_operand(
     return out
 
 
+def _at_point_operand(
+    at_point: AtPoint,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+    path: str,
+) -> np.ndarray:
+    episodes = bundle.episodes if bundle is not None else None
+    if episodes is None:
+        raise InvalidRequestError(
+            "at_point operand has no evaluated episode", episode_ref=at_point.episode
+        )
+    length = len(frame.time_ms)
+    inner = np.broadcast_to(
+        np.asarray(
+            _values(at_point.operand, frame, context, identity, side, bundle, f"{path}.operand"),
+            dtype=np.float64,
+        ),
+        (length,),
+    )
+    valid, origin, peak = touch_points(episodes.side(at_point.episode, side), length)
+    out = _take_rows(inner, peak if at_point.point == "peak" else origin, valid)
+    out[~np.isfinite(out)] = math.nan
+    out.flags.writeable = False
+    return out
+
+
 def _take_rows(column: np.ndarray, rows: np.ndarray, mask: np.ndarray) -> np.ndarray:
     out = np.full(len(rows), math.nan)
     out[mask] = column[rows[mask]]
@@ -1999,6 +2074,7 @@ def _has_value(operand: Operand) -> bool:
         or operand.leg_change is not None
         or operand.absolute is not None
         or operand.difference is not None
+        or operand.at_point is not None
     )
 
 
@@ -2242,6 +2318,8 @@ def _operand_param(operand: Operand) -> tuple[object, ...]:
         return ("abs",)
     if operand.difference is not None:
         return ("difference",)
+    if operand.at_point is not None:
+        return ("at_point",)
     return ("feature",)
 
 
@@ -2714,6 +2792,35 @@ def _resolve_operand(
         )
         operand_ids[path] = node
         return node, [node, *consumed]
+    if operand.at_point is not None:
+        at_point = operand.at_point
+        episode = (contexts or {}).get(episode_identity_key(at_point.episode, side))
+        if episode is None:
+            raise InvalidRequestError(
+                "at_point episode is not declared", episode_ref=at_point.episode
+            )
+        inner_node, inner_consumed = _resolve_operand(
+            at_point.operand,
+            f"{path}.operand",
+            feature_ids,
+            side,
+            contexts,
+            column_ids,
+            episode_ids,
+            operand_ids,
+        )
+        at_upstream = {"episode": episode}
+        if inner_node is not None:
+            at_upstream["operand"] = inner_node
+        node = node_spec(
+            "predicate.at_point",
+            version=PREDICATE_NODE_VERSION,
+            params={"point": at_point.point, "operand": _operand_param(at_point.operand)},
+            upstream=at_upstream,
+            side=side,
+        )
+        operand_ids[path] = node
+        return node, [node, *inner_consumed]
     return None, []
 
 
