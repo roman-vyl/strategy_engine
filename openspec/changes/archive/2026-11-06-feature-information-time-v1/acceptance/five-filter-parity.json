@@ -1,0 +1,818 @@
+{
+  "scope": "Independent Claude formulas from recovered tool transcripts / altvals versus RangeIndicatorEvaluator.evaluate_native + actual operand evaluator. Full market prefixes; same frozen S/P and validity isolate HTF semantics. No production changes.",
+  "coins": {
+    "btc": {
+      "entries": 2824,
+      "eligible": 2815,
+      "filters": {
+        "15": {
+          "engine_vs_claude": {
+            "n": 2824,
+            "finite_engine": 233,
+            "finite_reference": 233,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2824,
+            "finite_engine": 233,
+            "finite_reference": 233,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2824,
+            "finite_engine": 233,
+            "finite_reference": 233,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          }
+        },
+        "16": {
+          "engine_vs_claude": {
+            "n": 2824,
+            "finite_engine": 2713,
+            "finite_reference": 2713,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2824,
+            "finite_engine": 2713,
+            "finite_reference": 2713,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2824,
+            "finite_engine": 2713,
+            "finite_reference": 2713,
+            "mask_mismatches": 0,
+            "value_mismatches": 1,
+            "max_abs_error": 0.8502360479153175,
+            "indices": [
+              1873
+            ]
+          }
+        },
+        "142": {
+          "engine_vs_claude": {
+            "n": 2824,
+            "finite_engine": 2811,
+            "finite_reference": 2811,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2824,
+            "finite_engine": 2811,
+            "finite_reference": 2811,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2824,
+            "finite_engine": 2811,
+            "finite_reference": 2811,
+            "mask_mismatches": 0,
+            "value_mismatches": 4,
+            "max_abs_error": 0.007285697974599881,
+            "indices": [
+              540,
+              1873,
+              2291,
+              2548
+            ]
+          }
+        },
+        "178": {
+          "engine_vs_claude": {
+            "n": 2824,
+            "finite_engine": 2815,
+            "finite_reference": 2815,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2824,
+            "finite_engine": 2815,
+            "finite_reference": 2815,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2824,
+            "finite_engine": 2815,
+            "finite_reference": 2815,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          }
+        },
+        "280": {
+          "engine_vs_claude": {
+            "n": 2824,
+            "finite_engine": 2815,
+            "finite_reference": 2815,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 2.842170943040401e-14,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2824,
+            "finite_engine": 2815,
+            "finite_reference": 2815,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2824,
+            "finite_engine": 2815,
+            "finite_reference": 2815,
+            "mask_mismatches": 0,
+            "value_mismatches": 37,
+            "max_abs_error": 0.9666837590710697,
+            "indices": [
+              100,
+              157,
+              484,
+              485,
+              700,
+              764,
+              768,
+              888,
+              889,
+              899,
+              900,
+              901,
+              927,
+              928,
+              1033,
+              1169,
+              1376,
+              1523,
+              1755,
+              1896,
+              1897,
+              2049,
+              2203,
+              2265,
+              2266,
+              2289,
+              2378,
+              2387,
+              2388,
+              2513,
+              2514,
+              2641,
+              2647,
+              2710,
+              2717,
+              2767,
+              2768
+            ]
+          }
+        }
+      },
+      "full_axis_feature_checks": {
+        "atr_wilder_1d": {
+          "n": 691157,
+          "finite_engine": 687252,
+          "finite_reference": 687252,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        },
+        "candle_body_atr_1d": {
+          "n": 691157,
+          "finite_engine": 686964,
+          "finite_reference": 686964,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        },
+        "candle_close_position_1d": {
+          "n": 691157,
+          "finite_engine": 690996,
+          "finite_reference": 690996,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        },
+        "candle_body_atr_1w": {
+          "n": 691157,
+          "finite_engine": 661620,
+          "finite_reference": 661620,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        },
+        "atr_wilder_4h": {
+          "n": 691157,
+          "finite_engine": 690517,
+          "finite_reference": 690517,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        }
+      },
+      "examples": [],
+      "causal_prefix_checks": [
+        {
+          "last_bar": 345567,
+          "close_utc": "2023-07-08T07:55:00+00:00",
+          "all_features_equal_full_history": true
+        },
+        {
+          "last_bar": 345568,
+          "close_utc": "2023-07-08T08:00:00+00:00",
+          "all_features_equal_full_history": true
+        },
+        {
+          "last_bar": 345569,
+          "close_utc": "2023-07-08T08:05:00+00:00",
+          "all_features_equal_full_history": true
+        }
+      ],
+      "boundary_counts": {
+        "peak_bucket_closes": 43,
+        "entry_closes_4h": 34,
+        "entry_closes_1d": 4,
+        "entry_closes_1w": 1
+      }
+    },
+    "eth": {
+      "entries": 2542,
+      "eligible": 2534,
+      "filters": {
+        "15": {
+          "engine_vs_claude": {
+            "n": 2542,
+            "finite_engine": 230,
+            "finite_reference": 230,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2542,
+            "finite_engine": 230,
+            "finite_reference": 230,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2542,
+            "finite_engine": 230,
+            "finite_reference": 230,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          }
+        },
+        "16": {
+          "engine_vs_claude": {
+            "n": 2542,
+            "finite_engine": 2386,
+            "finite_reference": 2386,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2542,
+            "finite_engine": 2386,
+            "finite_reference": 2386,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2542,
+            "finite_engine": 2386,
+            "finite_reference": 2386,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          }
+        },
+        "142": {
+          "engine_vs_claude": {
+            "n": 2542,
+            "finite_engine": 2528,
+            "finite_reference": 2528,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2542,
+            "finite_engine": 2528,
+            "finite_reference": 2528,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2542,
+            "finite_engine": 2528,
+            "finite_reference": 2528,
+            "mask_mismatches": 0,
+            "value_mismatches": 3,
+            "max_abs_error": 0.024450788478685204,
+            "indices": [
+              969,
+              2359,
+              2506
+            ]
+          }
+        },
+        "178": {
+          "engine_vs_claude": {
+            "n": 2542,
+            "finite_engine": 2534,
+            "finite_reference": 2534,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2542,
+            "finite_engine": 2534,
+            "finite_reference": 2534,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2542,
+            "finite_engine": 2534,
+            "finite_reference": 2534,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          }
+        },
+        "280": {
+          "engine_vs_claude": {
+            "n": 2542,
+            "finite_engine": 2534,
+            "finite_reference": 2534,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 2.842170943040401e-14,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2542,
+            "finite_engine": 2534,
+            "finite_reference": 2534,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2542,
+            "finite_engine": 2534,
+            "finite_reference": 2534,
+            "mask_mismatches": 0,
+            "value_mismatches": 34,
+            "max_abs_error": 0.6444082811511525,
+            "indices": [
+              31,
+              104,
+              162,
+              391,
+              520,
+              561,
+              710,
+              711,
+              953,
+              974,
+              1066,
+              1067,
+              1155,
+              1204,
+              1240,
+              1241,
+              1242,
+              1381,
+              1429,
+              1636,
+              1637,
+              1712,
+              1760,
+              2035,
+              2077,
+              2269,
+              2270,
+              2385,
+              2395,
+              2418,
+              2419,
+              2435,
+              2436,
+              2488
+            ]
+          }
+        }
+      },
+      "full_axis_feature_checks": {
+        "atr_wilder_1d": {
+          "n": 589043,
+          "finite_engine": 585011,
+          "finite_reference": 585011,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        },
+        "candle_body_atr_1d": {
+          "n": 589043,
+          "finite_engine": 584723,
+          "finite_reference": 584723,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        },
+        "candle_close_position_1d": {
+          "n": 589043,
+          "finite_engine": 588755,
+          "finite_reference": 588755,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        },
+        "candle_body_atr_1w": {
+          "n": 589043,
+          "finite_engine": 558803,
+          "finite_reference": 558803,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        },
+        "atr_wilder_4h": {
+          "n": 589043,
+          "finite_engine": 588372,
+          "finite_reference": 588372,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        }
+      },
+      "examples": [],
+      "causal_prefix_checks": [
+        {
+          "last_bar": 294526,
+          "close_utc": "2024-01-01T15:55:00+00:00",
+          "all_features_equal_full_history": true
+        },
+        {
+          "last_bar": 294527,
+          "close_utc": "2024-01-01T16:00:00+00:00",
+          "all_features_equal_full_history": true
+        },
+        {
+          "last_bar": 294528,
+          "close_utc": "2024-01-01T16:05:00+00:00",
+          "all_features_equal_full_history": true
+        }
+      ],
+      "boundary_counts": {
+        "peak_bucket_closes": 28,
+        "entry_closes_4h": 40,
+        "entry_closes_1d": 3,
+        "entry_closes_1w": 0
+      }
+    },
+    "sol": {
+      "entries": 2232,
+      "eligible": 2226,
+      "filters": {
+        "15": {
+          "engine_vs_claude": {
+            "n": 2232,
+            "finite_engine": 178,
+            "finite_reference": 178,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2232,
+            "finite_engine": 178,
+            "finite_reference": 178,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2232,
+            "finite_engine": 178,
+            "finite_reference": 178,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          }
+        },
+        "16": {
+          "engine_vs_claude": {
+            "n": 2232,
+            "finite_engine": 2113,
+            "finite_reference": 2113,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2232,
+            "finite_engine": 2113,
+            "finite_reference": 2113,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2232,
+            "finite_engine": 2113,
+            "finite_reference": 2113,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          }
+        },
+        "142": {
+          "engine_vs_claude": {
+            "n": 2232,
+            "finite_engine": 2223,
+            "finite_reference": 2223,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2232,
+            "finite_engine": 2223,
+            "finite_reference": 2223,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2232,
+            "finite_engine": 2223,
+            "finite_reference": 2223,
+            "mask_mismatches": 0,
+            "value_mismatches": 6,
+            "max_abs_error": 0.01335074166478123,
+            "indices": [
+              782,
+              795,
+              862,
+              1978,
+              2034,
+              2191
+            ]
+          }
+        },
+        "178": {
+          "engine_vs_claude": {
+            "n": 2232,
+            "finite_engine": 2226,
+            "finite_reference": 2226,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2232,
+            "finite_engine": 2226,
+            "finite_reference": 2226,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2232,
+            "finite_engine": 2226,
+            "finite_reference": 2226,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          }
+        },
+        "280": {
+          "engine_vs_claude": {
+            "n": 2232,
+            "finite_engine": 2226,
+            "finite_reference": 2226,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 3.552713678800501e-15,
+            "indices": []
+          },
+          "claude_vs_saved_research": {
+            "n": 2232,
+            "finite_engine": 2226,
+            "finite_reference": 2226,
+            "mask_mismatches": 0,
+            "value_mismatches": 0,
+            "max_abs_error": 0.0,
+            "indices": []
+          },
+          "global_close_shift_vs_claude": {
+            "n": 2232,
+            "finite_engine": 2226,
+            "finite_reference": 2226,
+            "mask_mismatches": 0,
+            "value_mismatches": 44,
+            "max_abs_error": 2.2364134230124506,
+            "indices": [
+              100,
+              152,
+              153,
+              182,
+              183,
+              184,
+              226,
+              234,
+              258,
+              307,
+              308,
+              309,
+              310,
+              388,
+              409,
+              410,
+              475,
+              548,
+              549,
+              557,
+              646,
+              647,
+              761,
+              762,
+              1120,
+              1387,
+              1388,
+              1447,
+              1448,
+              1449,
+              1450,
+              1638,
+              1639,
+              1654,
+              1655,
+              1785,
+              1786,
+              1792,
+              1793,
+              1794,
+              1795,
+              1922,
+              1923,
+              2070
+            ]
+          }
+        }
+      },
+      "full_axis_feature_checks": {
+        "atr_wilder_1d": {
+          "n": 527412,
+          "finite_engine": 523380,
+          "finite_reference": 523380,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        },
+        "candle_body_atr_1d": {
+          "n": 527412,
+          "finite_engine": 523092,
+          "finite_reference": 523092,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        },
+        "candle_close_position_1d": {
+          "n": 527412,
+          "finite_engine": 527124,
+          "finite_reference": 527124,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        },
+        "candle_body_atr_1w": {
+          "n": 527412,
+          "finite_engine": 498324,
+          "finite_reference": 498324,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        },
+        "atr_wilder_4h": {
+          "n": 527412,
+          "finite_engine": 526741,
+          "finite_reference": 526741,
+          "mask_mismatches": 0,
+          "value_mismatches": 0,
+          "max_abs_error": 0.0,
+          "indices": []
+        }
+      },
+      "examples": [],
+      "causal_prefix_checks": [
+        {
+          "last_bar": 263710,
+          "close_utc": "2024-04-17T15:55:00+00:00",
+          "all_features_equal_full_history": true
+        },
+        {
+          "last_bar": 263711,
+          "close_utc": "2024-04-17T16:00:00+00:00",
+          "all_features_equal_full_history": true
+        },
+        {
+          "last_bar": 263712,
+          "close_utc": "2024-04-17T16:05:00+00:00",
+          "all_features_equal_full_history": true
+        }
+      ],
+      "boundary_counts": {
+        "peak_bucket_closes": 31,
+        "entry_closes_4h": 40,
+        "entry_closes_1d": 6,
+        "entry_closes_1w": 0
+      }
+    }
+  },
+  "sources": {
+    "/Users/mcroma/BBB_project/research_service/results/recovered_slope2/mds_recalculation/mds_btc.npz": "3a3da64fd27d2ded19d01e7f149c2cbd061e6c62201fc04c664fa6137d9fe5ae",
+    "/Users/mcroma/BBB_data/tmp/anchors_btc_20261020/work/a200/entries_a200btc.csv.gz": "202c5c290fcf04ed7117d164edb1fe6d6a60cacbdd665521a563f0d4310df29d",
+    "/Users/mcroma/BBB_data/tmp/v3e200_20261020/work/btc.pkl": "2001f3302cbdbb817c915d57c68b61442c51661b1f6afd0510c89e1a78c1133d",
+    "/Users/mcroma/BBB_project/research_service/results/recovered_slope2/mds_recalculation/mds_eth.npz": "00bbc396d8a157c0383124f45182ea7d10d413184afa8cfb1298b58fa15c51e5",
+    "/Users/mcroma/BBB_data/tmp/eth200_20261020/work/eth/entries_e200eth.csv.gz": "f14612841f556f71e9555d10396e2f51dffb7f0dba613f66ebcaf25c5c57de95",
+    "/Users/mcroma/BBB_data/tmp/v3e200_20261020/work/eth.pkl": "6be9584aabb4fbb9c2ef301f9df8b807939ea050e6336ad3b659abe25ebbcdb6",
+    "/Users/mcroma/BBB_project/research_service/results/recovered_slope2/mds_recalculation/mds_sol.npz": "7de7f55b88b5211007157fc24427d6b12b9e7b0143db9bfc4d80ee77090cdefe",
+    "/Users/mcroma/BBB_data/tmp/ema200_calib_20261020/sol/work/sol/entries_e200sol.csv.gz": "66d581084c3e4cdc0ac9226a5224f4ad8a129c45ee7c676071e1e5cebe9a9a0c",
+    "/Users/mcroma/BBB_data/tmp/ema200_calib_20261020/sol/work/sol.pkl": "ac244239cb3ccfd0c435cd829f965fce8904b6f3d8b5811f00d106032d75e5fc"
+  }
+}

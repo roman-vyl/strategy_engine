@@ -1,0 +1,4 @@
+- [x] Add explicit feature information time, parser, HTTP model, identity and labels.
+- [x] Align completed HTF against chosen information time.
+- [x] Verify prefix causality, boundary, defaults and identity.
+- [x] Compare all five reconstructed Claude filters on BTC/ETH/SOL.

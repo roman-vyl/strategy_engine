@@ -143,6 +143,14 @@ class ResolveIndicatorHistoryRequirements:
                 bars=period + lag,
                 reason=f"{feature.output_id}: finite rolling_sum(period={period}, lag={lag})",
             )
+        if kind == "rsi_ewm":
+            period = int(feature.parameters["period"])
+            return HistoryRequirement(
+                timeframe=feature.timeframe,
+                bars=1 + _wilder_convergence_bars(period, 1e-12),
+                reason=f"{feature.output_id}: zero-seeded recursive RSI; gain/loss seed "
+                "decay 1e-12, not a bound on RSI error; exact parity requires same prefix",
+            )
         if kind in _FINITE_KINDS:
             period = int(feature.parameters["period"])
             return HistoryRequirement(

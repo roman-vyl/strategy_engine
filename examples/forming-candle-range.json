@@ -1,0 +1,118 @@
+{
+  "anchor_stack": {
+    "anchor": {
+      "period": 200,
+      "source": "close",
+      "timeframe": "base"
+    },
+    "fast": {
+      "period": 100,
+      "source": "close",
+      "timeframe": "base"
+    },
+    "slow": {
+      "period": 500,
+      "source": "close",
+      "timeframe": "base"
+    }
+  },
+  "components": {
+    "blockers": [],
+    "direction": "ema_anchor_stack_trend",
+    "risk": "no_risk_filter",
+    "trigger": {
+      "component_id": "touch_anchor"
+    }
+  },
+  "contexts": {},
+  "setups": [
+    {
+      "component_id": "composite_setup",
+      "instance_id": "forming-range-example",
+      "params": {
+        "children": [
+          {
+            "child_id": "measurement",
+            "predicate": {
+              "kind": "range",
+              "operand": {
+                "forming_candle": {
+                  "episode": "trend",
+                  "timeframe": "4h",
+                  "field": "range",
+                  "atr": {
+                    "kind": "atr_wilder",
+                    "timeframe": "4h",
+                    "params": {
+                      "period": 14
+                    }
+                  }
+                }
+              },
+              "min": null,
+              "max": null,
+              "empty": "pass"
+            }
+          }
+        ],
+        "paths": [
+          {
+            "path_id": "observe",
+            "require": [
+              "measurement"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "trade_management": {
+    "exit_management": {},
+    "exit_policy": {
+      "always_on": {
+        "exits": [
+          {
+            "component_id": "atr_stop_loss",
+            "distance": {
+              "multiplier": 3.0,
+              "period": 48,
+              "timeframe": "base"
+            },
+            "exit_kind": "stop_loss",
+            "instance_id": "sl-measurement"
+          },
+          {
+            "component_id": "atr_take_profit",
+            "distance": {
+              "multiplier": 6.0,
+              "period": 48,
+              "timeframe": "base"
+            },
+            "exit_kind": "take_profit",
+            "instance_id": "tp-measurement"
+          }
+        ]
+      },
+      "profiles": {
+        "aligned": {
+          "exits": []
+        },
+        "countertrend": {
+          "exits": []
+        },
+        "neutral": {
+          "exits": []
+        }
+      }
+    }
+  },
+  "trade_sides": [
+    "long",
+    "short"
+  ],
+  "ema_stack_episode": {
+    "trend": {
+      "window_bars": 12
+    }
+  }
+}

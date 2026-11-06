@@ -73,7 +73,6 @@ def test_new_fields_parse() -> None:
         {"value": "change", "span": 3},  # span without change_over
         {"value": "change_over", "span": 0, "aggregate": "max"},
         {"value": "change_over", "span": True, "aggregate": "max"},
-        {"value": "level", "aggregate": "max"},
         {"value": "level", "aggregate": "abs_sum"},
         {"value": "change_over", "span": 3, "aggregate": "sum"},
         {"value": "change_over", "span": 3, "aggregate": "mean_per_bar"},

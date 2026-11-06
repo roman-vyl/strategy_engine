@@ -283,7 +283,6 @@ def test_segment_defaults() -> None:
         {"from": "current", "to": "peak"},
         {"from": "peak", "to": "peak"},
         {"from": "origin", "to": "next_origin"},
-        {"aggregate": "max"},
         {"aggregate": "mean"},
         {"value": "delta"},
         {"window": {"last_n": 0}},

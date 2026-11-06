@@ -1,0 +1,55 @@
+{
+  "scope": "Full-prefix indicator and composed operands, frozen research episode points; synthetic/pipeline tests cover Engine episode integration",
+  "coins": {
+    "btc": {
+      "entries": 2824,
+      "finite": 1928,
+      "missing_mismatches": [],
+      "max_error": 8.526512829121202e-14,
+      "seed_open_time_ms": 1585132500000,
+      "selected_finite": 228,
+      "directions": {
+        "long": 1144,
+        "short": 784
+      }
+    },
+    "eth": {
+      "entries": 2542,
+      "finite": 1680,
+      "missing_mismatches": [],
+      "max_error": 7.815970093361102e-14,
+      "seed_open_time_ms": 1615766400000,
+      "selected_finite": 208,
+      "directions": {
+        "long": 976,
+        "short": 704
+      }
+    },
+    "sol": {
+      "entries": 2232,
+      "finite": 1461,
+      "missing_mismatches": [],
+      "max_error": 7.105427357601002e-14,
+      "seed_open_time_ms": 1634256000000,
+      "selected_finite": 122,
+      "directions": {
+        "long": 747,
+        "short": 714
+      }
+    }
+  },
+  "hashes": {
+    "/Users/mcroma/BBB_data/tmp/anchors_btc_20261020/work/a200/entries_a200btc.csv.gz": "202c5c290fcf04ed7117d164edb1fe6d6a60cacbdd665521a563f0d4310df29d",
+    "../research_service/results/recovered_slope2/mds_recalculation/mds_btc.npz": "3a3da64fd27d2ded19d01e7f149c2cbd061e6c62201fc04c664fa6137d9fe5ae",
+    "../research_service/research/stage0_plateau_medians/studies/btc_ema200_w9-11_lb20-40_v2/inputs/feature_values.npz": "83971fb72cbc3d23be6e3b0f10a6dd4cabc7103edb942e023b1b0d1aab981ea6",
+    "../research_service/research/stage0_plateau_medians/studies/btc_ema200_w9-11_lb20-40_v2/inputs/entry_labels.npz": "fc6b27c39dc0144e59aad5a4183462d032397121803ffd9ce3f9966deab4384e",
+    "/Users/mcroma/BBB_data/tmp/eth200_20261020/work/eth/entries_e200eth.csv.gz": "f14612841f556f71e9555d10396e2f51dffb7f0dba613f66ebcaf25c5c57de95",
+    "../research_service/results/recovered_slope2/mds_recalculation/mds_eth.npz": "00bbc396d8a157c0383124f45182ea7d10d413184afa8cfb1298b58fa15c51e5",
+    "../research_service/research/stage0_plateau_medians/studies/eth_ema200_four_plateaus_v1/inputs/feature_values.npz": "db75ac27e121595aadbf1a4aa97fb91410d24553d6f7de3b373dd2b671de886b",
+    "../research_service/research/stage0_plateau_medians/studies/eth_ema200_four_plateaus_v1/inputs/entry_labels.npz": "2e6db92b7485235543a5ce7854e4dc5f056c7eb6dc1b26a8f4f2dfdc6544eff3",
+    "/Users/mcroma/BBB_data/tmp/ema200_calib_20261020/sol/work/sol/entries_e200sol.csv.gz": "66d581084c3e4cdc0ac9226a5224f4ad8a129c45ee7c676071e1e5cebe9a9a0c",
+    "../research_service/results/recovered_slope2/mds_recalculation/mds_sol.npz": "7de7f55b88b5211007157fc24427d6b12b9e7b0143db9bfc4d80ee77090cdefe",
+    "../research_service/research/stage0_plateau_medians/studies/sol_ema200_four_plateaus_v1/inputs/feature_values.npz": "f4c6fbcc753ce268100f5282e0f93d49c77a21675c18bd3669536d1dc65e22dd",
+    "../research_service/research/stage0_plateau_medians/studies/sol_ema200_four_plateaus_v1/inputs/entry_labels.npz": "6442369c7030a7e0faee7c1da0717b67cd72920c291cbf8f9728b0c979f9ef4e"
+  }
+}

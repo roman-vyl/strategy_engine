@@ -541,19 +541,19 @@ when any `x` it reads is non-finite, and its cost SHALL NOT depend on leg length
 
 ### Requirement: Ratio operand
 
-A ratio SHALL have the shape `{"ratio": {"left", "right"}}`, each side an operand of the layer, a ratio included, and not
-both constants. Its value SHALL be `left / right`, and SHALL be missing when either side is missing or non-finite or when
-`right ≤ 0`.
+A ratio SHALL have left and right operands, not both constants, and MAY include right_floor and denominator_mode. Mode SHALL be positive (default) or absolute. Positive mode SHALL preserve legacy division semantics. Absolute mode SHALL return left/right when inputs and output are finite and abs(right)>right_floor; otherwise it SHALL be missing. Unknown modes and fields SHALL be rejected.
 
 #### Scenario: Zero denominator
-
-- **WHEN** the right side is 0 on a bar
-- **THEN** the ratio SHALL be missing on that bar.
+- **WHEN** the right side is 0 with default floor and either mode
+- **THEN** the ratio SHALL be missing.
 
 #### Scenario: Ratio of two ratios
+- **WHEN** a ratio has a ratio on each side, the right side 0.04 on one bar and 0.2 on another, and right_floor 0.05 in positive mode
+- **THEN** the outer ratio SHALL be missing on the first bar and left/0.2 on the second.
 
-- **WHEN** a ratio has a ratio on each side, the right side 0.04 on one bar and 0.2 on another, and `right_floor` 0.05
-- **THEN** the outer ratio SHALL be missing on the first bar and `left / 0.2` on the second.
+#### Scenario: Signed denominator
+- **WHEN** left=2, right=-1, right_floor=.02 and denominator_mode=absolute
+- **THEN** the result SHALL be -2; with positive mode it SHALL be missing.
 
 ### Requirement: Range bounds
 
@@ -886,13 +886,19 @@ SHALL be missing when any `x[s … e]` is not finite.
 
 ### Requirement: Ratio denominator floor
 
-A ratio MAY carry `right_floor`, a finite number, default 0. The ratio SHALL be missing when the right side is not greater than
-`right_floor`. A non-finite or non-numeric `right_floor` SHALL be rejected.
+Right_floor SHALL be finite numeric, default 0. Positive mode SHALL preserve the existing check right>right_floor and legacy accepted floor values. Absolute mode SHALL require a nonnegative floor and abs(right)>right_floor. Invalid floors SHALL be rejected. Omitted mode and explicit positive SHALL have the same operand identity as the previous default.
 
 #### Scenario: Tiny positive denominator
-
-- **WHEN** `right_floor` is 1e-6 and the right side is 1e-7
+- **WHEN** right_floor is 1e-6 and the right side is 1e-7
 - **THEN** the ratio SHALL be missing.
+
+#### Scenario: Absolute floor boundary
+- **WHEN** absolute mode has right_floor=.02 and right is -.02, 0 or .02
+- **THEN** the ratio SHALL be missing in all three cases.
+
+#### Scenario: Invalid absolute floor
+- **WHEN** absolute mode has a negative floor
+- **THEN** static validation SHALL reject the spec.
 
 ### Requirement: Directional index wave ratio
 
@@ -1667,4 +1673,45 @@ Signed and only-if operands SHALL be accepted wherever a ratio is accepted. They
 
 - **WHEN** a `change` operand is a signed operand
 - **THEN** static validation SHALL reject the spec.
+
+### Requirement: Forming candle range operand
+The system SHALL accept optional field body or range in forming_candle while retaining existing required episode, timeframe and ATR validation. Omitted field and body SHALL preserve existing results and canonical identity. Unknown field values MUST be rejected. Range SHALL return the observed current HTF high minus low, divided by the preceding HTF bucket's Wilder ATR, without a long/short sign multiplier. Existing episode validity gating SHALL remain in force.
+
+#### Scenario: Side independent observed range
+- **WHEN** a valid episode has observed high 110, low 100 and previous bucket ATR 5
+- **THEN** range equals 2 on either side, including the evaluation candle's extrema.
+
+#### Scenario: Backward compatibility
+- **WHEN** an existing operand omits field or explicitly selects body
+- **THEN** its legacy signed-body values and canonical identity are unchanged.
+
+#### Scenario: Invalid selector
+- **WHEN** field is unknown or is not a string
+- **THEN** validation rejects the operand with its field path.
+
+### Requirement: Range normalization is causal and bucket stable
+The range mode MUST use only base candles from the current HTF bucket start through the evaluation candle inclusive. Its denominator SHALL remain ATR of the immediately preceding bucket even at the final base candle of the current bucket. Future candle values MUST NOT influence the result.
+
+#### Scenario: Last base candle and rollover
+- **WHEN** a 5m evaluation reaches 11:55 in the 08:00–12:00 bucket
+- **THEN** the range includes 11:55 and ATR is taken through the preceding 04:00–08:00 bucket; at 12:00 the range resets and ATR advances by one bucket.
+
+#### Scenario: Future mutation
+- **WHEN** highs and lows after the evaluation candle are changed
+- **THEN** the evaluated range remains unchanged.
+
+### Requirement: Range missing data and execution integration
+The system SHALL return missing for an invalid episode, incomplete current bucket prefix, nonfinite prefix extrema or missing/nonpositive ATR. Zero observed range with positive ATR SHALL return zero. History requirements SHALL cover complete bucket history and existing ATR warmup. Range SHALL be usable in predicates and weighted votes with distinct cache identity and explainable field selection, consistently across full and sufficiently warmed prefix execution.
+
+#### Scenario: Insufficient history
+- **WHEN** supplied base history starts in the middle of the current bucket
+- **THEN** range is missing rather than computed from partial extrema.
+
+#### Scenario: Zero range
+- **WHEN** all observed highs and lows equal 100 and preceding ATR is positive
+- **THEN** range returns zero.
+
+#### Scenario: Manifest and prefix parity
+- **WHEN** a range operand is reconstructed from a manifest and evaluated with sufficient planned history
+- **THEN** its values, missing masks and voting inputs agree with full-history execution within the existing ATR numerical policy, and evidence identifies range mode.
 

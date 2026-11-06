@@ -51,6 +51,7 @@ def test_registry_exposes_adx_and_directional_indices() -> None:
         "atr",
         "atr_distance",
         "rsi",
+        "rsi_ewm",
         "adx",
         "di_plus",
         "di_minus",

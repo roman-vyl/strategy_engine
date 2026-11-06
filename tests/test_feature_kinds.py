@@ -30,6 +30,7 @@ def test_existing_kinds_in_public_order() -> None:
         "atr",
         "atr_distance",
         "rsi",
+        "rsi_ewm",
         "adx",
         "di_plus",
         "di_minus",
@@ -44,6 +45,7 @@ def test_existing_kinds_in_public_order() -> None:
         "ema",
         "atr",
         "rsi",
+        "rsi_ewm",
         "adx",
         "di_plus",
         "di_minus",
@@ -121,9 +123,7 @@ def test_new_kind_needs_only_a_contract_entry(monkeypatch: pytest.MonkeyPatch) -
         schema={"indicator_id": "fake_band"},
         default_source="close",
         validate=_validate_fake,
-        label=lambda tf, _src, params, _deps: (
-            f"fake_band_{tf}_{params['period']}_{params['std']}"
-        ),
+        label=lambda tf, _src, params, _deps: f"fake_band_{tf}_{params['period']}_{params['std']}",
         identity_params=lambda f: {
             "period": int(f.parameters["period"]),
             "std": float(f.parameters["std"]),

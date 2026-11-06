@@ -46,6 +46,7 @@ def test_registry_exposes_atr_schema() -> None:
         "atr",
         "atr_distance",
         "rsi",
+        "rsi_ewm",
         "adx",
         "di_plus",
         "di_minus",

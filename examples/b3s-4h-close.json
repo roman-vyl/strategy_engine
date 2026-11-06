@@ -1,0 +1,31 @@
+{
+  "scale": {
+    "operand": {
+      "ratio": {
+        "left": {
+          "leg_speed": {
+            "episode": "trend",
+            "leg": "impulse"
+          }
+        },
+        "right": {
+          "at_point": {
+            "episode": "trend",
+            "point": "peak",
+            "operand": {
+              "feature": {
+                "kind": "atr_wilder",
+                "timeframe": "4h",
+                "params": {
+                  "period": 14
+                },
+                "availability": "bar_close"
+              }
+            }
+          }
+        }
+      }
+    },
+    "factor": 48
+  }
+}

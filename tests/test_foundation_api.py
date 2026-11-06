@@ -105,6 +105,7 @@ def test_catalogs_advertise_only_ported_capabilities() -> None:
             "atr",
             "atr_distance",
             "rsi",
+            "rsi_ewm",
             "adx",
             "di_plus",
             "di_minus",
