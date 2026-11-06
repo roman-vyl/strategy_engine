@@ -1,8 +1,12 @@
 # Feature information time
 
+## Why
+
 B3S reads ATR14 4h at the close of episode peak P. Existing completed HTF
 features are aligned to base candle opens, delaying the newly closed bucket
 by one base row. Other researched formulas intentionally use the older value.
+
+## What Changes
 
 Add explicit generic feature `availability: bar_open | bar_close`, default
 bar_open. At bar_close query completed HTF values at open + base duration,

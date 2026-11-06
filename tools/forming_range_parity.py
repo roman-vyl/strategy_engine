@@ -15,7 +15,7 @@ from strategy_engine.indicators.implementations.frame_ops import (
 )
 from strategy_engine.strategies.ema_pullback.forming_candle import forming_range_values
 
-P = Path("openspec/changes/forming-candle-range-v1/acceptance")
+P = Path("openspec/changes/archive/2026-11-06-forming-candle-range-v1/acceptance")
 P.mkdir(exist_ok=True)
 R = Path("/Users/mcroma/BBB_project/research_service")
 

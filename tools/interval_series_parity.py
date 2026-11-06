@@ -99,7 +99,7 @@ def main():
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("openspec/changes/interval-series-operands-v1/acceptance"),
+        default=Path("openspec/changes/archive/2026-11-06-interval-series-operands-v1/acceptance"),
     )
     args = parser.parse_args()
     r = args.research_root

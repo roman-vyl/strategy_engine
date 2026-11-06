@@ -49,7 +49,7 @@ def main():
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("openspec/changes/recursive-rsi-episode-extrema-v1/acceptance"),
+        default=Path("openspec/changes/archive/2026-11-06-recursive-rsi-episode-extrema-v1/acceptance"),
     )
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
