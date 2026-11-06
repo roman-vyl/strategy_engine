@@ -16,11 +16,11 @@ _____________________ test_live_entry_responses_unchanged ______________________
         )
 E       AssertionError: /live-entry response bytes changed for a spec without partial takes
 E       assert {'base_atr': ...2a6af9', ...}} == {'base_atr': ...6f7571', ...}}
-E         
+E
 E         Differing items:
 E         {'base_atr': {'3000': 'ccf1e7de706c1286bdb99441449666400aa38d7d867847d4f84287fc9f492440', '3555': 'd6322805e80fd43660b...d9f421520587e30a09617870183e471824b', '3999': '1d170eb24a1a8ed11c5971eb18897e17910c22de6acc64ca7c616c9b6ad21e48', ...}} != {'base_atr': {'3000': 'ccf1e7de706c1286bdb99441449666400aa38d7d867847d4f84287fc9f492440', '3555': 'd45eaed1569a8afddf8...9bd531378cad9036799da4be62ba7b1cd6a', '3999': '9a3b4124789d029d9efcc9dbf18755b2c6440aef66ad6c1cd397082b3234399c', ...}}
 E         {'constant_usd': {'3000': 'ccf1e7de706c1286bdb99441449666400aa38d7d867847d4f...
-E         
+E
 E         ...Full output truncated (2 lines hidden), use '-vv' to show
 
 /tmp/c6-head-check/tests/test_declared_invariants_live_entry.py:30: AssertionError
