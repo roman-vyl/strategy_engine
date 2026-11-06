@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from strategy_engine.domain.errors import InvalidRequestError
@@ -45,3 +46,22 @@ def rsi_rolling_mean(close: pd.Series, *, period: int) -> pd.Series:
     avg_loss = loss.rolling(window=period, min_periods=period).mean()
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
+
+
+def rsi_recursive(close: pd.Series, *, period: int) -> pd.Series:
+    """Zero-seeded alpha=1/period RSI; no reset or gap bridging."""
+    values = close.to_numpy(dtype=float)
+    out = np.full(len(values), np.nan)
+    gain = loss = 0.0
+    alpha = 1.0 / period
+    for i in range(1, len(values)):
+        if not np.isfinite(values[i - 1]) or not np.isfinite(values[i]):
+            break
+        delta = values[i] - values[i - 1]
+        if not np.isfinite(delta):
+            break
+        gain = (1 - alpha) * gain + alpha * max(delta, 0.0)
+        loss = (1 - alpha) * loss + alpha * max(-delta, 0.0)
+        if gain + loss > 0:
+            out[i] = 100 * gain / (gain + loss)
+    return pd.Series(out, index=close.index, name=close.name)

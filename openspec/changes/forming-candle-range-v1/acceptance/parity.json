@@ -1,0 +1,20 @@
+{
+  "btc": {
+    "mask_mismatches": 0,
+    "value_mismatches": 0,
+    "max_abs": 0.0,
+    "source_sha256": "3a3da64fd27d2ded19d01e7f149c2cbd061e6c62201fc04c664fa6137d9fe5ae"
+  },
+  "eth": {
+    "mask_mismatches": 0,
+    "value_mismatches": 0,
+    "max_abs": 0.0,
+    "source_sha256": "00bbc396d8a157c0383124f45182ea7d10d413184afa8cfb1298b58fa15c51e5"
+  },
+  "sol": {
+    "mask_mismatches": 0,
+    "value_mismatches": 0,
+    "max_abs": 0.0,
+    "source_sha256": "7de7f55b88b5211007157fc24427d6b12b9e7b0143db9bfc4d80ee77090cdefe"
+  }
+}

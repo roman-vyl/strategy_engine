@@ -57,6 +57,7 @@ class PlannedFeatureModel(BaseModel):
     source: StrictStr | None = None
     parameters: dict[str, Any] = Field(default_factory=dict)
     dependencies: list[StrictStr] = Field(default_factory=list)
+    availability: Literal["bar_open", "bar_close"] = "bar_open"
 
     def to_domain(self) -> PlannedFeature:
         return PlannedFeature(
@@ -66,6 +67,7 @@ class PlannedFeatureModel(BaseModel):
             source=self.source,
             parameters=self.parameters,
             dependencies=tuple(self.dependencies),
+            availability=self.availability,
         )
 
 

@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.market import MarketBar, MarketFrame, MarketStream
 from strategy_engine.domain.ranges import TimeRange
 from strategy_engine.domain.validity import Validity
@@ -23,6 +24,14 @@ class PlannedFeature:
     parameters: dict[str, Any] = field(default_factory=dict)
     dependencies: tuple[str, ...] = ()
 
+    availability: str = "bar_open"
+
+    def __post_init__(self) -> None:
+        if self.availability not in ("bar_open", "bar_close"):
+            raise InvalidRequestError("feature availability must be bar_open or bar_close")
+        if self.dependencies and self.availability != "bar_open":
+            raise InvalidRequestError("derived features inherit availability from dependencies")
+
     def canonical_payload(self) -> dict[str, Any]:
         return {
             "output_id": self.output_id,
@@ -31,6 +40,7 @@ class PlannedFeature:
             "source": self.source,
             "parameters": self.parameters,
             "dependencies": list(self.dependencies),
+            **({"availability": self.availability} if self.availability != "bar_open" else {}),
         }
 
 

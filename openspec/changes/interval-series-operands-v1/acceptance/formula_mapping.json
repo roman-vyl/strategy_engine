@@ -1,0 +1,2092 @@
+[
+  {
+    "index": 26,
+    "raw": "E100-E200|L96",
+    "operand": {
+      "difference": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 100
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "fixed",
+                      "bars": 96
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 200
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "fixed",
+                      "bars": 96
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        }
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 27,
+    "raw": "E100-E200|R24",
+    "operand": {
+      "difference": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 100
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 24
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 200
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 24
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        }
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 30,
+    "raw": "E100-E500|R12",
+    "operand": {
+      "difference": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 100
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 12
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 500
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 12
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        }
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 32,
+    "raw": "E100/E1000|R12",
+    "operand": {
+      "ratio": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 100
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 12
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 1000
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 12
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right_floor": 0.02,
+        "denominator_mode": "absolute"
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 46,
+    "raw": "E100|I48/I",
+    "operand": {
+      "ratio": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 100
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "impulse",
+                      "last_n": 48
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 100
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "impulse"
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right_floor": 0.02,
+        "denominator_mode": "absolute"
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 50,
+    "raw": "E100|R24",
+    "operand": {
+      "signed": {
+        "operand": {
+          "scale": {
+            "operand": {
+              "interval_change": {
+                "of": {
+                  "feature": {
+                    "kind": "ema",
+                    "source": "close",
+                    "params": {
+                      "period": 100
+                    }
+                  }
+                },
+                "interval": {
+                  "kind": "episode",
+                  "ref": "trend",
+                  "leg": "pullback",
+                  "last_n": 24
+                },
+                "operation": "relative_change_per_bar"
+              }
+            },
+            "factor": 10000.0
+          }
+        },
+        "center": 0
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 63,
+    "raw": "E200|L12/L96",
+    "operand": {
+      "ratio": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 200
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "fixed",
+                      "bars": 12
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 200
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "fixed",
+                      "bars": 96
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right_floor": 0.02,
+        "denominator_mode": "absolute"
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 69,
+    "raw": "E50-E200|R24",
+    "operand": {
+      "difference": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 50
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 24
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 200
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 24
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        }
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 82,
+    "raw": "E500|L12/L96",
+    "operand": {
+      "ratio": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 500
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "fixed",
+                      "bars": 12
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 500
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "fixed",
+                      "bars": 96
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right_floor": 0.02,
+        "denominator_mode": "absolute"
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 88,
+    "raw": "E50|I48/I",
+    "operand": {
+      "ratio": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 50
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "impulse",
+                      "last_n": 48
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 50
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "impulse"
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right_floor": 0.02,
+        "denominator_mode": "absolute"
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 92,
+    "raw": "E50|L24/L288",
+    "operand": {
+      "ratio": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 50
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "fixed",
+                      "bars": 24
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 50
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "fixed",
+                      "bars": 288
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right_floor": 0.02,
+        "denominator_mode": "absolute"
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 95,
+    "raw": "E50|R24/I",
+    "operand": {
+      "ratio": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 50
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 24
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 50
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "impulse"
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right_floor": 0.02,
+        "denominator_mode": "absolute"
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 103,
+    "raw": "gap200-1000|dL288",
+    "operand": {
+      "signed": {
+        "operand": {
+          "interval_change": {
+            "of": {
+              "scale": {
+                "operand": {
+                  "ratio": {
+                    "left": {
+                      "difference": {
+                        "left": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 200
+                            }
+                          }
+                        },
+                        "right": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 1000
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "right": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 1000
+                        }
+                      }
+                    }
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "interval": {
+              "kind": "fixed",
+              "bars": 288
+            },
+            "operation": "change_per_bar"
+          }
+        },
+        "center": 0
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 104,
+    "raw": "gap200-1000|dR/dI",
+    "operand": {
+      "ratio": {
+        "left": {
+          "signed": {
+            "operand": {
+              "interval_change": {
+                "of": {
+                  "scale": {
+                    "operand": {
+                      "ratio": {
+                        "left": {
+                          "difference": {
+                            "left": {
+                              "feature": {
+                                "kind": "ema",
+                                "source": "close",
+                                "params": {
+                                  "period": 200
+                                }
+                              }
+                            },
+                            "right": {
+                              "feature": {
+                                "kind": "ema",
+                                "source": "close",
+                                "params": {
+                                  "period": 1000
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 1000
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "factor": 10000.0
+                  }
+                },
+                "interval": {
+                  "kind": "episode",
+                  "ref": "trend",
+                  "leg": "pullback"
+                },
+                "operation": "change_per_bar"
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "interval_change": {
+                "of": {
+                  "scale": {
+                    "operand": {
+                      "ratio": {
+                        "left": {
+                          "difference": {
+                            "left": {
+                              "feature": {
+                                "kind": "ema",
+                                "source": "close",
+                                "params": {
+                                  "period": 200
+                                }
+                              }
+                            },
+                            "right": {
+                              "feature": {
+                                "kind": "ema",
+                                "source": "close",
+                                "params": {
+                                  "period": 1000
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 1000
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "factor": 10000.0
+                  }
+                },
+                "interval": {
+                  "kind": "episode",
+                  "ref": "trend",
+                  "leg": "impulse"
+                },
+                "operation": "change_per_bar"
+              }
+            },
+            "center": 0
+          }
+        },
+        "right_floor": 0.01,
+        "denominator_mode": "absolute"
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 111,
+    "raw": "gap50-500|dL24",
+    "operand": {
+      "signed": {
+        "operand": {
+          "interval_change": {
+            "of": {
+              "scale": {
+                "operand": {
+                  "ratio": {
+                    "left": {
+                      "difference": {
+                        "left": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 50
+                            }
+                          }
+                        },
+                        "right": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 500
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "right": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 500
+                        }
+                      }
+                    }
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "interval": {
+              "kind": "fixed",
+              "bars": 24
+            },
+            "operation": "change_per_bar"
+          }
+        },
+        "center": 0
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 300,
+    "raw": "E100-E1000|R12",
+    "operand": {
+      "difference": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 100
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 12
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 1000
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 12
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        }
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 309,
+    "raw": "E100-E200|L24",
+    "operand": {
+      "difference": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 100
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "fixed",
+                      "bars": 24
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 200
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "fixed",
+                      "bars": 24
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        }
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 314,
+    "raw": "E100-E200|R12",
+    "operand": {
+      "difference": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 100
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 12
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 200
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 12
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        }
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 368,
+    "raw": "E100/E500|R12",
+    "operand": {
+      "ratio": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 100
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 12
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 500
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 12
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right_floor": 0.02,
+        "denominator_mode": "absolute"
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 455,
+    "raw": "E100|L12",
+    "operand": {
+      "signed": {
+        "operand": {
+          "scale": {
+            "operand": {
+              "interval_change": {
+                "of": {
+                  "feature": {
+                    "kind": "ema",
+                    "source": "close",
+                    "params": {
+                      "period": 100
+                    }
+                  }
+                },
+                "interval": {
+                  "kind": "fixed",
+                  "bars": 12
+                },
+                "operation": "relative_change_per_bar"
+              }
+            },
+            "factor": 10000.0
+          }
+        },
+        "center": 0
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 459,
+    "raw": "E100|L24",
+    "operand": {
+      "signed": {
+        "operand": {
+          "scale": {
+            "operand": {
+              "interval_change": {
+                "of": {
+                  "feature": {
+                    "kind": "ema",
+                    "source": "close",
+                    "params": {
+                      "period": 100
+                    }
+                  }
+                },
+                "interval": {
+                  "kind": "fixed",
+                  "bars": 24
+                },
+                "operation": "relative_change_per_bar"
+              }
+            },
+            "factor": 10000.0
+          }
+        },
+        "center": 0
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 597,
+    "raw": "E200|R12",
+    "operand": {
+      "signed": {
+        "operand": {
+          "scale": {
+            "operand": {
+              "interval_change": {
+                "of": {
+                  "feature": {
+                    "kind": "ema",
+                    "source": "close",
+                    "params": {
+                      "period": 200
+                    }
+                  }
+                },
+                "interval": {
+                  "kind": "episode",
+                  "ref": "trend",
+                  "leg": "pullback",
+                  "last_n": 12
+                },
+                "operation": "relative_change_per_bar"
+              }
+            },
+            "factor": 10000.0
+          }
+        },
+        "center": 0
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 621,
+    "raw": "E50-E200|L24",
+    "operand": {
+      "difference": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 50
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "fixed",
+                      "bars": 24
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 200
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "fixed",
+                      "bars": 24
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        }
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 637,
+    "raw": "E50-E500|L96",
+    "operand": {
+      "difference": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 50
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "fixed",
+                      "bars": 96
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 500
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "fixed",
+                      "bars": 96
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        }
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 669,
+    "raw": "E50/E500|R12",
+    "operand": {
+      "ratio": {
+        "left": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 50
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 12
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right": {
+          "signed": {
+            "operand": {
+              "scale": {
+                "operand": {
+                  "interval_change": {
+                    "of": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 500
+                        }
+                      }
+                    },
+                    "interval": {
+                      "kind": "episode",
+                      "ref": "trend",
+                      "leg": "pullback",
+                      "last_n": 12
+                    },
+                    "operation": "relative_change_per_bar"
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "center": 0
+          }
+        },
+        "right_floor": 0.02,
+        "denominator_mode": "absolute"
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 870,
+    "raw": "gap100-200|dL24",
+    "operand": {
+      "signed": {
+        "operand": {
+          "interval_change": {
+            "of": {
+              "scale": {
+                "operand": {
+                  "ratio": {
+                    "left": {
+                      "difference": {
+                        "left": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 100
+                            }
+                          }
+                        },
+                        "right": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 200
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "right": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 200
+                        }
+                      }
+                    }
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "interval": {
+              "kind": "fixed",
+              "bars": 24
+            },
+            "operation": "change_per_bar"
+          }
+        },
+        "center": 0
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 880,
+    "raw": "gap100-200|dR12",
+    "operand": {
+      "signed": {
+        "operand": {
+          "interval_change": {
+            "of": {
+              "scale": {
+                "operand": {
+                  "ratio": {
+                    "left": {
+                      "difference": {
+                        "left": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 100
+                            }
+                          }
+                        },
+                        "right": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 200
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "right": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 200
+                        }
+                      }
+                    }
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "interval": {
+              "kind": "episode",
+              "ref": "trend",
+              "leg": "pullback",
+              "last_n": 12
+            },
+            "operation": "change_per_bar"
+          }
+        },
+        "center": 0
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 882,
+    "raw": "gap100-200|dR24",
+    "operand": {
+      "signed": {
+        "operand": {
+          "interval_change": {
+            "of": {
+              "scale": {
+                "operand": {
+                  "ratio": {
+                    "left": {
+                      "difference": {
+                        "left": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 100
+                            }
+                          }
+                        },
+                        "right": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 200
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "right": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 200
+                        }
+                      }
+                    }
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "interval": {
+              "kind": "episode",
+              "ref": "trend",
+              "leg": "pullback",
+              "last_n": 24
+            },
+            "operation": "change_per_bar"
+          }
+        },
+        "center": 0
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 998,
+    "raw": "gap50-200|dL24",
+    "operand": {
+      "signed": {
+        "operand": {
+          "interval_change": {
+            "of": {
+              "scale": {
+                "operand": {
+                  "ratio": {
+                    "left": {
+                      "difference": {
+                        "left": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 50
+                            }
+                          }
+                        },
+                        "right": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 200
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "right": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 200
+                        }
+                      }
+                    }
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "interval": {
+              "kind": "fixed",
+              "bars": 24
+            },
+            "operation": "change_per_bar"
+          }
+        },
+        "center": 0
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 1008,
+    "raw": "gap50-200|dR24",
+    "operand": {
+      "signed": {
+        "operand": {
+          "interval_change": {
+            "of": {
+              "scale": {
+                "operand": {
+                  "ratio": {
+                    "left": {
+                      "difference": {
+                        "left": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 50
+                            }
+                          }
+                        },
+                        "right": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 200
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "right": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 200
+                        }
+                      }
+                    }
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "interval": {
+              "kind": "episode",
+              "ref": "trend",
+              "leg": "pullback",
+              "last_n": 24
+            },
+            "operation": "change_per_bar"
+          }
+        },
+        "center": 0
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  },
+  {
+    "index": 1041,
+    "raw": "gap50-500|dR24",
+    "operand": {
+      "signed": {
+        "operand": {
+          "interval_change": {
+            "of": {
+              "scale": {
+                "operand": {
+                  "ratio": {
+                    "left": {
+                      "difference": {
+                        "left": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 50
+                            }
+                          }
+                        },
+                        "right": {
+                          "feature": {
+                            "kind": "ema",
+                            "source": "close",
+                            "params": {
+                              "period": 500
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "right": {
+                      "feature": {
+                        "kind": "ema",
+                        "source": "close",
+                        "params": {
+                          "period": 500
+                        }
+                      }
+                    }
+                  }
+                },
+                "factor": 10000.0
+              }
+            },
+            "interval": {
+              "kind": "episode",
+              "ref": "trend",
+              "leg": "pullback",
+              "last_n": 24
+            },
+            "operation": "change_per_bar"
+          }
+        },
+        "center": 0
+      }
+    },
+    "entry_candle_included": true,
+    "eligibility": "frozen research elig; identical entries",
+    "units": "bp/base bar for slopes; dimensionless for ratios",
+    "direction": "outer signed once per slope",
+    "reference": "corrected_features or unchanged impulse feat"
+  }
+]

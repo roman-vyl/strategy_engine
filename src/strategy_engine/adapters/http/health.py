@@ -26,6 +26,7 @@ def readiness() -> dict[str, object]:
                 "atr",
                 "atr_distance",
                 "rsi",
+                "rsi_ewm",
                 "adx",
                 "di_plus",
                 "di_minus",

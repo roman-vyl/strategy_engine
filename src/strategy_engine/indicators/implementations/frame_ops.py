@@ -62,11 +62,17 @@ def align_completed_to_base(
     *,
     timeframe: str,
     base_index: pd.Index,
+    evaluation_offset_ms: int = 0,
 ) -> pd.Series:
     completed = feature.copy()
     # A fixed duration: an anchored weekly offset would roll to its anchor day.
     completed.index = completed.index + pd.Timedelta(timeframe_duration_ms(timeframe), unit="ms")
-    return completed.reindex(base_index, method="ffill")
+    # Query by the information time, then restore row labels (base bar opens).
+    # This also works on a prefix ending at the closing bar; no next row is read.
+    query_index = base_index + pd.Timedelta(evaluation_offset_ms, unit="ms")
+    aligned = completed.reindex(query_index, method="ffill")
+    aligned.index = base_index
+    return aligned
 
 
 def serialize_value(value: float) -> str | None:

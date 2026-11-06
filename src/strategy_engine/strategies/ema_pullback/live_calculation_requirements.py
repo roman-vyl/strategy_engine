@@ -14,7 +14,7 @@ means 20 *base* bars for the blocker, not 20 * 1h.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Any
 
 from strategy_engine.domain.errors import InvalidRequestError
@@ -29,6 +29,7 @@ from strategy_engine.strategies.ema_pullback.entry_change import CHANGE_SINCE_EN
 from strategy_engine.strategies.ema_pullback.predicates import (
     AnyPredicate,
     Change,
+    Operand,
     Predicate,
     StatePredicate,
     TemporalPredicate,
@@ -69,11 +70,71 @@ _BOUNCE_HISTORY_TIERS: tuple[_BounceHistoryTier, ...] = (
 _BASE = "base"
 
 
-def _predicate_history(predicate: AnyPredicate, where: str) -> list[HistoryRequirement]:
+def _operand_history(operand: Operand, horizons: Mapping[str, int]) -> int:
+    """Additional endpoint displacement; episode horizon is supplied separately.
+
+    Only fixed intervals introduce a new displacement. Episode history remains
+    the declared horizon, including truncated intervals ending at historical P.
+    """
+    if operand.interval_change is not None:
+        interval = operand.interval_change.interval
+        return interval.bars or horizons.get(interval.ref or "", 0)
+    if operand.at_point is not None:
+        extra = _operand_history(operand.at_point.operand, horizons)
+        return extra + horizons.get(operand.at_point.episode, 0) if extra else 0
+    children: list[Operand] = []
+    for field in fields(operand):
+        value = getattr(operand, field.name)
+        if isinstance(value, Operand):
+            children.append(value)
+        elif value is not None and hasattr(value, "__dataclass_fields__"):
+            for child_field in fields(value):
+                child = getattr(value, child_field.name)
+                if isinstance(child, Operand):
+                    children.append(child)
+                elif child_field.name == "require":
+                    children.extend(item.operand for item in child)
+    return max((_operand_history(child, horizons) for child in children), default=0)
+
+
+def _forming_history(value: Any) -> list[HistoryRequirement]:
+    """Discover forming range even inside arithmetic and temporal operands."""
+    if not hasattr(value, "__dataclass_fields__"):
+        return []
+    if isinstance(value, Operand) and value.forming_candle is not None:
+        candle = value.forming_candle
+        if candle.field == "range":
+            return [
+                HistoryRequirement(
+                    timeframe=candle.timeframe,
+                    bars=1,
+                    reason="complete forming candle prefix plus ATR warm-up",
+                )
+            ]
+    out: list[HistoryRequirement] = []
+    for item in fields(value):
+        child = getattr(value, item.name)
+        if isinstance(child, (tuple, list)):
+            for element in child:
+                out.extend(_forming_history(element))
+        else:
+            out.extend(_forming_history(child))
+    return out
+
+
+def _predicate_history(
+    predicate: AnyPredicate, where: str, horizons: Mapping[str, int] | None = None
+) -> list[HistoryRequirement]:
+    return _predicate_history_base(predicate, where, horizons) + _forming_history(predicate)
+
+
+def _predicate_history_base(
+    predicate: AnyPredicate, where: str, horizons: Mapping[str, int] | None = None
+) -> list[HistoryRequirement]:
     """History policy of one composite predicate child (design D4):
-    - `compare`/`range`/`state` read only the current bar: an explicit
-      zero-additional entry (indicator and context EMA warm-up is already
-      counted from the plan by the per-feature policies);
+    - `compare`/`range` recurse through new interval operands for endpoint
+      displacement; ordinary current-bar operands and `state` add zero.
+      Indicator warm-up is counted separately by the per-feature policies;
     - `change` adds `lookback` bars of its operand's timeframe on top of the
       operand's own warm-up (OpenSpec `predicate-change-class-v1`, design D6);
     - `temporal` adds `bars - 1` base bars on top of its inner predicate; over a
@@ -94,6 +155,23 @@ def _predicate_history(predicate: AnyPredicate, where: str) -> list[HistoryRequi
                 ),
             )
         ]
+    if isinstance(predicate, Predicate):
+        extra = 0
+        for condition in (predicate.long, predicate.short):
+            if condition is None:
+                continue
+            for field in fields(condition):
+                value = getattr(condition, field.name)
+                if isinstance(value, Operand):
+                    extra = max(extra, _operand_history(value, horizons or {}))
+        if extra:
+            return [
+                HistoryRequirement(
+                    timeframe=_BASE,
+                    bars=extra,
+                    reason=f"{where} interval endpoints: {extra} base bars plus feature warm-up",
+                )
+            ]
     if isinstance(predicate, (Predicate, StatePredicate)):
         return [
             HistoryRequirement(
@@ -103,7 +181,7 @@ def _predicate_history(predicate: AnyPredicate, where: str) -> list[HistoryRequi
             )
         ]
     if isinstance(predicate, TemporalPredicate):
-        inner = _predicate_history(predicate.of, where)
+        inner = _predicate_history(predicate.of, where, horizons)
         return [
             HistoryRequirement(
                 timeframe=inner[0].timeframe,
@@ -300,11 +378,10 @@ class EmaPullbackLiveCalculationRequirements:
                                 f"setups[{index}].params.children[{child_index}].predicate",
                             ),
                             f"setups[{index}].{child.child_id}",
+                            {ref: p.history_bars for ref, p in parse_episode_section(root).items()},
                         )
                         continue
-                    out += self._semantic_setup(
-                        root, child_setup_item(composite, child), index
-                    )
+                    out += self._semantic_setup(root, child_setup_item(composite, child), index)
                 continue
             if str(setup.get("component_id", "")) == WEIGHTED_VOTE_SETUP:
                 # The vote adds no history: the max over its inputs, each
@@ -315,6 +392,7 @@ class EmaPullbackLiveCalculationRequirements:
                         out += _predicate_history(
                             parse_predicate(raw, f"setups[{index}].params.{vote_input.input_id}"),
                             f"setups[{index}].{vote_input.input_id}",
+                            {ref: p.history_bars for ref, p in parse_episode_section(root).items()},
                         )
                 continue
             out += self._semantic_setup(root, setup, index)
@@ -354,8 +432,7 @@ class EmaPullbackLiveCalculationRequirements:
                     timeframe=_BASE,
                     bars=lookback,
                     reason=(
-                        f"setups[{index}] anchor_stack_width_setup "
-                        f"width_lookback_bars={lookback}"
+                        f"setups[{index}] anchor_stack_width_setup width_lookback_bars={lookback}"
                     ),
                 )
             )
@@ -431,9 +508,7 @@ class EmaPullbackLiveCalculationRequirements:
             item = _mapping(blocker_raw, f"components.blockers[{index}]")
             component_id = str(item.get("component_id", ""))
             if component_id in _ZERO_LOOKBACK_BLOCKERS:
-                out.append(
-                    _zero(f"components.blockers[{index}] {component_id}: current-bar only")
-                )
+                out.append(_zero(f"components.blockers[{index}] {component_id}: current-bar only"))
             elif component_id == "rsi_lookback_extreme_blocker":
                 lookback = int(item.get("lookback", 20))
                 out.append(
@@ -501,9 +576,7 @@ class EmaPullbackLiveCalculationRequirements:
 
     def _all_exit_rules(self, root: Mapping[str, Any]) -> list[Mapping[str, Any]]:
         trade_management = _mapping(root.get("trade_management"), "trade_management")
-        exit_policy = _mapping(
-            trade_management.get("exit_policy"), "trade_management.exit_policy"
-        )
+        exit_policy = _mapping(trade_management.get("exit_policy"), "trade_management.exit_policy")
         rules: list[Mapping[str, Any]] = []
         always_on = _mapping(exit_policy.get("always_on"), "exit_policy.always_on")
         rules.extend(
@@ -569,7 +642,7 @@ class EmaPullbackLiveCalculationRequirements:
             condition = _mapping(phase_rule.get("condition"), f"phase_rules[{index}].condition")
             component_id = str(condition.get("component_id", ""))
             if component_id == COMPOSITE_PHASE_CONDITION:
-                out += self._composite_phase_condition(condition, index)
+                out += self._composite_phase_condition(condition, index, root)
             else:
                 out.append(self._phase_atom(component_id, f"phase_rules[{index}]"))
 
@@ -624,7 +697,7 @@ class EmaPullbackLiveCalculationRequirements:
         )
 
     def _composite_phase_condition(
-        self, condition: Mapping[str, Any], index: int
+        self, condition: Mapping[str, Any], index: int, root: Mapping[str, Any]
     ) -> list[HistoryRequirement]:
         """composite-managed-phase-condition-v1 task 4.2: the composite
         contributes its children -- predicates through `_predicate_history`,
@@ -643,6 +716,7 @@ class EmaPullbackLiveCalculationRequirements:
                         ".predicate",
                     ),
                     where,
+                    {ref: p.history_bars for ref, p in parse_episode_section(root).items()},
                 )
             else:
                 assert child.condition is not None

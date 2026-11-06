@@ -312,6 +312,16 @@ _CONTRACTS: dict[str, FeatureKindContract] = {
             dependency_role="atr",
         ),
         _period_kind("rsi", _RSI_SCHEMA, validate_rsi_feature),
+        _period_kind(
+            "rsi_ewm",
+            {
+                **_RSI_SCHEMA,
+                "indicator_id": "rsi_ewm",
+                "title": "Zero-seeded recursive RSI",
+                "compatibility_profile": "recursive_zero_seed_v1",
+            },
+            validate_rsi_feature,
+        ),
         _period_kind("adx", _ADX_SCHEMA, validate_adx_dmi_feature),
         _period_kind("di_plus", _DI_PLUS_SCHEMA, validate_adx_dmi_feature),
         _period_kind("di_minus", _DI_MINUS_SCHEMA, validate_adx_dmi_feature),
@@ -371,6 +381,8 @@ def plan_feature_request(
     timeframe: str | None,
     source: str | None,
     params: Mapping[str, Any],
+    *,
+    availability: str = "bar_open",
 ) -> PlannedFeature:
     """Normalize one standalone feature request into the `PlannedFeature`
     the canonical plan holds for it (default timeframe `base`, the kind's
@@ -381,9 +393,14 @@ def plan_feature_request(
         raise InvalidRequestError("feature kind is not requestable as an operand", kind=kind)
     resolved_timeframe = "base" if timeframe is None else timeframe
     resolved_source = contract.default_source if source is None else source
-    unlabeled = PlannedFeature("", kind, resolved_timeframe, resolved_source, dict(params))
+    unlabeled = PlannedFeature(
+        "", kind, resolved_timeframe, resolved_source, dict(params), availability=availability
+    )
     contract.validate(unlabeled)
     return replace(
         unlabeled,
-        output_id=contract.label(resolved_timeframe, resolved_source, unlabeled.parameters, ()),
+        output_id=(
+            contract.label(resolved_timeframe, resolved_source, unlabeled.parameters, ())
+            + ("__bar_close" if availability == "bar_close" else "")
+        ),
     )

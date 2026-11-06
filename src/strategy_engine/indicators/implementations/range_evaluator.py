@@ -55,6 +55,7 @@ from strategy_engine.indicators.implementations.rolling_extreme import (
     validate_rolling_sum_feature,
 )
 from strategy_engine.indicators.implementations.rsi import (
+    rsi_recursive,
     rsi_rolling_mean,
     validate_rsi_feature,
 )
@@ -213,6 +214,11 @@ def _compute_feature(
             complete=dependency_validity.complete,
             reason=dependency_validity.reason,
         )
+    elif feature.kind == "rsi_ewm":
+        validate_rsi_feature(feature)
+        values = rsi_recursive(
+            feature_frame["close"].astype(float), period=_feature_period(feature)
+        )
     elif feature.kind == "rsi":
         values = _rsi_values(feature_frame, feature)
     elif feature.kind in {"adx", "di_plus", "di_minus"}:
@@ -242,6 +248,9 @@ def _compute_feature(
             values,
             timeframe=timeframe,
             base_index=base_index,
+            evaluation_offset_ms=(
+                timeframe_duration_ms(base_timeframe) if feature.availability == "bar_close" else 0
+            ),
         )
 
     output = tuple(None if pd.isna(value) else float(value) for value in values.to_numpy())
@@ -319,6 +328,9 @@ def resolve_feature(
             "timeframe": timeframe,
             "source": feature.source,
             **contract.identity_params(feature),
+            **(
+                {"availability": feature.availability} if feature.availability != "bar_open" else {}
+            ),
         },
     )
 

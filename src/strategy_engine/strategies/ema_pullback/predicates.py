@@ -135,6 +135,8 @@ class Segment:
     top: int | None = None
     eligibility: Eligibility | None = None
     touch: str = "current"
+    include_start: bool = True
+    empty_policy: str = "missing"
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,6 +219,7 @@ class FormingCandle:
     episode: str
     timeframe: str
     atr: PlannedFeature
+    field: str = "body"
 
 
 @dataclass(frozen=True, slots=True)
@@ -266,6 +269,7 @@ class Ratio:
     left: Operand
     right: Operand
     right_floor: float = 0.0
+    denominator_mode: str = "positive"
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,6 +323,28 @@ class AtPoint:
 
 
 @dataclass(frozen=True, slots=True)
+class Scale:
+    operand: Operand
+    factor: float
+
+
+@dataclass(frozen=True, slots=True)
+class Interval:
+    kind: str
+    bars: int | None = None
+    ref: str | None = None
+    leg: str | None = None
+    last_n: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class IntervalChange:
+    of: Operand
+    interval: Interval
+    operation: str
+
+
+@dataclass(frozen=True, slots=True)
 class Operand:
     """Exactly one of a canonical feature request, an EMA stack episode
     reference, a segment aggregate, a ratio, a base-bar price field or a
@@ -346,6 +372,8 @@ class Operand:
     difference: Difference | None = None
     at_point: AtPoint | None = None
     window_change: WindowChange | None = None
+    scale: Scale | None = None
+    interval_change: IntervalChange | None = None
     signed: Signed | None = None
     only_if: OnlyIf | None = None
 
@@ -439,6 +467,10 @@ AnyPredicate = Predicate | StatePredicate | TemporalPredicate
 def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
     """Every feature request an operand reads, in evaluation order."""
 
+    if operand.scale is not None:
+        return operand_features(operand.scale.operand)
+    if operand.interval_change is not None:
+        return operand_features(operand.interval_change.of)
     if operand.feature is not None:
         return (operand.feature,)
     if operand.segment is not None:
@@ -475,6 +507,10 @@ def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
 def operand_needs_episode(operand: Operand) -> bool:
     """True iff the operand reads the EMA stack episode bundle."""
 
+    if operand.scale is not None:
+        return operand_needs_episode(operand.scale.operand)
+    if operand.interval_change is not None:
+        return operand.interval_change.interval.kind == "episode"
     if (
         operand.episode is not None
         or operand.segment is not None
@@ -541,7 +577,7 @@ def _number(value: object, path: str) -> float:
 
 def _feature(raw: object, path: str) -> PlannedFeature:
     payload = _mapping(raw, path)
-    _only_fields(payload, {"kind", "timeframe", "source", "params"}, path)
+    _only_fields(payload, {"kind", "timeframe", "source", "params", "availability"}, path)
     kind = payload.get("kind")
     if not isinstance(kind, str) or not kind:
         raise InvalidRequestError(f"{path}.kind must be a non-empty string")
@@ -555,17 +591,23 @@ def _feature(raw: object, path: str) -> PlannedFeature:
     if source is not None and not isinstance(source, str):
         raise InvalidRequestError(f"{path}.source must be a string")
     params = _mapping(payload.get("params", {}), f"{path}.params")
-    return plan_feature_request(kind, timeframe, source, params)
+    availability = payload.get("availability", "bar_open")
+    if not isinstance(availability, str):
+        raise InvalidRequestError(f"{path}.availability must be bar_open or bar_close")
+    return plan_feature_request(kind, timeframe, source, params, availability=availability)
 
 
 _OPERAND_KEYS = (
     "feature, episode, segment, candle, leg_mean, leg_sum, leg_top_mean, anchor_follow, "
     "pullback_depth, leg_speed, impulse_atr, leg_bars, forming_candle, leg_efficiency, "
-    "leg_change, abs, difference, at_point, window_change, signed, only_if, ratio, price or const"
+    "leg_change, abs, difference, at_point, window_change, interval_change, scale, "
+    "signed, only_if, ratio, price or const"
 )
 AT_POINTS = ("peak", "origin")
 WINDOW_CHANGE_FORMS = ("change", "slope")
 _SEGMENT_FIELDS = {
+    "include_start",
+    "empty_policy",
     "episode",
     "of",
     "from",
@@ -701,7 +743,7 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
         span = _positive_int(payload["span"], f"{path}.span")
     elif "span" in payload:
         raise InvalidRequestError(f"{path}.span is only allowed with change_over")
-    if aggregate in _SEGMENT_CHANGE_AGGREGATES and value == "level":
+    if aggregate in _SEGMENT_CHANGE_AGGREGATES - {"min", "max"} and value == "level":
         raise InvalidRequestError(f"{path}.{aggregate} needs value change or change_over")
     if value == "change_over" and aggregate in ("sum", "mean_per_bar"):
         raise InvalidRequestError(f"{path}.{aggregate} is not defined for change_over")
@@ -728,6 +770,16 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
     negate = payload.get("negate", False)
     if not isinstance(negate, bool):
         raise InvalidRequestError(f"{path}.negate must be a boolean")
+    include_start = payload.get("include_start", True)
+    empty_policy = payload.get("empty_policy", "missing")
+    if not isinstance(include_start, bool):
+        raise InvalidRequestError(f"{path}.include_start must be a boolean")
+    if empty_policy not in ("missing", "end"):
+        raise InvalidRequestError(f"{path}.empty_policy must be missing or end")
+    if ("include_start" in payload or "empty_policy" in payload) and not (
+        value == "level" and aggregate in ("min", "max")
+    ):
+        raise InvalidRequestError(f"{path} boundary policies require level min/max")
     eligibility = payload.get("eligibility")
     return Segment(
         ref,
@@ -742,6 +794,8 @@ def _segment(raw: object, path: str, episode_refs: frozenset[str] | None) -> Seg
         top,
         None if eligibility is None else _eligibility(eligibility, f"{path}.eligibility"),
         str(touch),
+        include_start,
+        str(empty_policy),
     )
 
 
@@ -941,7 +995,7 @@ def _impulse_atr(raw: object, path: str, episode_refs: frozenset[str] | None) ->
 
 def _forming_candle(raw: object, path: str, episode_refs: frozenset[str] | None) -> FormingCandle:
     payload = _mapping(raw, path)
-    _only_fields(payload, {"episode", "timeframe", FORMING_CANDLE_ATR_FIELD}, path)
+    _only_fields(payload, {"episode", "timeframe", FORMING_CANDLE_ATR_FIELD, "field"}, path)
     for key in ("episode", "timeframe", FORMING_CANDLE_ATR_FIELD):
         if key not in payload:
             raise InvalidRequestError(f"{path}.{key} is required")
@@ -963,12 +1017,15 @@ def _forming_candle(raw: object, path: str, episode_refs: frozenset[str] | None)
             atr_timeframe=atr.timeframe,
             timeframe=timeframe,
         )
-    return FormingCandle(ref, timeframe, atr)
+    field = payload.get("field", "body")
+    if field not in ("body", "range"):
+        raise InvalidRequestError(f"{path}.field must be body or range")
+    return FormingCandle(ref, timeframe, atr, field)
 
 
 def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio:
     payload = _mapping(raw, path)
-    _only_fields(payload, {"left", "right", "right_floor"}, path)
+    _only_fields(payload, {"left", "right", "right_floor", "denominator_mode"}, path)
     floor = 0.0
     if "right_floor" in payload:
         floor = _number(payload["right_floor"], f"{path}.right_floor")
@@ -976,7 +1033,12 @@ def _ratio(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ratio
     right = _operand(payload.get("right"), f"{path}.right", episode_refs)
     if left.const is not None and right.const is not None:
         raise InvalidRequestError(f"{path} must have at least one non-constant side")
-    return Ratio(left, right, floor)
+    mode = payload.get("denominator_mode", "positive")
+    if mode not in ("positive", "absolute"):
+        raise InvalidRequestError(f"{path}.denominator_mode must be positive or absolute")
+    if mode == "absolute" and floor < 0:
+        raise InvalidRequestError(f"{path}.right_floor must be nonnegative in absolute mode")
+    return Ratio(left, right, floor, mode)
 
 
 def _difference(raw: object, path: str, episode_refs: frozenset[str] | None) -> Difference:
@@ -1078,11 +1140,98 @@ def _only_if(raw: object, path: str, episode_refs: frozenset[str] | None) -> Onl
     return OnlyIf(inner, tuple(require))
 
 
+def _sampled_operand(raw: object, path: str, refs: frozenset[str] | None) -> Operand:
+    payload = _mapping(raw, path)
+    if len(payload) != 1:
+        raise InvalidRequestError(f"{path} must carry one sampled-series operation")
+    ((key, value),) = payload.items()
+    if key not in {"feature", "price", "const", "difference", "ratio", "abs", "scale"}:
+        raise InvalidRequestError(f"{path} is not a sampled-series operation", operation=key)
+    # Parse arithmetic recursively here so forbidden leaves cannot hide in wrappers.
+    if key == "abs":
+        return Operand(absolute=_sampled_operand(value, f"{path}.abs", refs))
+    if key in {"difference", "ratio", "scale"}:
+        data = _mapping(value, f"{path}.{key}")
+        if key == "scale":
+            _only_fields(data, {"operand", "factor"}, path)
+            child = _sampled_operand(data.get("operand"), f"{path}.operand", refs)
+            if not _has_series_leaf(child):
+                raise InvalidRequestError(f"{path}.operand must contain a nonconstant series")
+            return Operand(scale=Scale(child, _number(data.get("factor"), f"{path}.factor")))
+        _only_fields(
+            data,
+            {"left", "right"} | ({"right_floor", "denominator_mode"} if key == "ratio" else set()),
+            path,
+        )
+        left = _sampled_operand(data.get("left"), f"{path}.left", refs)
+        right = _sampled_operand(data.get("right"), f"{path}.right", refs)
+        if key == "difference":
+            return Operand(difference=Difference(left, right))
+        floor = _number(data.get("right_floor", 0), f"{path}.right_floor")
+        mode = data.get("denominator_mode", "positive")
+        if mode not in ("positive", "absolute") or (mode == "absolute" and floor < 0):
+            raise InvalidRequestError(f"{path} has invalid denominator mode or floor")
+        return Operand(ratio=Ratio(left, right, floor, mode))
+    result = _operand(raw, path, refs)
+    if result.feature is not None and result.feature.timeframe != "base":
+        raise InvalidRequestError(f"{path} must use base-timeframe features")
+    return result
+
+
+def _has_series_leaf(operand: Operand) -> bool:
+    if operand.feature is not None or operand.price is not None:
+        return True
+    if operand.absolute is not None:
+        return _has_series_leaf(operand.absolute)
+    if operand.scale is not None:
+        return _has_series_leaf(operand.scale.operand)
+    pair = operand.ratio or operand.difference
+    return pair is not None and (_has_series_leaf(pair.left) or _has_series_leaf(pair.right))
+
+
+def _interval_change(raw: object, path: str, refs: frozenset[str] | None) -> IntervalChange:
+    payload = _mapping(raw, path)
+    _only_fields(payload, {"of", "interval", "operation"}, path)
+    series = _sampled_operand(payload.get("of"), f"{path}.of", refs)
+    if not _has_series_leaf(series):
+        raise InvalidRequestError(f"{path}.of must contain a nonconstant series")
+    data = _mapping(payload.get("interval"), f"{path}.interval")
+    if data.get("kind") == "fixed":
+        _only_fields(data, {"kind", "bars"}, path)
+        interval = Interval("fixed", bars=_positive_int(data.get("bars"), f"{path}.bars"))
+    elif data.get("kind") == "episode":
+        _only_fields(data, {"kind", "ref", "leg", "last_n"}, path)
+        ref, leg = data.get("ref"), data.get("leg")
+        if not isinstance(ref, str) or not ref or (refs is not None and ref not in refs):
+            raise InvalidRequestError(f"{path}.ref must name a declared episode")
+        if leg not in ("impulse", "pullback"):
+            raise InvalidRequestError(f"{path}.leg must be impulse or pullback")
+        last_n = _positive_int(data["last_n"], f"{path}.last_n") if "last_n" in data else None
+        interval = Interval("episode", ref=ref, leg=leg, last_n=last_n)
+    else:
+        raise InvalidRequestError(f"{path}.interval.kind must be fixed or episode")
+    op = payload.get("operation")
+    if op not in ("change", "change_per_bar", "relative_change", "relative_change_per_bar"):
+        raise InvalidRequestError(f"{path}.operation is invalid")
+    return IntervalChange(series, interval, op)
+
+
 def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Operand:
     payload = _mapping(raw, path)
     if len(payload) != 1:
         raise InvalidRequestError(f"{path} must carry exactly one of {_OPERAND_KEYS}")
     ((key, value),) = payload.items()
+    if key == "interval_change":
+        return Operand(
+            interval_change=_interval_change(value, f"{path}.interval_change", episode_refs)
+        )
+    if key == "scale":
+        data = _mapping(value, f"{path}.scale")
+        _only_fields(data, {"operand", "factor"}, path)
+        inner = _operand(data.get("operand"), f"{path}.operand", episode_refs)
+        if inner.const is not None:
+            raise InvalidRequestError(f"{path}.operand must not be a constant")
+        return Operand(scale=Scale(inner, _number(data.get("factor"), f"{path}.factor")))
     if key == "feature":
         return Operand(feature=_feature(value, f"{path}.feature"))
     if key == "episode":
@@ -1386,6 +1535,14 @@ def _values(
             ),
         )
     node = identity.operand_ids.get(path) if identity is not None else None
+    if operand.scale is not None or operand.interval_change is not None:
+        return compute_through(
+            context,
+            node,
+            functools.partial(
+                _interval_or_scale_operand, operand, frame, context, identity, side, bundle, path
+            ),
+        )
     if operand.segment is not None:
         return compute_through(
             context,
@@ -1800,6 +1957,10 @@ def _forming_candle_operand(
         close=market.array("close"),
         timeframe_ms=timeframe_ms,
         atr=_feature_array(forming_candle.atr, frame, context, identity),
+        field=forming_candle.field,
+        high=market.array("high") if forming_candle.field == "range" else None,
+        low=market.array("low") if forming_candle.field == "range" else None,
+        base_ms=base_ms,
     )
 
 
@@ -1836,9 +1997,13 @@ def _ratio_operand(
     right = np.broadcast_to(
         _values(ratio.right, frame, context, identity, side, bundle, f"{path}.right"), (length,)
     )
-    valid = np.isfinite(left) & np.isfinite(right) & (right > ratio.right_floor)
+    denominator = np.abs(right) if ratio.denominator_mode == "absolute" else right
+    valid = np.isfinite(left) & np.isfinite(right) & (denominator > ratio.right_floor)
     out = np.full(length, math.nan)
-    np.divide(left, right, out=out, where=valid)
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        np.divide(left, right, out=out, where=valid)
+    if ratio.denominator_mode == "absolute":
+        out[~np.isfinite(out)] = math.nan
     out.flags.writeable = False
     return out
 
@@ -1978,6 +2143,71 @@ def _only_if_operand(
     return out
 
 
+def interval_change_values(
+    series: np.ndarray, interval: Interval, operation: str, episode: SideEpisode | None = None
+) -> np.ndarray:
+    """Endpoint-inclusive O(history) measurement; no implicit direction or units."""
+    size = len(series)
+    t = np.arange(size, dtype=np.int64)
+    if interval.kind == "fixed":
+        assert interval.bars is not None
+        start, end = t - interval.bars, t
+        valid = start >= 0
+    else:
+        if episode is None:
+            raise InvalidRequestError("interval_change requires an evaluated episode")
+        valid, origin, peak = touch_points(episode, size)
+        start, end = (origin, peak) if interval.leg == "impulse" else (peak, t)
+        # Reject missing acquired history before any last_n truncation.
+        valid = valid & (origin >= 0) & (peak >= 0)
+        if interval.last_n is not None:
+            start = np.maximum(start, end - interval.last_n)
+    valid = valid & (start >= 0) & (end < size) & (end <= t) & (start < end)
+    out = np.full(size, math.nan)
+    indices = np.flatnonzero(valid)
+    u, v = series[start[indices]], series[end[indices]]
+    with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+        measured = v - u
+        if operation.startswith("relative_"):
+            measured = np.where(u != 0, measured / u, math.nan)
+        if operation.endswith("_per_bar"):
+            measured = measured / (end[indices] - start[indices])
+    out[indices] = np.where(
+        np.isfinite(u) & np.isfinite(v) & np.isfinite(measured), measured, math.nan
+    )
+    out.flags.writeable = False
+    return out
+
+
+def _interval_or_scale_operand(
+    operand: Operand,
+    frame: FeatureFrameLike,
+    context: EvaluationContext | None,
+    identity: PredicateIdentity | None,
+    side: str,
+    bundle: ContextBundle | None,
+    path: str,
+) -> np.ndarray:
+    if operand.scale is not None:
+        scale = operand.scale
+        values = _values(scale.operand, frame, context, identity, side, bundle, f"{path}.operand")
+        with np.errstate(invalid="ignore", over="ignore"):
+            out = np.asarray(np.broadcast_to(values, (len(frame.time_ms),)) * scale.factor).copy()
+        out[~np.isfinite(out)] = math.nan
+        out.flags.writeable = False
+        return out
+    change = operand.interval_change
+    assert change is not None
+    values = np.asarray(_values(change.of, frame, context, identity, side, bundle, f"{path}.of"))
+    episode = None
+    if change.interval.kind == "episode":
+        if bundle is None or bundle.episodes is None:
+            raise InvalidRequestError("interval_change requires an evaluated episode")
+        assert change.interval.ref is not None
+        episode = bundle.episodes.side(change.interval.ref, side)
+    return interval_change_values(values, change.interval, change.operation, episode)
+
+
 def _window_change_operand(
     window_change: WindowChange,
     frame: FeatureFrameLike,
@@ -2073,6 +2303,15 @@ def segment_values(episode: SideEpisode, series: np.ndarray, segment: Segment) -
         ok &= end <= np.arange(size)  # nothing after the evaluated bar is read
     a = np.where(ok, begin, 0).astype(np.int64)
     e = np.where(ok, end, 0).astype(np.int64)
+    if not segment.include_start:
+        excluded = a + 1
+        if segment.empty_policy == "end":
+            excluded = np.where(a == e, e, excluded)
+        a = excluded
+        ok &= a <= e
+    ok &= (a >= 0) & (e < size)
+    a = np.where(ok, a, 0)
+    e = np.where(ok, e, 0)
     s = a if segment.last_n is None else np.maximum(a, e - segment.last_n + 1)
 
     finite = np.isfinite(series)
@@ -2081,7 +2320,13 @@ def segment_values(episode: SideEpisode, series: np.ndarray, segment: Segment) -
     clean = np.where(finite, series, 0.0)
     if segment.eligibility is not None:
         ok &= _eligible(segment.eligibility, points, valid, clean, bad)
-    if segment.value == "from_start":
+    if segment.value == "level" and segment.aggregate in ("min", "max"):
+        ok &= (bad[e + 1] - bad[s]) == 0
+        result = np.full(size, np.nan)
+        rows = np.flatnonzero(ok)
+        if len(rows):
+            result[rows] = window_extreme(clean, s[rows], e[rows], segment.aggregate == "max")
+    elif segment.value == "from_start":
         result = _from_start_aggregate(segment, clean, bad, s, e, ok)
     elif segment.aggregate in _SEGMENT_CHANGE_AGGREGATES:
         result = _change_aggregate(segment, clean, bad, s, e, ok)
@@ -2306,7 +2551,9 @@ def range_operand_values(
 
 def _has_value(operand: Operand) -> bool:
     return (
-        operand.segment is not None
+        operand.scale is not None
+        or operand.interval_change is not None
+        or operand.segment is not None
         or operand.ratio is not None
         or operand.candle is not None
         or operand.leg_mean is not None
@@ -2531,6 +2778,10 @@ def episode_operand_node(episode: NodeSpec, operand: EpisodeRef) -> NodeSpec:
 
 
 def _operand_param(operand: Operand) -> tuple[object, ...]:
+    if operand.scale is not None:
+        return ("scale",)
+    if operand.interval_change is not None:
+        return ("interval_change",)
     if operand.const is not None:
         return ("const", operand.const)
     if operand.price is not None:
@@ -2735,6 +2986,10 @@ def _resolve_operand(
             "aggregate": segment.aggregate,
             "negate": segment.negate,
         }
+        if not segment.include_start:
+            segment_params["include_start"] = False
+        if segment.empty_policy != "missing":
+            segment_params["empty_policy"] = segment.empty_policy
         if segment.span is not None:
             segment_params["span"] = segment.span
         if segment.touch != "current":
@@ -2895,7 +3150,10 @@ def _resolve_operand(
         node = node_spec(
             "predicate.forming_candle",
             version=PREDICATE_NODE_VERSION,
-            params={"timeframe": forming_candle.timeframe},
+            params={
+                "timeframe": forming_candle.timeframe,
+                **({"field": "range"} if forming_candle.field == "range" else {}),
+            },
             upstream={"episode": episode, FORMING_CANDLE_ATR_FIELD: column},
             side=side,
         )
@@ -2966,6 +3224,50 @@ def _resolve_operand(
         )
         operand_ids[path] = node
         return node, [node]
+    if operand.scale is not None or operand.interval_change is not None:
+        scale, change = operand.scale, operand.interval_change
+        if scale is not None:
+            child, role, kind = scale.operand, "operand", "scale"
+            params: dict[str, object] = {"factor": scale.factor}
+        else:
+            assert change is not None
+            child, role, kind = change.of, "of", "interval_change"
+            interval = change.interval
+            params = {
+                "operation": change.operation,
+                "kind": interval.kind,
+                "bars": interval.bars,
+                "ref": interval.ref,
+                "leg": interval.leg,
+                "last_n": interval.last_n,
+            }
+        inner_node, inner_consumed = _resolve_operand(
+            child,
+            f"{path}.{role}",
+            feature_ids,
+            side,
+            contexts,
+            column_ids,
+            episode_ids,
+            operand_ids,
+        )
+        new_upstream = {} if inner_node is None else {role: inner_node}
+        params[role] = _operand_param(child)
+        if change is not None and change.interval.kind == "episode":
+            assert change.interval.ref is not None
+            episode_node = (contexts or {}).get(episode_identity_key(change.interval.ref, side))
+            if episode_node is None:
+                raise InvalidRequestError("interval_change episode is not declared")
+            new_upstream["episode"] = episode_node
+        node = node_spec(
+            "predicate." + kind,
+            version=PREDICATE_NODE_VERSION,
+            params=params,
+            upstream=new_upstream,
+            side=side if operand_needs_episode(operand) else None,
+        )
+        operand_ids[path] = node
+        return node, [node, *inner_consumed]
     if operand.ratio is not None:
         ratio = operand.ratio
         upstream = {}
@@ -2990,6 +3292,8 @@ def _resolve_operand(
         }
         if ratio.right_floor:
             ratio_params["right_floor"] = ratio.right_floor
+        if ratio.denominator_mode != "positive":
+            ratio_params["denominator_mode"] = ratio.denominator_mode
         node = node_spec(
             "predicate.ratio",
             version=PREDICATE_NODE_VERSION,

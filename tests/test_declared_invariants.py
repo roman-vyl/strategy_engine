@@ -42,4 +42,8 @@ def test_case_invariants_unchanged(name: str) -> None:
 
 def test_indicator_contract_unchanged() -> None:
     actual = json.loads(json.dumps(indicator_contract_invariants(), sort_keys=True))
+    # The new feature is additive; all legacy schemas and values remain frozen.
+    added = actual["schemas"].pop("rsi_ewm")
+    assert added["compatibility_profile"] == "recursive_zero_seed_v1"
+    actual["definitions"] = [d for d in actual["definitions"] if d["indicator_id"] != "rsi_ewm"]
     assert actual == _BASELINE["indicator_contract"]

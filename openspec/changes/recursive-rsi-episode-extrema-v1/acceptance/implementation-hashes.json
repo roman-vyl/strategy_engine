@@ -1,0 +1,10 @@
+{
+  "src/strategy_engine/indicators/implementations/rsi.py": "b9370d4a3c6374820bb4282a6563bed6d9878912172e27cccefaf5b4f0f0df8f",
+  "src/strategy_engine/indicators/implementations/range_evaluator.py": "b6b4b9069858e7db898906742f158b0096da9861c23721418ea1c41c98e1d712",
+  "src/strategy_engine/indicators/feature_kinds.py": "93826ef05579dbdcd783e4ecf0828ccf14bb8a96a89f64860bd35e87cacf62ce",
+  "src/strategy_engine/strategies/ema_pullback/predicates.py": "952f36345e529b6ab58d0a5be152f861b7d25d740f133afe5c18e61d7aadf441",
+  "src/strategy_engine/strategies/live_calculation/indicator_requirements.py": "2f76934bbdd6f6534307954ca294c38a8d702117b8313a8d56ed42fd35f88699",
+  "tools/c6_parity.py": "f452a6fd50bb04877245caafff5fd5589fd8f6e13b72d9ae8aa9007659b4d1a1",
+  "examples/c6-original.json": "e3ff10bb8c387f018dcb3064d7437a02e3aac9f1d4fc610c7958e1d8befe76d0",
+  "/Users/mcroma/BBB_data/tmp/v3e200_20261020/code/altvals.py": "df1985c810ec7be0b21d234c928d32fc3e44339ea3009bd7cbad991f3a1eff9f"
+}

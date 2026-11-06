@@ -26,10 +26,21 @@ def forming_candle_values(
     close: np.ndarray,
     timeframe_ms: int,
     atr: np.ndarray,
+    field: str = "body",
+    high: np.ndarray | None = None,
+    low: np.ndarray | None = None,
+    base_ms: int | None = None,
 ) -> np.ndarray:
     """The value on every bar as a read-only float64 array; missing without a
     valid wave, a finite price or a positive ATR. Nothing after `t` is read."""
 
+    if field == "range":
+        if high is None or low is None or base_ms is None:
+            raise ValueError("range requires high, low and base_ms")
+        result = forming_range_values(time_ms, high, low, atr, timeframe_ms, base_ms)
+        result = np.where(touch_points(episode, len(time_ms))[0], result, np.nan)
+        result.flags.writeable = False
+        return result
     size = len(time_ms)
     out = np.full(size, math.nan)
     if size:
@@ -43,5 +54,39 @@ def forming_candle_values(
             usable = valid & np.isfinite(atr) & (atr > 0)
         rows = np.flatnonzero(usable)
         out[rows] = g * (close[rows] - open_[first_bar[rows]]) / atr[rows]
+    out.flags.writeable = False
+    return out
+
+
+def forming_range_values(
+    time_ms: np.ndarray,
+    high: np.ndarray,
+    low: np.ndarray,
+    atr: np.ndarray,
+    timeframe_ms: int,
+    base_ms: int,
+) -> np.ndarray:
+    """Observed range / prior bucket ATR aligned at base OPEN, never close.
+
+    Freeze the aligned ATR at bucket start. Invalid/gapped prefixes remain
+    missing until the next complete bucket.
+    """
+    out = np.full(len(time_ms), np.nan)
+    previous_bucket = -1
+    valid = False
+    hi = lo = denominator = math.nan
+    for i, stamp in enumerate(time_ms):
+        bucket = int(stamp) // timeframe_ms
+        if bucket != previous_bucket:
+            valid = int(stamp) % timeframe_ms == 0
+            hi, lo, denominator = -math.inf, math.inf, float(atr[i])
+        elif i and stamp - time_ms[i - 1] != base_ms:
+            valid = False
+        previous_bucket = bucket
+        valid = valid and math.isfinite(high[i]) and math.isfinite(low[i])
+        if valid:
+            hi, lo = max(hi, high[i]), min(lo, low[i])
+            if math.isfinite(denominator) and denominator > 0:
+                out[i] = (hi - lo) / denominator
     out.flags.writeable = False
     return out
