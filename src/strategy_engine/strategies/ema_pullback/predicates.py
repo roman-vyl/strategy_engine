@@ -376,6 +376,7 @@ class Operand:
     interval_change: IntervalChange | None = None
     signed: Signed | None = None
     only_if: OnlyIf | None = None
+    legacy_sp109: tuple[str, str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -507,6 +508,8 @@ def operand_features(operand: Operand) -> tuple[PlannedFeature, ...]:
 def operand_needs_episode(operand: Operand) -> bool:
     """True iff the operand reads the EMA stack episode bundle."""
 
+    if operand.legacy_sp109 is not None:
+        return True
     if operand.scale is not None:
         return operand_needs_episode(operand.scale.operand)
     if operand.interval_change is not None:
@@ -1221,6 +1224,25 @@ def _operand(raw: object, path: str, episode_refs: frozenset[str] | None) -> Ope
     if len(payload) != 1:
         raise InvalidRequestError(f"{path} must carry exactly one of {_OPERAND_KEYS}")
     ((key, value),) = payload.items()
+    if key == "legacy_sp109_feature":
+        from .legacy_sp109 import METRICS
+
+        data = _mapping(value, path)
+        _only_fields(data, {"episode", "metric", "timing", "eligibility"}, path)
+        ref = data.get("episode")
+        if (
+            not isinstance(ref, str)
+            or not ref
+            or (episode_refs is not None and ref not in episode_refs)
+        ):
+            raise InvalidRequestError("legacy SP109 needs a declared episode")
+        if (
+            data.get("metric") not in METRICS
+            or data.get("timing") != "archive_entry_minus_one"
+            or data.get("eligibility") != "original_w24"
+        ):
+            raise InvalidRequestError("invalid frozen SP109 contract")
+        return Operand(legacy_sp109=(ref, str(data["metric"])))
     if key == "interval_change":
         return Operand(
             interval_change=_interval_change(value, f"{path}.interval_change", episode_refs)
@@ -1533,6 +1555,28 @@ def _values(
             functools.partial(
                 episode_operand_values, episodes.side(operand.episode.ref, side), operand.episode
             ),
+        )
+    if operand.legacy_sp109 is not None:
+        from .legacy_sp109 import runtime_features
+
+        ref, metric = operand.legacy_sp109
+        if bundle is None or bundle.episodes is None:
+            raise InvalidRequestError("legacy SP109 requires evaluated episode")
+        arrays = frame_market_arrays(frame)
+        archive_node = identity.operand_ids.get(path + ".archive") if identity else None
+        values = compute_through(
+            context,
+            archive_node,
+            functools.partial(
+                runtime_features,
+                bundle.episodes.side(ref, side),
+                arrays.array("close"),
+                arrays.array("high"),
+                arrays.array("low"),
+            ),
+        )
+        return compute_through(
+            context, identity.operand_ids.get(path) if identity else None, lambda: values[metric]
         )
     node = identity.operand_ids.get(path) if identity is not None else None
     if operand.scale is not None or operand.interval_change is not None:
@@ -2551,7 +2595,8 @@ def range_operand_values(
 
 def _has_value(operand: Operand) -> bool:
     return (
-        operand.scale is not None
+        operand.legacy_sp109 is not None
+        or operand.scale is not None
         or operand.interval_change is not None
         or operand.segment is not None
         or operand.ratio is not None
@@ -2778,6 +2823,8 @@ def episode_operand_node(episode: NodeSpec, operand: EpisodeRef) -> NodeSpec:
 
 
 def _operand_param(operand: Operand) -> tuple[object, ...]:
+    if operand.legacy_sp109 is not None:
+        return ("legacy_sp109", *operand.legacy_sp109)
     if operand.scale is not None:
         return ("scale",)
     if operand.interval_change is not None:
@@ -2948,6 +2995,28 @@ def _resolve_operand(
     upstream of its parent (None for a price or a constant) and the nodes its
     evaluation consumes, in order, the operand's own node first."""
 
+    if operand.legacy_sp109 is not None:
+        ref, metric = operand.legacy_sp109
+        episode = (contexts or {}).get(episode_identity_key(ref, side))
+        if episode is None:
+            raise InvalidRequestError("legacy SP109 episode is not declared")
+        archive = node_spec(
+            "predicate.legacy_sp109_archive",
+            version=1,
+            params={"timing": "entry_minus_one"},
+            upstream={"episode": episode},
+            side=side,
+        )
+        node = node_spec(
+            "predicate.legacy_sp109_feature",
+            version=1,
+            params={"metric": metric},
+            upstream={"archive": archive},
+            side=side,
+        )
+        operand_ids[path + ".archive"] = archive
+        operand_ids[path] = node
+        return node, [archive, node]
     if operand.episode is not None:
         episode = (contexts or {}).get(episode_identity_key(operand.episode.ref, side))
         if episode is None:
