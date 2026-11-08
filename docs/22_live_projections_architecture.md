@@ -36,6 +36,23 @@ Runtime does not send candles, indicator values, cached features, warmup ranges,
 
 The v1 architecture does not yet optimize FeaturePlan separately for entry-only or exit-only requirements. Both projections may use the existing full strategy feature requirements while the projection adapters restrict which strategy behavior is consumed. Feature-plan specialization is a later optimization, not a prerequisite for the live boundary.
 
+### Request-scoped SP109 reuse invariants
+
+- LiveEntry and OpenTrade must use a `NativeFeatureFrame` and one shared
+  `EvaluationContext` within each HTTP request. The context must cover all
+  SP109 consumers in that request, including OpenTrade managed predicates.
+- For the same market data, episode, and side, all SP109 predicates must use
+  one shared archive node: one SP109 calculation produces all 109 results
+  for those consumers. Recomputing the full set for each predicate is not
+  permitted.
+- SP109 results must not be cached between HTTP requests. Reuse is limited
+  to the current request's evaluation context.
+
+One calculation does not guarantee a safe peak RSS: SP109 still retains
+109 full-length result arrays per archive. Request-scoped reuse removes
+repeated calculations but does not establish that the production memory
+budget is sufficient.
+
 ## 3. Live Projections package boundary
 
 Each strategy family owns a dedicated `Live Projections` package or equivalent physical boundary.
