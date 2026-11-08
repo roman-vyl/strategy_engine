@@ -19,7 +19,7 @@ from strategy_engine.strategies.contracts import (
 )
 from strategy_engine.strategies.ema_pullback.evaluation import (
     EmaPullbackEvaluation,
-    evaluate_ema_pullback_frame,
+    evaluate_live_ema_pullback_frame,
 )
 from strategy_engine.strategies.ema_pullback.exits import PartialTakeRule
 from strategy_engine.strategies.ema_pullback.live_projections.contracts import (
@@ -214,8 +214,8 @@ class EmaPullbackLiveEntryProjectionAdapter:
         request: LiveEntryProjectionRequest,
         bundle: LiveFeatureFrameBundle,
     ) -> EmaPullbackLiveEntryProjection:
-        evaluation = evaluate_ema_pullback_frame(
-            request.strategy, bundle.frame, bundle.planned_features
+        evaluation = evaluate_live_ema_pullback_frame(
+            request.strategy, bundle.frame, bundle.planned_features, bundle.evaluation_context
         )
         if self._live_entry_mode == "touch_trigger":
             return EmaPullbackLiveEntryProjection(

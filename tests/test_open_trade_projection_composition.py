@@ -206,6 +206,7 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
         return SimpleNamespace(
             frame=frame,
             planned_features=object(),
+            evaluation_context=None,
             target_index=2,
             market_data_hash="market-hash",
         )
@@ -228,7 +229,9 @@ def test_application_result_is_desired_state_without_execution_fields(monkeypatc
         desired_stop_price=100.0,
         desired_take_price=None,
     )
-    monkeypatch.setattr(adapter_module, "evaluate_ema_pullback_frame", lambda *_args: evaluation)
+    monkeypatch.setattr(
+        adapter_module, "evaluate_live_ema_pullback_frame", lambda *_args: evaluation
+    )
     monkeypatch.setattr(
         adapter_module,
         "evaluate_start_after_entry_managed_projection",

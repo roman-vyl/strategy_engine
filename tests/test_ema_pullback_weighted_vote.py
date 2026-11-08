@@ -815,3 +815,46 @@ def test_live_entry_equals_the_historical_decision_on_the_same_bar() -> None:
     with _slice_services() as services, TestClient(create_app(services=services)) as client:
         for index in targets:
             assert _live_side(client, voted, index) == voted_entries.get(index), index
+
+
+def test_live_sp109_archive_is_computed_once_per_side(monkeypatch: pytest.MonkeyPatch) -> None:
+    from strategy_engine.strategies.ema_pullback import legacy_sp109
+
+    calls: list[str] = []
+    original = legacy_sp109.runtime_features
+
+    def counted(episode: Any, *arrays: Any) -> Any:
+        calls.append(episode.side)
+        return original(episode, *arrays)
+
+    monkeypatch.setattr(legacy_sp109, "runtime_features", counted)
+    spec = _spec(
+        _vote(
+            0.5,
+            *[
+                _voter(
+                    str(i),
+                    _operand_input(
+                        f"metric_{i}",
+                        {
+                            "legacy_sp109_feature": {
+                                "episode": "trend",
+                                "metric": metric,
+                                "timing": "archive_entry_minus_one",
+                                "eligibility": "original_w24",
+                            }
+                        },
+                        "at_most",
+                        _ladder((1, 0.1)),
+                    ),
+                )
+                for i, metric in enumerate(legacy_sp109.METRICS)
+            ],
+        )
+    )
+    with _slice_services() as services, TestClient(create_app(services=services)) as client:
+        _live_side(client, spec, 4099)
+        assert sorted(calls) == ["long", "short"]
+        calls.clear()
+        _live_side(client, spec, 4099)
+        assert sorted(calls) == ["long", "short"]  # no cache across requests

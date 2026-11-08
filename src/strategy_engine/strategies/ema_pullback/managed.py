@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from strategy_engine.domain.errors import InvalidRequestError
 from strategy_engine.domain.values import normalized_decimal_text
-from strategy_engine.indicators.contracts import FeatureFrame, FeatureFrameLike
+from strategy_engine.indicators.contracts import FeatureFrameLike
 from strategy_engine.strategies.ema_pullback.feature_plan import EmaPullbackFeaturePlan
 from strategy_engine.strategies.ema_pullback.raw_spec_identity import (
     InitialRStopFormula,
@@ -314,7 +314,7 @@ def _atr_output_id(plan: EmaPullbackFeaturePlan, timeframe: str, period: int) ->
 
 
 def _feature_value(
-    cache: SeriesCache, frame: FeatureFrame, output_id: str | None, index: int
+    cache: SeriesCache, frame: FeatureFrameLike, output_id: str | None, index: int
 ) -> float | None:
     if output_id is None:
         return None
@@ -347,7 +347,7 @@ def _phase_met(
     *,
     state: ManagedTradeState,
     index: int,
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     series_cache: SeriesCache,
 ) -> tuple[bool, dict[str, object]]:
@@ -404,7 +404,7 @@ def _phase_met(
 
 def _fold_composite_rules(
     phase_rules: tuple[Mapping[str, Any], ...],
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     side: Side,
     bundle: ContextBundle | None,
@@ -435,7 +435,7 @@ def _composite_phase_met(
     *,
     state: ManagedTradeState,
     index: int,
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     series_cache: SeriesCache,
 ) -> tuple[bool, dict[str, object]]:
@@ -466,7 +466,7 @@ def _runtime_signal(
     *,
     state: ManagedTradeState,
     index: int,
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     evaluation_start_index: int,
     series_cache: SeriesCache,
@@ -517,7 +517,7 @@ def _runtime_signal(
 
 def _evaluate_managed_replay_core(
     raw_spec: Mapping[str, Any],
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     *,
     side: Side,
@@ -771,7 +771,7 @@ def _evaluate_managed_replay_core(
 
 def evaluate_managed_replay(
     raw_spec: Mapping[str, Any],
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     *,
     trade_id: str,
@@ -805,7 +805,7 @@ def evaluate_managed_replay(
 
 def evaluate_start_after_entry_managed_projection(
     raw_spec: Mapping[str, Any],
-    frame: FeatureFrame,
+    frame: FeatureFrameLike,
     plan: EmaPullbackFeaturePlan,
     *,
     side: Side,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from strategy_engine.domain.errors import (
     InvalidRequestError,
@@ -14,7 +14,8 @@ from strategy_engine.domain.market import MarketStream
 from strategy_engine.domain.market_data import StreamBounds
 from strategy_engine.domain.ranges import TimeRange, timeframe_duration_ms
 from strategy_engine.indicators.application.evaluate_range import EvaluateIndicatorRange
-from strategy_engine.indicators.contracts import FeatureFrame, IndicatorRangeRequest
+from strategy_engine.indicators.contracts import IndicatorRangeRequest, NativeFeatureFrame
+from strategy_engine.indicators.evaluation_context import EvaluationContext
 from strategy_engine.ports.market_data import MarketDataPort
 from strategy_engine.strategies.application.build_live_strategy_feature_plan import (
     BuildLiveStrategyFeaturePlan,
@@ -44,8 +45,9 @@ class LiveFeatureFrameBundle:
     bounds: StreamBounds
     requested_range: TimeRange
     planned_features: EmaPullbackFeaturePlan
-    frame: FeatureFrame
+    frame: NativeFeatureFrame
     planned_from_ms: int
+    evaluation_context: EvaluationContext | None = None
 
     @property
     def market_data_hash(self) -> str:
@@ -107,11 +109,16 @@ class LoadLiveFeatureFrame:
         actual_from_ms = max(planned_from_ms, earliest)
         requested_range = TimeRange(from_ms=actual_from_ms, to_ms=target + step_ms)
         requested_range.validate_alignment(request.market.base_timeframe)
-        frame = self._indicator_evaluator.execute(
-            IndicatorRangeRequest(
-                market=request.market,
-                time_range=requested_range,
-                plan=planned.indicator_plan,
+        indicator_request = IndicatorRangeRequest(
+            market=request.market,
+            time_range=requested_range,
+            plan=planned.indicator_plan,
+        )
+        market_frame = self._indicator_evaluator.load_market_frame(indicator_request)
+        context = EvaluationContext(market_frame, evidence=False)
+        frame = self._indicator_evaluator.execute_native(
+            replace(
+                indicator_request, market_frame=market_frame, market_arrays=context.market_arrays
             )
         )
         if frame.market != request.market or frame.requested_range != requested_range:
@@ -134,4 +141,5 @@ class LoadLiveFeatureFrame:
             planned_features=planned,
             frame=frame,
             planned_from_ms=planned_from_ms,
+            evaluation_context=context,
         )
