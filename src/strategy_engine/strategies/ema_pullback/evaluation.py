@@ -385,3 +385,20 @@ def managed_memo_identities(
         return resolve_managed_predicates(raw_spec, features, contexts)
     except Exception:
         return None
+
+
+def evaluate_live_ema_pullback_frame(
+    strategy: LiveStrategySpec,
+    frame: FeatureFrameLike,
+    planned: EmaPullbackFeaturePlan,
+    context: EvaluationContext | None,
+) -> EmaPullbackEvaluation:
+    """One live request is one memo root over its native market arrays."""
+    if context is None:
+        return evaluate_ema_pullback_frame(strategy, frame, planned)
+    stages = resolve_memoized_stages(
+        strategy.raw_spec, planned, base_timeframe=frame.market.base_timeframe
+    )
+    context.plan_roots([memoized_stage_consumptions(stages)])
+    with context.root(0):
+        return evaluate_ema_pullback_frame(strategy, frame, planned, context=context)

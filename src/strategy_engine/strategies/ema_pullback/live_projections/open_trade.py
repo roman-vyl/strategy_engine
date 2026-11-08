@@ -12,7 +12,7 @@ from strategy_engine.strategies.application.load_live_feature_frame import LiveF
 from strategy_engine.strategies.contracts import OpenTradeProjectionRequest
 from strategy_engine.strategies.ema_pullback.evaluation import (
     EmaPullbackEvaluation,
-    evaluate_ema_pullback_frame,
+    evaluate_live_ema_pullback_frame,
 )
 from strategy_engine.strategies.ema_pullback.live_projections.contracts import (
     EmaPullbackCloseSignal,
@@ -148,8 +148,8 @@ class EmaPullbackOpenTradeProjectionAdapter:
                 entry_bar_open_time_ms=receipt.entry_bar_open_time_ms,
                 target_bar_open_time_ms=request.target_bar_open_time_ms,
             ) from exc
-        evaluation = evaluate_ema_pullback_frame(
-            request.strategy, bundle.frame, bundle.planned_features
+        evaluation = evaluate_live_ema_pullback_frame(
+            request.strategy, bundle.frame, bundle.planned_features, bundle.evaluation_context
         )
         managed = evaluate_start_after_entry_managed_projection(
             request.strategy.raw_spec,
